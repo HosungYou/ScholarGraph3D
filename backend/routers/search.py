@@ -12,6 +12,7 @@ Main search endpoint that orchestrates:
 import hashlib
 import json
 import logging
+import math
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -272,11 +273,11 @@ async def search_papers(request: SearchRequest, db: Database = Depends(get_db)):
                 hull_points=hull_verts,
             ))
 
-    else:
-        # Not enough embeddings for graph — return flat list
-        for i, paper in enumerate(papers):
+        # Also include papers without embeddings at the periphery
+        offset = len(papers_with_embeddings)
+        for i, paper in enumerate(papers_without_embeddings):
             nodes.append(GraphNode(
-                id=str(i),
+                id=str(offset + i),
                 title=paper.title,
                 abstract=paper.abstract,
                 year=paper.year,
@@ -291,38 +292,40 @@ async def search_papers(request: SearchRequest, db: Database = Depends(get_db)):
                 s2_paper_id=paper.s2_paper_id,
                 oa_work_id=paper.oa_work_id,
                 topics=paper.oa_topics,
-                x=float(i),
-                y=0.0,
+                x=float(offset + i) * 0.5,
+                y=10.0,
                 z=0.0,
+                cluster_id=-1,
+                cluster_label="Unclustered",
+            ))
+
+    else:
+        # Not enough embeddings for graph — arrange in 3D spiral
+        for i, paper in enumerate(papers):
+            angle = i * 0.5
+            radius = 5.0 + i * 0.3
+            nodes.append(GraphNode(
+                id=str(i),
+                title=paper.title,
+                abstract=paper.abstract,
+                year=paper.year or 2000,
+                venue=paper.venue,
+                citation_count=paper.citation_count,
+                fields=paper.fields_of_study,
+                tldr=paper.tldr,
+                is_open_access=paper.is_open_access,
+                oa_url=paper.oa_url,
+                authors=paper.authors,
+                doi=paper.doi,
+                s2_paper_id=paper.s2_paper_id,
+                oa_work_id=paper.oa_work_id,
+                topics=paper.oa_topics,
+                x=radius * math.cos(angle),
+                y=float(i) * 0.2,
+                z=radius * math.sin(angle),
                 cluster_id=0,
                 cluster_label="",
             ))
-
-    # Also include papers without embeddings at the periphery
-    offset = len(papers_with_embeddings)
-    for i, paper in enumerate(papers_without_embeddings):
-        nodes.append(GraphNode(
-            id=str(offset + i),
-            title=paper.title,
-            abstract=paper.abstract,
-            year=paper.year,
-            venue=paper.venue,
-            citation_count=paper.citation_count,
-            fields=paper.fields_of_study,
-            tldr=paper.tldr,
-            is_open_access=paper.is_open_access,
-            oa_url=paper.oa_url,
-            authors=paper.authors,
-            doi=paper.doi,
-            s2_paper_id=paper.s2_paper_id,
-            oa_work_id=paper.oa_work_id,
-            topics=paper.oa_topics,
-            x=float(offset + i) * 0.5,
-            y=10.0,
-            z=0.0,
-            cluster_id=-1,
-            cluster_label="Unclustered",
-        ))
 
     elapsed = time.time() - start_time
     meta = {

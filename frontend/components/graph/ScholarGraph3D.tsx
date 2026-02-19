@@ -138,7 +138,8 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
   // Compute year range for opacity
   const yearRange = useMemo(() => {
     if (!graphData) return { min: 2000, max: 2024 };
-    const years = graphData.nodes.map((n) => n.year);
+    const years = graphData.nodes.map((n) => n.year).filter((y) => y != null && !isNaN(y));
+    if (years.length === 0) return { min: 2000, max: 2024 };
     return {
       min: Math.min(...years),
       max: Math.max(...years),
@@ -172,16 +173,18 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       return { nodes: [] as ForceGraphNode[], links: [] as ForceGraphLink[] };
 
     const nodes: ForceGraphNode[] = graphData.nodes.map((paper) => {
-      const primaryField = paper.fields[0] || 'Other';
+      const primaryField = paper.fields?.[0] || 'Other';
       const color = FIELD_COLOR_MAP[primaryField] || '#95A5A6';
       const yearSpan = yearRange.max - yearRange.min || 1;
+      const paperYear = paper.year || yearRange.min;
       const opacity =
-        0.3 + 0.7 * ((paper.year - yearRange.min) / yearSpan);
-      const size = Math.max(3, Math.log(paper.citation_count + 1) * 3);
+        0.3 + 0.7 * ((paperYear - yearRange.min) / yearSpan);
+      const size = Math.max(3, Math.log((paper.citation_count || 0) + 1) * 3);
+      const authorName = paper.authors?.[0]?.name?.split(' ').pop() || 'Unknown';
 
       return {
         id: paper.id,
-        name: `${paper.authors[0]?.name.split(' ').pop() || 'Unknown'} ${paper.year}`,
+        name: `${authorName} ${paper.year || ''}`,
         val: size,
         color,
         opacity,
