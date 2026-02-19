@@ -7,6 +7,10 @@ import {
   Type,
   RotateCcw,
   Maximize,
+  Sun,
+  SunDim,
+  Zap,
+  Target,
 } from 'lucide-react';
 import { useGraphStore } from '@/hooks/useGraphStore';
 import { cn } from '@/lib/utils';
@@ -21,6 +25,12 @@ export default function GraphControls() {
     toggleSimilarityEdges,
     toggleClusterHulls,
     toggleLabels,
+    showBloom,
+    showGhostEdges,
+    showGapOverlay,
+    toggleBloom,
+    toggleGhostEdges,
+    toggleGapOverlay,
   } = useGraphStore();
 
   const controls = [
@@ -47,6 +57,24 @@ export default function GraphControls() {
       label: 'Labels',
       active: showLabels,
       toggle: toggleLabels,
+    },
+    {
+      icon: showBloom ? SunDim : Sun,
+      label: 'Bloom Effect',
+      active: showBloom,
+      toggle: toggleBloom,
+    },
+    {
+      icon: Zap,
+      label: 'Ghost Edges',
+      active: showGhostEdges,
+      toggle: toggleGhostEdges,
+    },
+    {
+      icon: Target,
+      label: 'Gap Overlay',
+      active: showGapOverlay,
+      toggle: toggleGapOverlay,
     },
   ];
 

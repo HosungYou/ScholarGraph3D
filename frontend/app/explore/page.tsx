@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useCallback, useState, Suspense } from 'react';
+import { useEffect, useCallback, useState, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
 import { useGraphStore } from '@/hooks/useGraphStore';
-import ScholarGraph3D from '@/components/graph/ScholarGraph3D';
+import ScholarGraph3D, { type ScholarGraph3DRef } from '@/components/graph/ScholarGraph3D';
 import PaperDetailPanel from '@/components/graph/PaperDetailPanel';
 import ClusterPanel from '@/components/graph/ClusterPanel';
 import SearchBar from '@/components/graph/SearchBar';
@@ -48,6 +48,9 @@ function ExploreContent() {
     setShowEnhancedIntents,
   } = useGraphStore();
 
+  // Graph ref for camera control
+  const graphRef = useRef<ScholarGraph3DRef>(null);
+
   // Local UI state
   const [leftTab, setLeftTab] = useState<LeftTab>('clusters');
   const [showChat, setShowChat] = useState(false);
@@ -61,6 +64,22 @@ function ExploreContent() {
       setLLMSettings(saved);
     }
   }, [setLLMSettings]);
+
+  // Wire up camera control custom events from GraphControls + ClusterPanel
+  useEffect(() => {
+    const handleResetCamera = () => graphRef.current?.resetCamera();
+    const handleFocusCluster = (e: Event) => {
+      const { clusterId } = (e as CustomEvent<{ clusterId: number }>).detail;
+      graphRef.current?.focusOnCluster(clusterId);
+    };
+
+    window.addEventListener('resetCamera', handleResetCamera);
+    window.addEventListener('focusCluster', handleFocusCluster);
+    return () => {
+      window.removeEventListener('resetCamera', handleResetCamera);
+      window.removeEventListener('focusCluster', handleFocusCluster);
+    };
+  }, []);
 
   const { data, isLoading: queryLoading, error: queryError } = useQuery({
     queryKey: ['search', query, yearMin, yearMax, field],
@@ -249,7 +268,7 @@ function ExploreContent() {
             </div>
           )}
 
-          {graphData && <ScholarGraph3D />}
+          {graphData && <ScholarGraph3D ref={graphRef} />}
 
           {/* Floating controls */}
           <GraphControls />

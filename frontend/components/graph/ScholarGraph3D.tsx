@@ -55,6 +55,7 @@ interface ForceGraphNode {
   color: string;
   opacity: number;
   paper: Paper;
+  citationPercentile: number;
   x?: number;
   y?: number;
   z?: number;
@@ -126,6 +127,11 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     showLabels,
     citationIntents,
     showEnhancedIntents,
+    showBloom,
+    showGhostEdges,
+    showGapOverlay,
+    hiddenClusterIds,
+    bridgeNodeIds,
     selectPaper,
     setHoveredPaper,
     toggleMultiSelect,
@@ -172,28 +178,41 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     if (!graphData)
       return { nodes: [] as ForceGraphNode[], links: [] as ForceGraphLink[] };
 
-    const nodes: ForceGraphNode[] = graphData.nodes.map((paper) => {
-      const primaryField = paper.fields?.[0] || 'Other';
-      const color = FIELD_COLOR_MAP[primaryField] || '#95A5A6';
-      const yearSpan = yearRange.max - yearRange.min || 1;
-      const paperYear = paper.year || yearRange.min;
-      const opacity =
-        0.3 + 0.7 * ((paperYear - yearRange.min) / yearSpan);
-      const size = Math.max(3, Math.log((paper.citation_count || 0) + 1) * 3);
-      const authorName = paper.authors?.[0]?.name?.split(' ').pop() || 'Unknown';
-
-      return {
-        id: paper.id,
-        name: `${authorName} ${paper.year || ''}`,
-        val: size,
-        color,
-        opacity,
-        paper,
-        x: paper.x,
-        y: paper.y,
-        z: paper.z,
-      };
+    // Sort papers by citation count for percentile computation
+    const sortedByCitations = [...graphData.nodes].sort(
+      (a, b) => (b.citation_count || 0) - (a.citation_count || 0)
+    );
+    const citationRankMap = new Map<string, number>();
+    sortedByCitations.forEach((p, idx) => {
+      citationRankMap.set(p.id, 1 - idx / sortedByCitations.length);
     });
+
+    const nodes: ForceGraphNode[] = graphData.nodes
+      .filter((paper) => !hiddenClusterIds.has(paper.cluster_id))
+      .map((paper) => {
+        const primaryField = paper.fields?.[0] || 'Other';
+        const color = FIELD_COLOR_MAP[primaryField] || '#95A5A6';
+        const yearSpan = yearRange.max - yearRange.min || 1;
+        const paperYear = paper.year || yearRange.min;
+        const opacity =
+          0.3 + 0.7 * ((paperYear - yearRange.min) / yearSpan);
+        const size = Math.max(3, Math.log((paper.citation_count || 0) + 1) * 3);
+        const authorName = paper.authors?.[0]?.name?.split(' ').pop() || 'Unknown';
+        const citationPercentile = citationRankMap.get(paper.id) || 0;
+
+        return {
+          id: paper.id,
+          name: `${authorName} ${paper.year || ''}`,
+          val: size,
+          color,
+          opacity,
+          paper,
+          citationPercentile,
+          x: paper.x,
+          y: paper.y,
+          z: paper.z,
+        };
+      });
 
     const filteredEdges = graphData.edges.filter((e) => {
       if (e.type === 'citation' && !showCitationEdges) return false;
@@ -246,8 +265,37 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       };
     });
 
+    // Ghost edges: high-similarity pairs without citations
+    if (showGhostEdges) {
+      const citationPairs = new Set(
+        graphData.edges
+          .filter((e) => e.type === 'citation')
+          .flatMap((e) => [`${e.source}-${e.target}`, `${e.target}-${e.source}`])
+      );
+      // Ghost edges are similarity edges with weight > 0.75 and no citation
+      graphData.edges
+        .filter(
+          (e) =>
+            e.type === 'similarity' &&
+            e.weight > 0.75 &&
+            !citationPairs.has(`${e.source}-${e.target}`)
+        )
+        .forEach((edge) => {
+          links.push({
+            source: edge.source,
+            target: edge.target,
+            color: '#FF8C00',
+            width: 0.8,
+            edgeType: 'similarity' as const,
+            dashed: true,
+            intentLabel: 'ghost',
+            intentContext: `Semantic similarity: ${(edge.weight * 100).toFixed(0)}% — These papers don't cite each other`,
+          });
+        });
+    }
+
     return { nodes, links };
-  }, [graphData, yearRange, showCitationEdges, showSimilarityEdges, citationIntents, showEnhancedIntents]);
+  }, [graphData, yearRange, showCitationEdges, showSimilarityEdges, citationIntents, showEnhancedIntents, hiddenClusterIds, showGhostEdges]);
 
   // Node rendering
   const nodeThreeObject = useCallback(
@@ -299,12 +347,65 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         group.add(ring);
       }
 
-      // Label
-      if (
-        showLabels &&
-        node.name &&
-        (isHighlighted || isSelected || !hasSelection)
-      ) {
+      // Bridge node gold glow
+      if (node.paper?.is_bridge) {
+        const glowGeo = new THREE.SphereGeometry(node.val * 1.5, 8, 8);
+        const glowMat = new THREE.MeshBasicMaterial({
+          color: 0xFFD700,
+          transparent: true,
+          opacity: 0.15,
+          depthWrite: false,
+        });
+        group.add(new THREE.Mesh(glowGeo, glowMat));
+      }
+
+      // OA paper green ring
+      if (node.paper?.is_open_access) {
+        const ringGeo = new THREE.RingGeometry(node.val * 1.1, node.val * 1.3, 32);
+        const ringMat = new THREE.MeshBasicMaterial({
+          color: 0x2ECC71,
+          transparent: true,
+          opacity: 0.7,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+        });
+        const ring = new THREE.Mesh(ringGeo, ringMat);
+        ring.rotation.x = Math.PI / 2;
+        group.add(ring);
+      }
+
+      // High-citation gold aura (top 10%)
+      if (node.citationPercentile > 0.9 && !isSelected) {
+        const auraGeo = new THREE.SphereGeometry(node.val * 1.5, 8, 8);
+        const auraMat = new THREE.MeshBasicMaterial({
+          color: 0xFFD700,
+          transparent: true,
+          opacity: 0.12,
+          depthWrite: false,
+        });
+        group.add(new THREE.Mesh(auraGeo, auraMat));
+      }
+
+      // Bloom effect for selected node
+      if (showBloom && isSelected) {
+        const bloomGeo = new THREE.SphereGeometry(node.val * 1.3, 8, 8);
+        const bloomMat = new THREE.MeshBasicMaterial({
+          color: displayColor,
+          transparent: true,
+          opacity: 0.12,
+          depthWrite: false,
+        });
+        group.add(new THREE.Mesh(bloomGeo, bloomMat));
+        // Strengthen emissive
+        material.emissiveIntensity = 0.8;
+      }
+
+      // Centrality-based label: show only top 20% OR highlighted/selected
+      const showLabel = showLabels && node.name && (
+        isSelected || isHighlighted || node.citationPercentile > 0.8
+      );
+
+      if (showLabel) {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         if (ctx) {
@@ -313,7 +414,11 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
           canvas.height = 64 * scale;
           ctx.scale(scale, scale);
 
-          const fontSize = isSelected ? 16 : 12;
+          const fontSize = isSelected ? 16 : 10 + 18 * node.citationPercentile;
+          const labelOpacity = isSelected ? 1.0 :
+            isHighlighted ? 0.9 :
+            0.3 + 0.7 * node.citationPercentile;
+
           ctx.font = `bold ${fontSize}px Arial, sans-serif`;
           ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
           ctx.shadowBlur = 6;
@@ -324,7 +429,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
             : isHighlighted
               ? '#4ECDC4'
               : '#FFFFFF';
-          ctx.globalAlpha = hasSelection && !isHighlighted ? 0.1 : 0.9;
+          ctx.globalAlpha = labelOpacity;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.fillText(
@@ -351,7 +456,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
 
       return group;
     },
-    [highlightSet, selectedPaper, showLabels]
+    [highlightSet, selectedPaper, showLabels, showBloom, bridgeNodeIds]
   );
 
   // Link width
@@ -500,6 +605,9 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
   // Cluster hull overlay
   const clusterOverlayRef = useRef<THREE.Group | null>(null);
 
+  // Gap overlay ref
+  const gapOverlayRef = useRef<THREE.Group | null>(null);
+
   useEffect(() => {
     if (!fgRef.current || !showClusterHulls || !graphData?.clusters.length) {
       if (clusterOverlayRef.current && fgRef.current) {
@@ -604,6 +712,138 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       }
     };
   }, [showClusterHulls, graphData]);
+
+  // Gap overlay useEffect
+  useEffect(() => {
+    if (!fgRef.current || !showGapOverlay || !graphData?.clusters.length) {
+      if (gapOverlayRef.current && fgRef.current) {
+        try { fgRef.current.scene().remove(gapOverlayRef.current); } catch {}
+        gapOverlayRef.current = null;
+      }
+      return;
+    }
+
+    const scene = fgRef.current.scene();
+    if (!scene) return;
+
+    if (gapOverlayRef.current) scene.remove(gapOverlayRef.current);
+
+    const overlayGroup = new THREE.Group();
+    overlayGroup.name = 'gap-overlay';
+    gapOverlayRef.current = overlayGroup;
+    scene.add(overlayGroup);
+
+    const updateGapOverlay = () => {
+      while (overlayGroup.children.length > 0) {
+        const child = overlayGroup.children[0] as any;
+        overlayGroup.remove(child);
+        child.geometry?.dispose();
+        child.material?.dispose();
+      }
+
+      const currentData = fgRef.current?.graphData();
+      if (!currentData?.nodes) return;
+
+      const nodePositions = new Map<string, THREE.Vector3>();
+      (currentData.nodes as ForceGraphNode[]).forEach((n) => {
+        if (n.x !== undefined) nodePositions.set(n.id, new THREE.Vector3(n.x, n.y, n.z));
+      });
+
+      // Compute cluster centroids from current positions
+      const clusterCentroids = new Map<number, THREE.Vector3>();
+      graphData!.clusters.forEach((cluster) => {
+        const clusterNodes = graphData!.nodes.filter((p) => p.cluster_id === cluster.id);
+        const positions = clusterNodes.map((p) => nodePositions.get(p.id)).filter(Boolean) as THREE.Vector3[];
+        if (positions.length === 0) return;
+        const centroid = new THREE.Vector3();
+        positions.forEach((p) => centroid.add(p));
+        centroid.divideScalar(positions.length);
+        clusterCentroids.set(cluster.id, centroid);
+      });
+
+      // Draw gap lines between cluster pairs
+      const clusters = graphData!.clusters;
+      for (let i = 0; i < clusters.length; i++) {
+        for (let j = i + 1; j < clusters.length; j++) {
+          const ca = clusters[i];
+          const cb = clusters[j];
+          const centA = clusterCentroids.get(ca.id);
+          const centB = clusterCentroids.get(cb.id);
+          if (!centA || !centB) continue;
+
+          // Compute inter-cluster edge density
+          const papersA = new Set(graphData!.nodes.filter((p) => p.cluster_id === ca.id).map((p) => p.id));
+          const papersB = new Set(graphData!.nodes.filter((p) => p.cluster_id === cb.id).map((p) => p.id));
+          const crossEdges = graphData!.edges.filter(
+            (e) =>
+              (papersA.has(e.source) && papersB.has(e.target)) ||
+              (papersB.has(e.source) && papersA.has(e.target))
+          ).length;
+          const maxPossible = papersA.size * papersB.size;
+          const density = maxPossible > 0 ? crossEdges / maxPossible : 0;
+
+          // Only show significant gaps (density < 0.15)
+          if (density >= 0.15) continue;
+
+          // Color by gap strength
+          const gapColor = density < 0.05 ? 0xFF4444 : density < 0.10 ? 0xFFD700 : 0x44BB44;
+
+          // Dashed line
+          const points = [centA, centB];
+          const geometry = new THREE.BufferGeometry().setFromPoints(points);
+          const material = new THREE.LineDashedMaterial({
+            color: gapColor,
+            dashSize: 6,
+            gapSize: 4,
+            transparent: true,
+            opacity: 0.5,
+          });
+          const line = new THREE.Line(geometry, material);
+          line.computeLineDistances();
+          overlayGroup.add(line);
+
+          // Pulsing hotspot at midpoint
+          const mid = new THREE.Vector3().addVectors(centA, centB).multiplyScalar(0.5);
+          const hotspotGeo = new THREE.SphereGeometry(3, 8, 8);
+          const hotspotMat = new THREE.MeshBasicMaterial({
+            color: gapColor,
+            transparent: true,
+            opacity: 0.6,
+          });
+          const hotspot = new THREE.Mesh(hotspotGeo, hotspotMat);
+          hotspot.position.copy(mid);
+          hotspot.userData.isPulsingHotspot = true;
+          overlayGroup.add(hotspot);
+        }
+      }
+    };
+
+    const interval = setInterval(updateGapOverlay, 1500);
+    updateGapOverlay();
+
+    // Animate hotspots
+    let animFrame: number;
+    const animate = () => {
+      animFrame = requestAnimationFrame(animate);
+      const t = Date.now() * 0.003;
+      overlayGroup.children.forEach((child: any) => {
+        if (child.userData?.isPulsingHotspot) {
+          const scale = 1 + Math.sin(t) * 0.3;
+          child.scale.setScalar(scale);
+        }
+      });
+    };
+    animate();
+
+    return () => {
+      clearInterval(interval);
+      cancelAnimationFrame(animFrame);
+      if (gapOverlayRef.current && fgRef.current?.scene()) {
+        try { fgRef.current.scene().remove(gapOverlayRef.current); } catch {}
+        gapOverlayRef.current = null;
+      }
+    };
+  }, [showGapOverlay, graphData]);
 
   // Expose ref methods
   useImperativeHandle(ref, () => ({

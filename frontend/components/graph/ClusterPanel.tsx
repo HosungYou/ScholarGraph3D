@@ -1,11 +1,41 @@
 'use client';
 
+import { useMemo } from 'react';
 import { useGraphStore } from '@/hooks/useGraphStore';
 import { motion } from 'framer-motion';
-import { Layers, ChevronRight } from 'lucide-react';
+import { Layers, ChevronRight, Eye, EyeOff, Focus } from 'lucide-react';
 
 export default function ClusterPanel() {
-  const { graphData, selectedCluster, selectCluster } = useGraphStore();
+  const {
+    graphData,
+    selectedCluster,
+    selectCluster,
+    hiddenClusterIds,
+    toggleClusterVisibility,
+  } = useGraphStore();
+
+  // Compute per-cluster edge counts
+  const clusterEdgeCounts = useMemo(() => {
+    if (!graphData) return new Map<number, number>();
+    const paperCluster = new Map<string, number>();
+    graphData.nodes.forEach((n) => paperCluster.set(n.id, n.cluster_id));
+
+    const counts = new Map<number, number>();
+    graphData.edges.forEach((e) => {
+      const srcCluster = paperCluster.get(e.source);
+      const tgtCluster = paperCluster.get(e.target);
+      if (srcCluster !== undefined && srcCluster === tgtCluster && srcCluster !== -1) {
+        counts.set(srcCluster, (counts.get(srcCluster) || 0) + 1);
+      }
+    });
+    return counts;
+  }, [graphData]);
+
+  // Max edge count for density bar scaling
+  const maxEdges = useMemo(
+    () => Math.max(1, ...Array.from(clusterEdgeCounts.values())),
+    [clusterEdgeCounts]
+  );
 
   if (!graphData) {
     return (
@@ -37,37 +67,97 @@ export default function ClusterPanel() {
       <div className="space-y-1.5">
         {clusters.map((cluster, i) => {
           const isSelected = selectedCluster?.id === cluster.id;
+          const isHidden = hiddenClusterIds.has(cluster.id);
+          const edgeCount = clusterEdgeCounts.get(cluster.id) || 0;
+          const densityRatio = edgeCount / maxEdges;
+
           return (
-            <motion.button
+            <motion.div
               key={cluster.id}
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: i * 0.03 }}
-              onClick={() => selectCluster(isSelected ? null : cluster)}
-              className={`w-full flex items-center gap-3 p-3 rounded-lg text-left transition-all ${
+              className={`rounded-lg border transition-all ${
                 isSelected
-                  ? 'bg-surface-hover border border-border/60'
-                  : 'hover:bg-surface-hover/50 border border-transparent'
-              }`}
+                  ? 'bg-surface-hover border-border/60'
+                  : 'hover:bg-surface-hover/50 border-transparent'
+              } ${isHidden ? 'opacity-40' : ''}`}
             >
-              <div
-                className="w-3 h-3 rounded-full flex-shrink-0"
-                style={{ backgroundColor: cluster.color }}
-              />
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-text-primary truncate">
-                  {cluster.label}
-                </div>
-                <div className="text-xs text-text-secondary">
-                  {cluster.paper_count} papers
+              <div className="flex items-center gap-2 p-3">
+                {/* Color dot */}
+                <div
+                  className="w-3 h-3 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: cluster.color }}
+                />
+
+                {/* Main cluster info - clickable */}
+                <button
+                  onClick={() => selectCluster(isSelected ? null : cluster)}
+                  className="flex-1 min-w-0 text-left"
+                >
+                  <div className="text-sm font-medium text-text-primary truncate">
+                    {cluster.label}
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-text-secondary mt-0.5">
+                    <span>{cluster.paper_count} papers</span>
+                    {edgeCount > 0 && (
+                      <span className="text-text-secondary/50">· {edgeCount} edges</span>
+                    )}
+                  </div>
+
+                  {/* Density bar */}
+                  <div className="mt-1.5 h-1 bg-surface-hover rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{
+                        width: `${Math.round(densityRatio * 100)}%`,
+                        backgroundColor: cluster.color,
+                        opacity: 0.7,
+                      }}
+                    />
+                  </div>
+                </button>
+
+                {/* Action buttons */}
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  {/* Visibility toggle */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleClusterVisibility(cluster.id);
+                    }}
+                    title={isHidden ? 'Show cluster' : 'Hide cluster'}
+                    className="p-1 rounded text-text-secondary/40 hover:text-text-secondary transition-colors"
+                  >
+                    {isHidden ? (
+                      <EyeOff className="w-3.5 h-3.5" />
+                    ) : (
+                      <Eye className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+
+                  {/* Focus button */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      window.dispatchEvent(
+                        new CustomEvent('focusCluster', { detail: { clusterId: cluster.id } })
+                      );
+                    }}
+                    title="Focus on cluster"
+                    className="p-1 rounded text-text-secondary/40 hover:text-text-secondary transition-colors"
+                  >
+                    <Focus className="w-3.5 h-3.5" />
+                  </button>
+
+                  <ChevronRight
+                    className={`w-4 h-4 text-text-secondary/40 transition-transform ${
+                      isSelected ? 'rotate-90' : ''
+                    }`}
+                  />
                 </div>
               </div>
-              <ChevronRight
-                className={`w-4 h-4 text-text-secondary/40 transition-transform ${
-                  isSelected ? 'rotate-90' : ''
-                }`}
-              />
-            </motion.button>
+            </motion.div>
           );
         })}
       </div>

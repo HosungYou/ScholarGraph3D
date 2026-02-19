@@ -36,6 +36,13 @@ interface GraphStore {
   litReview: LitReview | null;
   showEnhancedIntents: boolean;
 
+  // Phase 1.5: Visual enhancement state
+  showBloom: boolean;
+  showGhostEdges: boolean;
+  showGapOverlay: boolean;
+  hiddenClusterIds: Set<number>;
+  bridgeNodeIds: Set<string>;
+
   // Visibility toggles
   showCitationEdges: boolean;
   showSimilarityEdges: boolean;
@@ -76,6 +83,12 @@ interface GraphStore {
   setCitationIntents: (intents: CitationIntent[]) => void;
   setLitReview: (review: LitReview | null) => void;
   setShowEnhancedIntents: (show: boolean) => void;
+  toggleBloom: () => void;
+  toggleGhostEdges: () => void;
+  toggleGapOverlay: () => void;
+  toggleClusterVisibility: (clusterId: number) => void;
+  setBridgeNodeIds: (ids: Set<string>) => void;
+  addNodesStable: (nodes: Paper[], edges: GraphEdge[]) => void;
 }
 
 export const useGraphStore = create<GraphStore>((set, get) => ({
@@ -100,6 +113,11 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
   citationIntents: [],
   litReview: null,
   showEnhancedIntents: false,
+  showBloom: false,
+  showGhostEdges: false,
+  showGapOverlay: true,
+  hiddenClusterIds: new Set<number>(),
+  bridgeNodeIds: new Set<string>(),
 
   showCitationEdges: true,
   showSimilarityEdges: true,
@@ -188,4 +206,47 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
   setCitationIntents: (intents) => set({ citationIntents: intents }),
   setLitReview: (review) => set({ litReview: review }),
   setShowEnhancedIntents: (show) => set({ showEnhancedIntents: show }),
+
+  toggleBloom: () => set((s) => ({ showBloom: !s.showBloom })),
+  toggleGhostEdges: () => set((s) => ({ showGhostEdges: !s.showGhostEdges })),
+  toggleGapOverlay: () => set((s) => ({ showGapOverlay: !s.showGapOverlay })),
+  toggleClusterVisibility: (clusterId: number) => {
+    set((s) => {
+      const next = new Set(s.hiddenClusterIds);
+      if (next.has(clusterId)) {
+        next.delete(clusterId);
+      } else {
+        next.add(clusterId);
+      }
+      return { hiddenClusterIds: next };
+    });
+  },
+  setBridgeNodeIds: (ids: Set<string>) => set({ bridgeNodeIds: ids }),
+
+  addNodesStable: (newNodes: Paper[], newEdges: GraphEdge[]) => {
+    const { graphData } = get();
+    if (!graphData) return;
+
+    const existingIds = new Set(graphData.nodes.map((n) => n.id));
+    const uniqueNewNodes = newNodes.filter((n) => !existingIds.has(n.id));
+
+    const existingEdgeKeys = new Set(
+      graphData.edges.map((e) => `${e.source}-${e.target}`)
+    );
+    const uniqueNewEdges = newEdges.filter(
+      (e) => !existingEdgeKeys.has(`${e.source}-${e.target}`)
+    );
+
+    set({
+      graphData: {
+        ...graphData,
+        nodes: [...graphData.nodes, ...uniqueNewNodes],
+        edges: [...graphData.edges, ...uniqueNewEdges],
+        meta: {
+          ...graphData.meta,
+          total: graphData.meta.total + uniqueNewNodes.length,
+        },
+      },
+    });
+  },
 }));

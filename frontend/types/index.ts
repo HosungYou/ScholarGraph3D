@@ -30,12 +30,13 @@ export interface Paper {
   cluster_label: string;
   is_open_access: boolean;
   oa_url?: string;
+  is_bridge?: boolean;
 }
 
 export interface GraphEdge {
   source: string;
   target: string;
-  type: 'citation' | 'similarity';
+  type: 'citation' | 'similarity' | 'ghost';
   weight: number;
   intent?: 'methodology' | 'background' | 'result_comparison';
 }
@@ -222,4 +223,15 @@ export interface LitReview {
     cluster_count: number;
     generation_time: number;
   };
+}
+
+// ─── Phase 1.5: Visualization State ─────────────────────────────────
+
+export interface GapOverlayLine {
+  from: { x: number; y: number; z: number };
+  to: { x: number; y: number; z: number };
+  color: number; // THREE.js hex color: 0xFF4444 | 0xFFD700 | 0x44FF44
+  gapStrength: number;
+  clusterALabel: string;
+  clusterBLabel: string;
 }

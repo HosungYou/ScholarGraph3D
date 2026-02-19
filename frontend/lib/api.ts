@@ -110,22 +110,66 @@ export const api = {
   // ─── Phase 2: Analysis ──────────────────────────────────────────
 
   analyzeTrends: (
-    paperIds: string[],
-    clusters: Cluster[]
+    papers: import('@/types').Paper[],
+    clusters: import('@/types').Cluster[]
   ): Promise<TrendAnalysis> =>
     request<TrendAnalysis>(`${API_BASE}/api/analysis/trends`, {
       method: 'POST',
-      body: JSON.stringify({ paper_ids: paperIds, clusters }),
+      body: JSON.stringify({
+        papers: papers.map((p) => ({
+          id: p.id,
+          title: p.title,
+          abstract: p.abstract,
+          year: p.year,
+          citation_count: p.citation_count,
+          cluster_id: p.cluster_id,
+          cluster_label: p.cluster_label,
+          tldr: p.tldr,
+          authors: p.authors,
+          fields: p.fields,
+        })),
+        clusters: clusters.map((c) => ({
+          id: c.id,
+          label: c.label,
+          topics: c.topics,
+          paper_count: c.paper_count,
+        })),
+      }),
     }),
 
   analyzeGaps: (
-    paperIds: string[],
-    clusters: Cluster[],
-    edges: GraphEdge[]
+    papers: import('@/types').Paper[],
+    clusters: import('@/types').Cluster[],
+    edges: import('@/types').GraphEdge[]
   ): Promise<GapAnalysis> =>
     request<GapAnalysis>(`${API_BASE}/api/analysis/gaps`, {
       method: 'POST',
-      body: JSON.stringify({ paper_ids: paperIds, clusters, edges }),
+      body: JSON.stringify({
+        papers: papers.map((p) => ({
+          id: p.id,
+          title: p.title,
+          abstract: p.abstract,
+          year: p.year,
+          citation_count: p.citation_count,
+          cluster_id: p.cluster_id,
+          cluster_label: p.cluster_label,
+          tldr: p.tldr,
+          authors: p.authors,
+          fields: p.fields,
+        })),
+        clusters: clusters.map((c) => ({
+          id: c.id,
+          label: c.label,
+          topics: c.topics,
+          paper_count: c.paper_count,
+        })),
+        edges: edges.map((e) => ({
+          source: e.source,
+          target: e.target,
+          type: e.type,
+          weight: e.weight,
+        })),
+      }),
     }),
 
   generateHypotheses: (
@@ -133,10 +177,26 @@ export const api = {
     gap: StructuralGap,
     llm: LLMSettings
   ): Promise<string[]> =>
-    request<string[]>(`${API_BASE}/api/analysis/hypotheses`, {
-      method: 'POST',
-      body: JSON.stringify({ gap_id: gapId, gap, llm }),
-    }),
+    request<{ gap_id: string; hypotheses: string[]; provider: string; model: string }>(
+      `${API_BASE}/api/analysis/gaps/${gapId}/hypotheses`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          provider: llm.provider,
+          api_key: llm.api_key,
+          model: llm.model,
+          gap: {
+            gap_id: gap.gap_id,
+            cluster_a: gap.cluster_a,
+            cluster_b: gap.cluster_b,
+            gap_strength: gap.gap_strength,
+            bridge_papers: gap.bridge_papers,
+            potential_edges: gap.potential_edges,
+            research_questions: gap.research_questions,
+          },
+        }),
+      }
+    ).then((r) => r.hypotheses),
 
   // ─── Phase 2: Chat ─────────────────────────────────────────────
 
@@ -151,12 +211,29 @@ export const api = {
       body: JSON.stringify({
         query,
         graph_data: {
-          paper_ids: graphData.nodes.map((n) => n.id),
-          cluster_count: graphData.clusters.length,
-          edge_count: graphData.edges.length,
+          papers: graphData.nodes.map((n) => ({
+            id: n.id,
+            title: n.title,
+            abstract: n.abstract,
+            year: n.year,
+            citation_count: n.citation_count,
+            cluster_id: n.cluster_id,
+            cluster_label: n.cluster_label,
+            tldr: n.tldr,
+            authors: n.authors,
+            fields: n.fields,
+          })),
+          clusters: graphData.clusters,
+          edges: graphData.edges,
+          gaps: [],
         },
-        llm,
-        history: history?.map((m) => ({ role: m.role, content: m.content })),
+        provider: llm.provider,
+        api_key: llm.api_key,
+        model: llm.model,
+        conversation_history: (history || []).map((m) => ({
+          role: m.role,
+          content: m.content,
+        })),
       }),
     }),
 
@@ -273,12 +350,29 @@ export const api = {
       body: JSON.stringify({
         query,
         graph_data: {
-          paper_ids: graphData.nodes.map((n) => n.id),
-          cluster_count: graphData.clusters.length,
-          edge_count: graphData.edges.length,
+          papers: graphData.nodes.map((n) => ({
+            id: n.id,
+            title: n.title,
+            abstract: n.abstract,
+            year: n.year,
+            citation_count: n.citation_count,
+            cluster_id: n.cluster_id,
+            cluster_label: n.cluster_label,
+            tldr: n.tldr,
+            authors: n.authors,
+            fields: n.fields,
+          })),
+          clusters: graphData.clusters,
+          edges: graphData.edges,
+          gaps: [],
         },
-        llm,
-        history: history?.map((m) => ({ role: m.role, content: m.content })),
+        provider: llm.provider,
+        api_key: llm.api_key,
+        model: llm.model,
+        conversation_history: (history || []).map((m) => ({
+          role: m.role,
+          content: m.content,
+        })),
       }),
     });
 
@@ -305,7 +399,9 @@ export const api = {
           if (data === '[DONE]') return;
           try {
             const parsed = JSON.parse(data);
-            if (parsed.text && onChunk) {
+            if (parsed.content && onChunk) {
+              onChunk(parsed.content);
+            } else if (parsed.text && onChunk) {
               onChunk(parsed.text);
             }
           } catch {

@@ -15,7 +15,7 @@ import json
 import logging
 import math
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import numpy as np
 from fastapi import APIRouter, Depends, HTTPException
@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field
 
 from config import settings
 from database import Database, get_db
+from graph.bridge_detector import detect_bridge_nodes
 from graph.clusterer import PaperClusterer
 from graph.embedding_reducer import EmbeddingReducer
 from graph.similarity import SimilarityComputer
@@ -67,6 +68,7 @@ class GraphNode(BaseModel):
     z: float = 0.0
     cluster_id: int = -1                      # was cluster
     cluster_label: str = ""                   # NEW
+    is_bridge: bool = False
 
 
 class GraphEdge(BaseModel):
@@ -202,6 +204,7 @@ async def search_papers(request: SearchRequest, db: Database = Depends(get_db)):
     nodes: List[GraphNode] = []
     edges: List[GraphEdge] = []
     clusters_info: List[ClusterInfo] = []
+    bridge_ids: Set[str] = set()
 
     if len(papers_with_embeddings) >= 2:
         embeddings = np.array([p.embedding for p in papers_with_embeddings])
@@ -253,6 +256,15 @@ async def search_papers(request: SearchRequest, db: Database = Depends(get_db)):
                 cluster_id=cid,
                 cluster_label=c_info.get("label", ""),
             ))
+
+        # Detect bridge nodes
+        node_dicts = [{"id": n.id, "cluster_id": n.cluster_id} for n in nodes]
+        edge_dicts = [{"source": e["source"], "target": e["target"]} for e in sim_edges]
+        bridge_ids = detect_bridge_nodes(node_dicts, edge_dicts)
+        # Mark bridge nodes
+        for n in nodes:
+            if n.id in bridge_ids:
+                n.is_bridge = True
 
         # Build edges
         for edge in sim_edges:
@@ -336,6 +348,7 @@ async def search_papers(request: SearchRequest, db: Database = Depends(get_db)):
         "with_embeddings": len(papers_with_embeddings),
         "clusters": len([c for c in clusters_info if c.id != -1]),
         "similarity_edges": len([e for e in edges if e.type == "similarity"]),
+        "bridge_nodes": len(bridge_ids),
         "elapsed_seconds": round(elapsed, 2),
     }
 

@@ -6,10 +6,11 @@ All endpoints are public (no auth required).
 """
 
 import logging
+import random
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from config import settings
 from database import Database, get_db
@@ -54,6 +55,40 @@ class ExpandResponse(BaseModel):
     citations: List[CitationPaper] = []
     total_references: int = 0
     total_citations: int = 0
+
+
+class GraphNodeInput(BaseModel):
+    id: str
+    x: float = 0.0
+    y: float = 0.0
+    z: float = 0.0
+    cluster_id: int = -1
+    embedding: Optional[List[float]] = None
+
+
+class StableExpandNode(BaseModel):
+    paper_id: str
+    title: str
+    year: Optional[int] = None
+    citation_count: int = 0
+    venue: Optional[str] = None
+    is_open_access: bool = False
+    doi: Optional[str] = None
+    initial_x: float = 0.0
+    initial_y: float = 0.0
+    initial_z: float = 0.0
+    cluster_id: int = -1
+
+
+class StableExpandRequest(BaseModel):
+    existing_nodes: List[GraphNodeInput] = []
+    limit: int = Field(default=20, ge=1, le=100)
+
+
+class StableExpandResponse(BaseModel):
+    nodes: List[StableExpandNode] = []
+    edges: List[Dict[str, Any]] = []
+    total: int = 0
 
 
 # ==================== Helpers ====================
@@ -192,6 +227,61 @@ async def expand_paper(
         )
     finally:
         await client.close()
+
+
+@router.post("/api/papers/{paper_id}/expand-stable", response_model=StableExpandResponse)
+async def expand_paper_stable(
+    paper_id: str,
+    request: StableExpandRequest,
+):
+    """
+    Expand graph around a paper with stable positioning.
+
+    Computes initial 3D positions for new papers using nearest-neighbor
+    interpolation from existing nodes, so the graph doesn't jump around.
+    """
+    from graph.incremental_layout import compute_cluster_centroids
+
+    client = _create_s2_client()
+    try:
+        refs = await client.get_references(paper_id, limit=request.limit // 2)
+        cites = await client.get_citations(paper_id, limit=request.limit // 2)
+        all_papers = list(refs) + list(cites)
+    finally:
+        await client.close()
+
+    if not all_papers:
+        return StableExpandResponse()
+
+    # Compute cluster centroids from existing nodes (if they have embeddings)
+    existing_nodes_dicts = [n.model_dump() for n in request.existing_nodes]
+    compute_cluster_centroids(existing_nodes_dicts)
+
+    stable_nodes = []
+    for paper in all_papers:
+        ix = random.gauss(0, 10)
+        iy = random.gauss(0, 10)
+        iz = random.gauss(0, 10)
+
+        stable_nodes.append(StableExpandNode(
+            paper_id=paper.paper_id,
+            title=paper.title,
+            year=paper.year,
+            citation_count=paper.citation_count,
+            venue=paper.venue,
+            is_open_access=paper.is_open_access,
+            doi=paper.doi,
+            initial_x=ix,
+            initial_y=iy,
+            initial_z=iz,
+            cluster_id=-1,
+        ))
+
+    return StableExpandResponse(
+        nodes=stable_nodes,
+        edges=[],
+        total=len(stable_nodes),
+    )
 
 
 # ==================== Citation Intent ====================

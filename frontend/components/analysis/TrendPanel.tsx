@@ -194,8 +194,7 @@ export default function TrendPanel() {
     setError(null);
 
     try {
-      const paperIds = graphData.nodes.map((n) => n.id);
-      const result = await api.analyzeTrends(paperIds, graphData.clusters);
+      const result = await api.analyzeTrends(graphData.nodes, graphData.clusters);
       setTrendAnalysis(result);
     } catch (err) {
       setError(

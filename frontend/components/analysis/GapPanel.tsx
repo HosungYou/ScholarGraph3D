@@ -222,9 +222,8 @@ export default function GapPanel() {
     setError(null);
 
     try {
-      const paperIds = graphData.nodes.map((n) => n.id);
       const result = await api.analyzeGaps(
-        paperIds,
+        graphData.nodes,
         graphData.clusters,
         graphData.edges
       );
