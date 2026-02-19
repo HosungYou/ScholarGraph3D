@@ -1,49 +1,65 @@
-'use client';
-
+import type { Metadata } from 'next';
 import './globals.css';
 import { Inter } from 'next/font/google';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { AuthProvider } from '@/lib/auth-context';
-import { useState } from 'react';
+import Providers from './providers';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
+
+export const metadata: Metadata = {
+  metadataBase: new URL('https://scholargraph3d.com'),
+  title: {
+    default: 'ScholarGraph3D — Explore Academic Literature in 3D',
+    template: '%s — ScholarGraph3D',
+  },
+  description:
+    'Explore academic papers as an interactive 3D knowledge graph. Search by keyword, discover clusters, and navigate research topics visually.',
+  keywords: [
+    'academic papers',
+    'research visualization',
+    'knowledge graph',
+    '3D graph',
+    'literature review',
+    'semantic scholar',
+    'openAlex',
+  ],
+  authors: [{ name: 'ScholarGraph3D' }],
+  openGraph: {
+    type: 'website',
+    siteName: 'ScholarGraph3D',
+    title: 'ScholarGraph3D — Explore Academic Literature in 3D',
+    description:
+      'Explore academic papers as an interactive 3D knowledge graph.',
+    images: [
+      {
+        url: '/og-image.png',
+        width: 1200,
+        height: 630,
+        alt: 'ScholarGraph3D',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'ScholarGraph3D — Explore Academic Literature in 3D',
+    description:
+      'Explore academic papers as an interactive 3D knowledge graph.',
+    images: ['/og-image.png'],
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
+};
 
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const [queryClient] = useState(
-    () =>
-      new QueryClient({
-        defaultOptions: {
-          queries: {
-            staleTime: 60 * 1000,
-            retry: (failureCount, error) => {
-              if (error instanceof Error && error.message.includes('401')) {
-                return false;
-              }
-              return failureCount < 2;
-            },
-          },
-        },
-      })
-  );
-
   return (
     <html lang="en" className={`${inter.variable} dark`}>
-      <head>
-        <title>ScholarGraph3D</title>
-        <meta
-          name="description"
-          content="Explore the universe of academic papers in 3D"
-        />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-      </head>
       <body className="bg-background text-text-primary antialiased">
-        <QueryClientProvider client={queryClient}>
-          <AuthProvider>{children}</AuthProvider>
-        </QueryClientProvider>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

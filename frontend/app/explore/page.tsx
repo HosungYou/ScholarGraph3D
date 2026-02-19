@@ -19,6 +19,7 @@ import LitReviewPanel from '@/components/litreview/LitReviewPanel';
 import LLMSettingsModal, {
   loadLLMSettings,
 } from '@/components/settings/LLMSettingsModal';
+import CitationContextModal from '@/components/graph/CitationContextModal';
 import type { Paper } from '@/types';
 
 type LeftTab = 'clusters' | 'trends' | 'gaps' | 'watch';
@@ -56,6 +57,18 @@ function ExploreContent() {
   const [showChat, setShowChat] = useState(false);
   const [showLLMModal, setShowLLMModal] = useState(false);
   const [showLitReview, setShowLitReview] = useState(false);
+  const [citationModalData, setCitationModalData] = useState<{
+    sourceId: string;
+    targetId: string;
+    type: string;
+    intent?: string;
+    weight?: number;
+  } | null>(null);
+  const [searchProgress, setSearchProgress] = useState<{
+    stage: string;
+    progress: number;
+    message: string;
+  } | null>(null);
 
   // Load LLM settings from localStorage on mount
   useEffect(() => {
@@ -79,6 +92,31 @@ function ExploreContent() {
       window.removeEventListener('resetCamera', handleResetCamera);
       window.removeEventListener('focusCluster', handleFocusCluster);
     };
+  }, []);
+
+  // Handle double-click expand from ScholarGraph3D
+  useEffect(() => {
+    const handle = async (e: Event) => {
+      const { paper } = (e as CustomEvent<{ paper: Paper }>).detail;
+      try {
+        const result = await api.expandPaperStable(paper.id, graphData?.nodes || [], graphData?.edges || []);
+        useGraphStore.getState().addNodesStable(result.nodes, result.edges);
+      } catch (err) {
+        console.error('Failed to expand paper:', err);
+      }
+    };
+    window.addEventListener('expandPaper', handle);
+    return () => window.removeEventListener('expandPaper', handle);
+  }, [graphData]);
+
+  // Listen for citation edge clicks from ScholarGraph3D
+  useEffect(() => {
+    const handle = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      setCitationModalData(detail);
+    };
+    window.addEventListener('citationEdgeClick', handle);
+    return () => window.removeEventListener('citationEdgeClick', handle);
   }, []);
 
   const { data, isLoading: queryLoading, error: queryError } = useQuery({
@@ -110,6 +148,43 @@ function ExploreContent() {
     }
   }, [queryError, setError]);
 
+  // SSE search progress stream
+  useEffect(() => {
+    if (!query || !queryLoading) {
+      setSearchProgress(null);
+      return;
+    }
+
+    const params = new URLSearchParams({ q: query });
+    if (yearMin) params.set('year_min', String(yearMin));
+    if (yearMax) params.set('year_max', String(yearMax));
+
+    const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    const es = new EventSource(`${API_BASE}/api/search/stream?${params}`);
+
+    es.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        setSearchProgress(data);
+        if (data.stage === 'complete') {
+          es.close();
+        }
+      } catch {
+        // ignore parse errors
+      }
+    };
+
+    es.onerror = () => {
+      es.close();
+      setSearchProgress(null);
+    };
+
+    return () => {
+      es.close();
+      setSearchProgress(null);
+    };
+  }, [query, queryLoading, yearMin, yearMax]);
+
   const handleExpandPaper = useCallback(
     async (paper: Paper) => {
       try {
@@ -122,8 +197,8 @@ function ExploreContent() {
     []
   );
 
-  // Right panel: show paper detail OR chat
-  const showPaperDetail = selectedPaper && !showChat;
+  // Right panel: both can show simultaneously as independent columns
+  const showPaperDetail = !!selectedPaper;
   const showChatPanel = showChat;
 
   return (
@@ -237,11 +312,22 @@ function ExploreContent() {
         <div className="flex-1 relative">
           {isLoading && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/80">
-              <div className="text-center">
+              <div className="text-center max-w-sm w-full px-8">
                 <div className="w-12 h-12 border-2 border-accent border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-                <p className="text-sm text-text-secondary">
-                  Searching papers...
-                </p>
+                {searchProgress ? (
+                  <>
+                    <p className="text-sm text-text-secondary mb-3">{searchProgress.message}</p>
+                    <div className="w-full bg-gray-800 rounded-full h-1.5">
+                      <div
+                        className="bg-accent h-1.5 rounded-full transition-all duration-500"
+                        style={{ width: `${searchProgress.progress * 100}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-text-secondary/50 mt-2">{Math.round(searchProgress.progress * 100)}%</p>
+                  </>
+                ) : (
+                  <p className="text-sm text-text-secondary">Searching papers...</p>
+                )}
               </div>
             </div>
           )}
@@ -256,13 +342,38 @@ function ExploreContent() {
 
           {!query && (
             <div className="absolute inset-0 flex items-center justify-center">
-              <div className="text-center">
-                <p className="text-text-secondary text-lg mb-2">
-                  Enter a search query to explore
+              <div className="text-center max-w-lg px-4">
+                <div className="text-4xl mb-4">🔭</div>
+                <h2 className="text-xl font-semibold text-text-primary mb-2">
+                  Explore Academic Literature in 3D
+                </h2>
+                <p className="text-text-secondary/70 text-sm mb-6">
+                  Search papers → 3D graph appears → click nodes to explore
                 </p>
-                <p className="text-text-secondary/60 text-sm">
-                  Try &ldquo;graph neural networks&rdquo; or
-                  &ldquo;large language models&rdquo;
+                <p className="text-text-secondary/50 text-xs mb-4">
+                  Nodes = papers · Distance = semantic similarity · Clusters = research topics
+                </p>
+                <div className="flex flex-wrap gap-2 justify-center mb-6">
+                  {[
+                    'transformer architecture',
+                    'AI adoption healthcare',
+                    'climate change impacts',
+                  ].map((example) => (
+                    <button
+                      key={example}
+                      onClick={() => {
+                        const params = new URLSearchParams();
+                        params.set('q', example);
+                        window.location.href = `/explore?${params.toString()}`;
+                      }}
+                      className="px-4 py-2 bg-surface/80 hover:bg-surface border border-border/40 rounded-full text-sm text-text-secondary hover:text-text-primary transition-all"
+                    >
+                      {example}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-text-secondary/40 text-xs">
+                  💡 Tip: Use the 🤖 AI Search mode with a Groq API key for natural language queries
                 </p>
               </div>
             </div>
@@ -282,8 +393,8 @@ function ExploreContent() {
           )}
         </div>
 
-        {/* Right panel: paper detail OR chat */}
-        <AnimatePresence mode="wait">
+        {/* Right panel: paper detail and chat as independent columns */}
+        <AnimatePresence mode="popLayout">
           {showPaperDetail && (
             <motion.div
               key="paper-detail"
@@ -319,6 +430,28 @@ function ExploreContent() {
       {/* Literature Review Overlay */}
       {showLitReview && (
         <LitReviewPanel onClose={() => setShowLitReview(false)} />
+      )}
+
+      {/* Citation Context Modal */}
+      {citationModalData && (
+        <CitationContextModal
+          sourceId={citationModalData.sourceId}
+          targetId={citationModalData.targetId}
+          type={citationModalData.type}
+          intent={citationModalData.intent}
+          weight={citationModalData.weight}
+          onClose={() => setCitationModalData(null)}
+          onViewSourcePaper={(id) => {
+            const paper = graphData?.nodes.find((n) => n.id === id);
+            if (paper) selectPaper(paper);
+            setCitationModalData(null);
+          }}
+          onViewTargetPaper={(id) => {
+            const paper = graphData?.nodes.find((n) => n.id === id);
+            if (paper) selectPaper(paper);
+            setCitationModalData(null);
+          }}
+        />
       )}
 
       {/* LLM Settings Modal */}

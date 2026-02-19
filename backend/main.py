@@ -17,6 +17,8 @@ from database import db, init_db, close_db
 from auth.supabase_client import supabase_client
 from auth.middleware import AuthMiddleware
 from routers import search, papers, graphs, analysis, chat, watch, lit_review
+from routers.natural_search import router as natural_search_router
+from routers.search_stream import router as search_stream_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -116,6 +118,8 @@ app.include_router(analysis.router, tags=["Analysis"])
 app.include_router(chat.router, tags=["Chat"])
 app.include_router(watch.router, tags=["Watch"])
 app.include_router(lit_review.router, tags=["Literature Review"])
+app.include_router(natural_search_router, tags=["Natural Language Search"])
+app.include_router(search_stream_router)
 
 
 # ==================== Health Endpoints ====================

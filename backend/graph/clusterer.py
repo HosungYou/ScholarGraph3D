@@ -20,7 +20,7 @@ class PaperClusterer:
     def cluster(
         self,
         embeddings: np.ndarray,
-        min_cluster_size: int = 5,
+        min_cluster_size: int = 8,
         min_samples: Optional[int] = None,
     ) -> np.ndarray:
         """

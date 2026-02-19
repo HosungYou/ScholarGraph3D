@@ -76,6 +76,12 @@ class GraphEdge(BaseModel):
     target: str
     type: str  # "similarity" or "citation"
     weight: float = 1.0
+    # Best-effort intent classification.
+    # For similarity edges: heuristic based on edge weight.
+    # For citation edges: S2 intent when available (methodology/background/result_comparison).
+    # Full LLM-enhanced intent (supports/contradicts/extends/applies/compares)
+    # is available via the dedicated POST /api/papers/{id}/intents endpoint.
+    intent: Optional[str] = None
 
 
 class ClusterInfo(BaseModel):
@@ -266,13 +272,21 @@ async def search_papers(request: SearchRequest, db: Database = Depends(get_db)):
             if n.id in bridge_ids:
                 n.is_bridge = True
 
-        # Build edges
+        # Build edges with best-effort heuristic intent for similarity edges.
+        # High-weight similarity (>= 0.85) suggests the papers mutually support
+        # each other's findings; lower similarity defaults to "background".
         for edge in sim_edges:
+            similarity = edge["similarity"]
+            if similarity >= 0.85:
+                heuristic_intent = "supports"
+            else:
+                heuristic_intent = "background"
             edges.append(GraphEdge(
                 source=edge["source"],
                 target=edge["target"],
                 type="similarity",
-                weight=edge["similarity"],
+                weight=similarity,
+                intent=heuristic_intent,
             ))
 
         # Build cluster info

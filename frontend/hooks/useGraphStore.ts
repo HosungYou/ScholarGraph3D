@@ -38,6 +38,8 @@ interface GraphStore {
 
   // Phase 1.5: Visual enhancement state
   showBloom: boolean;
+  showOARings: boolean;
+  showCitationAura: boolean;
   showGhostEdges: boolean;
   showGapOverlay: boolean;
   hiddenClusterIds: Set<number>;
@@ -84,6 +86,8 @@ interface GraphStore {
   setLitReview: (review: LitReview | null) => void;
   setShowEnhancedIntents: (show: boolean) => void;
   toggleBloom: () => void;
+  toggleOARings: () => void;
+  toggleCitationAura: () => void;
   toggleGhostEdges: () => void;
   toggleGapOverlay: () => void;
   toggleClusterVisibility: (clusterId: number) => void;
@@ -114,6 +118,8 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
   litReview: null,
   showEnhancedIntents: false,
   showBloom: false,
+  showOARings: false,
+  showCitationAura: false,
   showGhostEdges: false,
   showGapOverlay: true,
   hiddenClusterIds: new Set<number>(),
@@ -208,6 +214,8 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
   setShowEnhancedIntents: (show) => set({ showEnhancedIntents: show }),
 
   toggleBloom: () => set((s) => ({ showBloom: !s.showBloom })),
+  toggleOARings: () => set((s) => ({ showOARings: !s.showOARings })),
+  toggleCitationAura: () => set((s) => ({ showCitationAura: !s.showCitationAura })),
   toggleGhostEdges: () => set((s) => ({ showGhostEdges: !s.showGhostEdges })),
   toggleGapOverlay: () => set((s) => ({ showGapOverlay: !s.showGapOverlay })),
   toggleClusterVisibility: (clusterId: number) => {

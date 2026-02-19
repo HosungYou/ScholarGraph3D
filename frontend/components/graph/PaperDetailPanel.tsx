@@ -1,5 +1,6 @@
 'use client';
 
+import React, { useState } from 'react';
 import {
   X,
   ExternalLink,
@@ -11,10 +12,10 @@ import {
   Hash,
   Network,
 } from 'lucide-react';
-import { useState } from 'react';
 import { motion } from 'framer-motion';
 import type { Paper } from '@/types';
 import { FIELD_COLORS } from '@/types';
+import { useGraphStore } from '@/hooks/useGraphStore';
 
 interface PaperDetailPanelProps {
   paper: Paper;
@@ -28,6 +29,23 @@ export default function PaperDetailPanel({
   onExpand,
 }: PaperDetailPanelProps) {
   const [showFullAbstract, setShowFullAbstract] = useState(false);
+  const { graphData } = useGraphStore();
+
+  // Compute relationship summary
+  const relationshipSummary = React.useMemo(() => {
+    if (!graphData || !paper) return null;
+    const incomingCitations = graphData.edges.filter(
+      (e) => e.type === 'citation' && e.target === paper.id
+    ).length;
+    const outgoingCitations = graphData.edges.filter(
+      (e) => e.type === 'citation' && e.source === paper.id
+    ).length;
+    const similarEdges = graphData.edges.filter(
+      (e) => e.type === 'similarity' && (e.source === paper.id || e.target === paper.id)
+    ).length;
+    const isBridge = paper.is_bridge;
+    return { incomingCitations, outgoingCitations, similarEdges, isBridge };
+  }, [graphData, paper]);
 
   const abstractText = paper.abstract || paper.tldr || 'No abstract available.';
   const isLongAbstract = abstractText.length > 300;
@@ -181,6 +199,41 @@ export default function PaperDetailPanel({
                 {topic.display_name}
               </span>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Relationship context */}
+      {relationshipSummary && (
+        <div className="border-t border-border/20 pt-3 mt-3">
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-text-secondary/60 mb-2">
+            Graph Relationships
+          </h4>
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="bg-surface/50 rounded-lg p-2">
+              <div className="text-text-secondary/60">Cited by (in graph)</div>
+              <div className="font-semibold text-text-primary">
+                {relationshipSummary.incomingCitations} papers
+              </div>
+            </div>
+            <div className="bg-surface/50 rounded-lg p-2">
+              <div className="text-text-secondary/60">Cites (in graph)</div>
+              <div className="font-semibold text-text-primary">
+                {relationshipSummary.outgoingCitations} papers
+              </div>
+            </div>
+            <div className="bg-surface/50 rounded-lg p-2">
+              <div className="text-text-secondary/60">Similar papers</div>
+              <div className="font-semibold text-text-primary">
+                {relationshipSummary.similarEdges} connected
+              </div>
+            </div>
+            {relationshipSummary.isBridge && (
+              <div className="bg-yellow-900/20 border border-yellow-700/30 rounded-lg p-2">
+                <div className="text-yellow-400/80 text-xs">◈ Bridge Node</div>
+                <div className="text-yellow-300/70 text-xs">Connects clusters</div>
+              </div>
+            )}
           </div>
         </div>
       )}

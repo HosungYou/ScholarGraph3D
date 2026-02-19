@@ -128,6 +128,8 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     citationIntents,
     showEnhancedIntents,
     showBloom,
+    showOARings,
+    showCitationAura,
     showGhostEdges,
     showGapOverlay,
     hiddenClusterIds,
@@ -359,8 +361,8 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         group.add(new THREE.Mesh(glowGeo, glowMat));
       }
 
-      // OA paper green ring
-      if (node.paper?.is_open_access) {
+      // OA paper green ring (toggle)
+      if (showOARings && node.paper?.is_open_access) {
         const ringGeo = new THREE.RingGeometry(node.val * 1.1, node.val * 1.3, 32);
         const ringMat = new THREE.MeshBasicMaterial({
           color: 0x2ECC71,
@@ -374,8 +376,8 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         group.add(ring);
       }
 
-      // High-citation gold aura (top 10%)
-      if (node.citationPercentile > 0.9 && !isSelected) {
+      // High-citation gold aura (top 10%) - toggle
+      if (showCitationAura && node.citationPercentile > 0.9 && !isSelected) {
         const auraGeo = new THREE.SphereGeometry(node.val * 1.5, 8, 8);
         const auraMat = new THREE.MeshBasicMaterial({
           color: 0xFFD700,
@@ -456,7 +458,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
 
       return group;
     },
-    [highlightSet, selectedPaper, showLabels, showBloom, bridgeNodeIds]
+    [highlightSet, selectedPaper, showLabels, showBloom, bridgeNodeIds, showOARings, showCitationAura]
   );
 
   // Link width
@@ -469,6 +471,19 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
   const linkColor = useCallback(
     (linkData: unknown) => {
       const link = linkData as ForceGraphLink;
+
+      // Check camera distance for LOD
+      const camDist = fgRef.current?.camera()?.position?.length() ?? 0;
+      const isFar = camDist > 800;
+      const isVeryFar = camDist > 1200;
+
+      if (isFar && link.edgeType === 'similarity') {
+        return 'rgba(0,0,0,0)'; // invisible
+      }
+      if (isVeryFar && link.width < 1.5) {
+        return 'rgba(0,0,0,0)'; // hide weak edges at far distances
+      }
+
       if (!selectedPaper) {
         return link.dashed
           ? 'rgba(74, 144, 217, 0.15)'
@@ -489,7 +504,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       }
       return 'rgba(255, 255, 255, 0.03)';
     },
-    [selectedPaper, highlightSet]
+    [selectedPaper, highlightSet, fgRef]
   );
 
   // Custom dashed link rendering for similarity edges
@@ -538,6 +553,27 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     []
   );
 
+  // Link click handler — dispatches citationEdgeClick custom event
+  const handleLinkClick = useCallback((linkData: unknown) => {
+    const link = linkData as ForceGraphLink;
+    const sourceId =
+      typeof link.source === 'string' ? link.source : (link.source as ForceGraphNode).id;
+    const targetId =
+      typeof link.target === 'string' ? link.target : (link.target as ForceGraphNode).id;
+
+    window.dispatchEvent(
+      new CustomEvent('citationEdgeClick', {
+        detail: {
+          sourceId,
+          targetId,
+          type: link.edgeType || 'citation',
+          intent: link.intentLabel,
+          weight: link.width,
+        },
+      })
+    );
+  }, []);
+
   // Click handler
   const handleNodeClick = useCallback(
     (nodeData: unknown, event: MouseEvent) => {
@@ -568,6 +604,8 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
             1000
           );
         }
+        // Dispatch expand event for explore page to handle
+        window.dispatchEvent(new CustomEvent('expandPaper', { detail: { paper: node.paper } }));
         lastClickRef.current = null;
         return;
       }
@@ -940,11 +978,20 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         nodeLabel={(nodeData: unknown) => {
           const node = nodeData as ForceGraphNode;
           const p = node.paper;
+          const tldrSnippet = p.tldr ? p.tldr.substring(0, 100) + (p.tldr.length > 100 ? '...' : '') : (p.abstract ? p.abstract.substring(0, 100) + '...' : '');
+          const badges = [];
+          if (node.citationPercentile > 0.9) badges.push('⭐ Highly Cited');
+          if (p.is_bridge) badges.push('◈ Bridge');
+          if (p.is_open_access) badges.push('🔓 OA');
+          if (p.year && p.year >= 2024) badges.push('◆ New');
           return `
-            <div style="background: rgba(10,14,26,0.92); padding: 10px 14px; border-radius: 8px; font-family: system-ui; font-size: 12px; max-width: 300px; border: 1px solid rgba(42,48,80,0.6);">
-              <div style="font-weight: bold; color: ${node.color}; margin-bottom: 4px;">${p.title.length > 80 ? p.title.substring(0, 80) + '...' : p.title}</div>
-              <div style="color: #8890a5; font-size: 11px;">${p.authors.slice(0, 3).map((a) => a.name).join(', ')}${p.authors.length > 3 ? ' et al.' : ''}</div>
-              <div style="color: #8890a5; margin-top: 4px; font-size: 11px;">${p.venue || ''} ${p.year} | Citations: ${p.citation_count}</div>
+            <div style="background: rgba(10,14,26,0.95); padding: 12px 14px; border-radius: 10px; font-family: system-ui; font-size: 12px; max-width: 320px; border: 1px solid rgba(42,48,80,0.7); box-shadow: 0 4px 24px rgba(0,0,0,0.4);">
+              <div style="font-weight: 600; color: ${node.color}; margin-bottom: 5px; line-height: 1.4;">${p.title.length > 80 ? p.title.substring(0, 80) + '...' : p.title}</div>
+              <div style="color: #8890a5; font-size: 11px; margin-bottom: 3px;">${p.authors.slice(0, 3).map((a) => a.name).join(', ')}${p.authors.length > 3 ? ' et al.' : ''}</div>
+              <div style="color: #6870a0; font-size: 11px; margin-bottom: 5px;">${p.venue || ''} ${p.year || ''} | ${p.citation_count.toLocaleString()} citations</div>
+              ${p.cluster_label ? `<div style="color: #5a7a9a; font-size: 10px; margin-bottom: 4px;">📍 ${p.cluster_label}</div>` : ''}
+              ${tldrSnippet ? `<div style="color: #a0a8c0; font-size: 11px; line-height: 1.4; border-top: 1px solid rgba(42,48,80,0.5); padding-top: 5px; margin-top: 5px;">${tldrSnippet}</div>` : ''}
+              ${badges.length > 0 ? `<div style="margin-top: 5px; font-size: 10px; color: #8890a5;">${badges.join('  ')}</div>` : ''}
             </div>
           `;
         }}
@@ -975,6 +1022,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         backgroundColor="#0a0e1a"
         onNodeClick={handleNodeClick}
         onNodeHover={handleNodeHover}
+        onLinkClick={handleLinkClick}
         onBackgroundClick={handleBackgroundClick}
         warmupTicks={100}
         cooldownTicks={0}

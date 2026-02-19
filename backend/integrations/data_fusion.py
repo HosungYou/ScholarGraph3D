@@ -108,7 +108,13 @@ def _oa_work_to_unified(work: OpenAlexWork) -> UnifiedPaper:
         oa_topics=work.topics,
         is_open_access=work.is_open_access,
         oa_url=work.open_access_url,
-        authors=work.authors,
+        authors=[
+            {
+                "name": a.get("display_name") or a.get("name") or "Unknown",
+                "affiliations": [i.get("display_name", "") for i in a.get("institutions", [])],
+            }
+            for a in work.authors
+        ],
         oa_work_id=work.id,
     )
 
@@ -177,28 +183,38 @@ class DataFusionService:
         if year_range:
             oa_filter_params["publication_year"] = f"{year_range[0]}-{year_range[1]}"
 
-        oa_results = await self.oa_client.search_works(
+        # 1+2. Parallel OA + S2 search
+        oa_task = self.oa_client.search_works(
             query=query,
-            per_page=min(limit, 100),
+            per_page=min(limit, 250),
             filter_params=oa_filter_params if oa_filter_params else None,
         )
+        s2_task = self.s2_client.search_papers(
+            query=query,
+            limit=min(limit, 250),
+            year_range=year_range,
+            fields_of_study=fields,
+            include_embedding=True,
+        )
+
+        import asyncio as _asyncio
+        oa_raw, s2_raw = await _asyncio.gather(oa_task, s2_task, return_exceptions=True)
+
+        if isinstance(oa_raw, Exception):
+            logger.warning(f"OA search failed: {oa_raw}")
+            oa_results = []
+        else:
+            oa_results = oa_raw
         logger.info(f"OA search returned {len(oa_results)} results for '{query}'")
 
-        # 2. S2 search (supplementary — graceful on rate limit)
         s2_results: List[SemanticScholarPaper] = []
-        try:
-            s2_results = await self.s2_client.search_papers(
-                query=query,
-                limit=min(limit, 100),
-                year_range=year_range,
-                fields_of_study=fields,
-                include_embedding=True,  # Request SPECTER2 embeddings inline
-            )
+        if isinstance(s2_raw, SemanticScholarRateLimitError):
+            logger.warning(f"S2 rate limited, continuing with OA-only results")
+        elif isinstance(s2_raw, Exception):
+            logger.warning(f"S2 search failed, continuing with OA-only: {s2_raw}")
+        else:
+            s2_results = s2_raw
             logger.info(f"S2 search returned {len(s2_results)} results for '{query}'")
-        except SemanticScholarRateLimitError as e:
-            logger.warning(f"S2 rate limited ({e.retry_after}s), continuing with OA-only results")
-        except Exception as e:
-            logger.warning(f"S2 search failed, continuing with OA-only: {e}")
 
         # 3. DOI-based dedup + merge
         merged = self._merge_results(oa_results, s2_results)

@@ -18,7 +18,7 @@ class EmbeddingReducer:
     def reduce_to_3d(
         self,
         embeddings: np.ndarray,
-        n_neighbors: int = 15,
+        n_neighbors: int = 10,
         min_dist: float = 0.1,
         metric: str = "cosine",
         random_state: int = 42,
@@ -38,8 +38,8 @@ class EmbeddingReducer:
         """
         from umap import UMAP
 
-        if embeddings.shape[0] < 2:
-            logger.warning("Need at least 2 embeddings for UMAP, returning zeros")
+        if embeddings.shape[0] < 3:
+            logger.warning("Need at least 3 embeddings for UMAP, returning zeros")
             return np.zeros((embeddings.shape[0], 3))
 
         # Adjust n_neighbors for small datasets

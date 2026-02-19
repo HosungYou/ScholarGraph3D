@@ -11,6 +11,8 @@ import {
   SunDim,
   Zap,
   Target,
+  Circle,
+  Sparkles,
 } from 'lucide-react';
 import { useGraphStore } from '@/hooks/useGraphStore';
 import { cn } from '@/lib/utils';
@@ -26,9 +28,13 @@ export default function GraphControls() {
     toggleClusterHulls,
     toggleLabels,
     showBloom,
+    showOARings,
+    showCitationAura,
     showGhostEdges,
     showGapOverlay,
     toggleBloom,
+    toggleOARings,
+    toggleCitationAura,
     toggleGhostEdges,
     toggleGapOverlay,
   } = useGraphStore();
@@ -75,6 +81,18 @@ export default function GraphControls() {
       label: 'Gap Overlay',
       active: showGapOverlay,
       toggle: toggleGapOverlay,
+    },
+    {
+      icon: Circle,
+      label: 'OA Rings',
+      active: showOARings,
+      toggle: toggleOARings,
+    },
+    {
+      icon: Sparkles,
+      label: 'Citation Aura',
+      active: showCitationAura,
+      toggle: toggleCitationAura,
     },
   ];
 

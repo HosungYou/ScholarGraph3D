@@ -75,6 +75,47 @@ export const api = {
   expandPaper: (id: string): Promise<{ nodes: import('@/types').Paper[]; edges: import('@/types').GraphEdge[] }> =>
     request(`${API_BASE}/api/papers/${id}/expand`, { method: 'POST' }),
 
+  expandPaperStable: (
+    id: string,
+    existingNodes: import('@/types').Paper[],
+    existingEdges: import('@/types').GraphEdge[]
+  ): Promise<{ nodes: import('@/types').Paper[]; edges: import('@/types').GraphEdge[] }> =>
+    request(`${API_BASE}/api/papers/${id}/expand-stable`, {
+      method: 'POST',
+      body: JSON.stringify({
+        existing_nodes: existingNodes.map((n) => ({
+          id: n.id,
+          x: n.x,
+          y: n.y,
+          z: n.z,
+          cluster_id: n.cluster_id,
+        })),
+        limit: 20,
+      }),
+    }).then((r: any) => ({
+      nodes: (r.nodes || []).map((n: any) => ({
+        id: n.paper_id,
+        title: n.title || '',
+        authors: [],
+        year: n.year || 0,
+        venue: n.venue,
+        citation_count: n.citation_count || 0,
+        abstract: undefined,
+        tldr: undefined,
+        fields: [],
+        topics: [],
+        x: n.initial_x || 0,
+        y: n.initial_y || 0,
+        z: n.initial_z || 0,
+        cluster_id: n.cluster_id ?? -1,
+        cluster_label: 'Expanded',
+        is_open_access: n.is_open_access || false,
+        oa_url: undefined,
+        is_bridge: false,
+      })),
+      edges: r.edges || [],
+    })),
+
   // Saved Graphs (auth required)
   listGraphs: async (): Promise<SavedGraph[]> =>
     request<SavedGraph[]>(`${API_BASE}/api/graphs`),

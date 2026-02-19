@@ -47,6 +47,7 @@ class SimilarityComputer:
         similarity_matrix = normalized @ normalized.T
 
         edges = []
+        degree: Dict[str, int] = {}
         for i in range(similarity_matrix.shape[0]):
             # Get similarities for this paper (excluding self)
             sims = similarity_matrix[i].copy()
@@ -65,12 +66,20 @@ class SimilarityComputer:
             for j in top_indices:
                 # Only add edge once (i < j to avoid duplicates)
                 if i < j:
+                    src, tgt = paper_ids[i], paper_ids[j]
+                    # Enforce max degree for both endpoints
+                    if degree.get(src, 0) >= max_edges_per_node:
+                        continue
+                    if degree.get(tgt, 0) >= max_edges_per_node:
+                        continue
                     edges.append({
-                        "source": paper_ids[i],
-                        "target": paper_ids[j],
+                        "source": src,
+                        "target": tgt,
                         "similarity": float(sims[j]),
                         "type": "similarity",
                     })
+                    degree[src] = degree.get(src, 0) + 1
+                    degree[tgt] = degree.get(tgt, 0) + 1
 
         logger.info(
             f"Computed {len(edges)} similarity edges "

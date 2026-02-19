@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Search, Filter, ChevronDown } from 'lucide-react';
+import { Search, Filter, ChevronDown, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useGraphStore } from '@/hooks/useGraphStore';
 
 const OA_FIELDS = [
   'Physical Sciences',
@@ -14,19 +15,61 @@ const OA_FIELDS = [
   'Arts & Humanities',
 ];
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
 export default function SearchBar() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { llmSettings } = useGraphStore();
   const [query, setQuery] = useState(searchParams.get('q') || '');
   const [yearMin, setYearMin] = useState(searchParams.get('year_min') || '');
   const [yearMax, setYearMax] = useState(searchParams.get('year_max') || '');
   const [field, setField] = useState(searchParams.get('field') || '');
   const [showFilters, setShowFilters] = useState(false);
+  const [aiMode, setAiMode] = useState(false);
+  const [isAiSearching, setIsAiSearching] = useState(false);
 
-  const handleSearch = (e: React.FormEvent) => {
+  const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim()) return;
 
+    // AI mode: call natural language search backend
+    if (aiMode) {
+      const groqKey = llmSettings?.provider === 'groq' ? llmSettings.api_key : null;
+
+      if (groqKey) {
+        // Use AI natural language search
+        setIsAiSearching(true);
+        try {
+          const resp = await fetch(`${API_BASE}/api/search/natural`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              query: query.trim(),
+              groq_api_key: groqKey,
+              limit: 200,
+            }),
+          });
+          if (resp.ok) {
+            // Navigate to explore with the query
+            const params = new URLSearchParams();
+            params.set('q', query.trim());
+            if (yearMin) params.set('year_min', yearMin);
+            if (yearMax) params.set('year_max', yearMax);
+            if (field) params.set('field', field);
+            router.push(`/explore?${params.toString()}`);
+            return;
+          }
+        } catch (err) {
+          console.error('AI search failed, falling back to keyword search:', err);
+        } finally {
+          setIsAiSearching(false);
+        }
+      }
+      // Fallback: use regular search with natural language query
+    }
+
+    // Regular keyword search
     const params = new URLSearchParams();
     params.set('q', query.trim());
     if (yearMin) params.set('year_min', yearMin);
@@ -38,14 +81,55 @@ export default function SearchBar() {
 
   return (
     <form onSubmit={handleSearch} className="flex-1 flex items-center gap-2">
+      {/* Mode toggle */}
+      <div className="flex-shrink-0 flex items-center bg-gray-800/50 rounded-lg p-0.5 border border-gray-700/30">
+        <button
+          type="button"
+          onClick={() => setAiMode(false)}
+          className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1 ${
+            !aiMode
+              ? 'bg-gray-700 text-gray-100 shadow-sm'
+              : 'text-gray-500 hover:text-gray-300'
+          }`}
+        >
+          <Search className="w-3 h-3" />
+          Keyword
+        </button>
+        <button
+          type="button"
+          onClick={() => setAiMode(true)}
+          className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1 ${
+            aiMode
+              ? 'bg-purple-700/80 text-purple-100 shadow-sm'
+              : 'text-gray-500 hover:text-gray-300'
+          }`}
+          title={!llmSettings || llmSettings.provider !== 'groq' ? 'Set Groq API key in LLM Settings for AI Search' : 'AI Search mode'}
+        >
+          <Sparkles className="w-3 h-3" />
+          AI Search
+        </button>
+      </div>
+
       <div className="flex-1 relative flex items-center">
-        <Search className="absolute left-3 w-4 h-4 text-text-secondary pointer-events-none" />
+        {aiMode ? (
+          <Sparkles className="absolute left-3 w-4 h-4 text-purple-400 pointer-events-none" />
+        ) : (
+          <Search className="absolute left-3 w-4 h-4 text-text-secondary pointer-events-none" />
+        )}
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search papers..."
-          className="w-full bg-surface/50 border border-border/30 rounded-lg pl-9 pr-4 py-2 text-sm text-text-primary placeholder:text-text-secondary/60 outline-none focus:border-accent/50 transition-colors"
+          placeholder={
+            aiMode
+              ? 'Describe what you\'re looking for... e.g. "How is AI adopted in healthcare since 2020?"'
+              : 'Search papers...'
+          }
+          className={`w-full bg-surface/50 border rounded-lg pl-9 pr-4 py-2 text-sm text-text-primary placeholder:text-text-secondary/60 outline-none transition-colors ${
+            aiMode
+              ? 'border-purple-700/40 focus:border-purple-500/50'
+              : 'border-border/30 focus:border-accent/50'
+          }`}
         />
       </div>
 
@@ -67,10 +151,14 @@ export default function SearchBar() {
 
       <button
         type="submit"
-        disabled={!query.trim()}
-        className="px-4 py-2 bg-accent hover:bg-accent/90 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        disabled={!query.trim() || isAiSearching}
+        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-white ${
+          aiMode
+            ? 'bg-purple-600 hover:bg-purple-700'
+            : 'bg-accent hover:bg-accent/90'
+        }`}
       >
-        Search
+        {isAiSearching ? 'Searching...' : aiMode ? '✨ Search' : 'Search'}
       </button>
 
       {/* Filter dropdown */}
@@ -140,6 +228,11 @@ export default function SearchBar() {
                 </button>
               )}
             </div>
+            {aiMode && (!llmSettings || llmSettings.provider !== 'groq') && (
+              <p className="text-xs text-purple-400/70 mt-2">
+                💡 Set a Groq API key in LLM Settings to enable AI-powered query expansion
+              </p>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

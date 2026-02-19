@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://scholargraph3d.com/sitemap.xml

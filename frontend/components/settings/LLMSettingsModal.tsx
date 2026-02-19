@@ -52,7 +52,7 @@ const PROVIDER_CONFIGS: Record<Provider, ProviderConfig> = {
   },
 };
 
-const PROVIDERS: Provider[] = ['openai', 'anthropic', 'google', 'groq'];
+const PROVIDERS: Provider[] = ['groq', 'openai', 'anthropic', 'google'];
 
 // Load settings from localStorage
 export function loadLLMSettings(): LLMSettings | null {
@@ -92,11 +92,11 @@ export default function LLMSettingsModal({
   const { llmSettings, setLLMSettings } = useGraphStore();
 
   const [provider, setProvider] = useState<Provider>(
-    llmSettings?.provider || 'openai'
+    llmSettings?.provider || 'groq'
   );
   const [apiKey, setApiKey] = useState(llmSettings?.api_key || '');
   const [model, setModel] = useState(
-    llmSettings?.model || PROVIDER_CONFIGS.openai.defaultModel
+    llmSettings?.model || PROVIDER_CONFIGS.groq.defaultModel
   );
   const [showKey, setShowKey] = useState(false);
   const [testStatus, setTestStatus] = useState<
