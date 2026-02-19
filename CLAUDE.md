@@ -143,7 +143,7 @@ Search endpoint returns: `{ nodes: Paper[], edges: GraphEdge[], clusters: Cluste
 
 ### Data Fusion Strategy
 1. OpenAlex keyword search (primary, 10 credits/page)
-2. Semantic Scholar search (supplementary)
+2. Semantic Scholar search (supplementary, include_embedding=True)
 3. DOI-based dedup (OA metadata preferred + S2 TLDR/embeddings)
 4. Abstract fallback: OA abstract → S2 TLDR → "No abstract"
 
@@ -153,6 +153,10 @@ Search endpoint returns: `{ nodes: Paper[], edges: GraphEdge[], clusters: Cluste
 - OA API: 100K credits/day with API key, semantic search = 1000 credits
 - pgvector: 768-dim vectors, ivfflat index with 100 lists
 - HDBSCAN min_cluster_size=5, UMAP n_neighbors=15
+- Backend: 1 uvicorn worker (async handles concurrency; CPU ops via asyncio.to_thread)
+- DB pool: min=1, max=3 connections
+- LLM cache: max 200 entries with oldest-25% eviction
+- HDBSCAN runs on 3D UMAP coordinates (not 768-dim embeddings)
 
 ## Documentation Map
 

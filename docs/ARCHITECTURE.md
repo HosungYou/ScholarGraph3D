@@ -136,20 +136,19 @@ search_papers()  handler  [backend/routers/search.py]
             v
         DataFusionService.search()
             |-- OA keyword search    (async, primary)
-            |-- S2 keyword search    (async, supplementary)
+            |-- S2 keyword search    (async, supplementary, include_embedding=True)
             |-- DOI dedup + merge    (sync)
-            |-- S2 batch embeddings  (async, fills gaps)
             |
             v
-        EmbeddingReducer.reduce_to_3d()    (UMAP, numpy)
+        EmbeddingReducer.reduce_to_3d()    (UMAP via asyncio.to_thread)
             |
             v
-        PaperClusterer.cluster()           (HDBSCAN)
+        PaperClusterer.cluster()           (HDBSCAN on 3D coords via asyncio.to_thread)
             |-- label_clusters()           (OA Topics)
             |-- compute_hulls()            (scipy ConvexHull)
             |
             v
-        SimilarityComputer.compute_edges() (cosine similarity)
+        SimilarityComputer.compute_edges() (cosine similarity via asyncio.to_thread)
             |
             v
         Build GraphResponse (nodes + edges + clusters + meta)
@@ -178,7 +177,7 @@ search_papers()  handler  [backend/routers/search.py]
 | **ASGI server** | uvicorn | latest | Production-grade ASGI; hot reload for development |
 | **Database** | PostgreSQL | 15 | JSONB for flexible paper metadata; pgvector for 768-dim SPECTER2 similarity search; RLS for user data isolation |
 | **Vector extension** | pgvector | 0.6+ | `ivfflat` index on `vector(768)` column; cosine distance queries for Phase 2 GraphRAG retrieval |
-| **Database driver** | asyncpg | 0.29+ | Pure-async PostgreSQL driver; connection pooling (min 2, max 5); JSONB codec registration in `init` callback |
+| **Database driver** | asyncpg | 0.29+ | Pure-async PostgreSQL driver; connection pooling (min 1, max 3); JSONB codec registration in `init` callback |
 | **Auth provider** | Supabase Auth | cloud | GoTrue-based JWT (RS256); manages `auth.users` table; RLS integration; email/password + OAuth |
 | **Embeddings** | SPECTER2 (allenai) | via S2 API | 768-dim scientific document embeddings; retrieved via S2 batch API — no local model hosting required |
 | **Dimensionality reduction** | UMAP-learn | 0.5+ | Reduces 768D SPECTER2 vectors to 3D; cosine metric; fixed `random_state=42` for reproducibility |
@@ -229,7 +228,7 @@ backend/
 `main.py` uses FastAPI's `@asynccontextmanager` lifespan pattern. On startup:
 
 1. Supabase Auth client is initialized if `SUPABASE_URL` and `SUPABASE_KEY` are set.
-2. `init_db()` creates the asyncpg connection pool (`min_size=2`, `max_size=5`).
+2. `init_db()` creates the asyncpg connection pool (`min_size=1`, `max_size=3`).
 3. pgvector availability is verified via `db.check_pgvector()`.
 4. API credentials (S2 key, OA email, OA key) are logged at INFO level (values redacted).
 
@@ -297,7 +296,7 @@ All configuration lives in `config.py` as a `Settings(BaseSettings)` class, cach
 
 `database.py` wraps an `asyncpg.Pool` in a `Database` class with:
 
-- **Connection pool:** `min_size=2`, `max_size=5`, `command_timeout=30.0`, `max_inactive_connection_lifetime=300.0`
+- **Connection pool:** `min_size=1`, `max_size=3`, `command_timeout=30.0`, `max_inactive_connection_lifetime=300.0`
 - **JSONB codec:** registered in the pool's `init` callback so asyncpg automatically decodes JSONB columns to Python dicts
 - **Health cache:** `get_health_snapshot()` caches db + pgvector status for 15 seconds (TTL guarded by `asyncio.Lock`)
 - **pgbouncer compatibility:** `statement_cache_size=0`
@@ -334,19 +333,16 @@ SearchRequest {query, limit, year_start, year_end,
     │         Credit tracking: 10 credits per page
     │
     ├── [2b] SemanticScholarClient.search_papers()
-    │         GET /paper/search?query={q}&limit=100
+    │         GET /paper/search?query={q}&limit=100&fields=...embedding...
+    │         Embeddings returned inline (include_embedding=True)
     │         Rate-limited: 1 RPS via asyncio.Lock
     │
-    ├── [2c] DOI Dedup + Merge
-    │         Normalize DOIs: strip URL prefix, lowercase
-    │         Index S2 by normalized DOI and lowercase title
-    │         OA metadata wins; S2 contributes tldr + embedding
-    │         Abstract fallback: OA -> S2 abstract -> S2 TLDR -> "No abstract available"
-    │         Result: deduplicated List[UnifiedPaper]
-    │
-    └── [2d] S2 Batch Embedding Fetch
-              POST /paper/batch (up to 500/request)
-              Fills papers with embedding=None but s2_paper_id present
+    └── [2c] DOI Dedup + Merge
+              Normalize DOIs: strip URL prefix, lowercase
+              Index S2 by normalized DOI and lowercase title
+              OA metadata wins; S2 contributes tldr + embedding
+              Abstract fallback: OA -> S2 abstract -> S2 TLDR -> "No abstract available"
+              Result: deduplicated List[UnifiedPaper]
     |
     v
 [Step 3] EmbeddingReducer.reduce_to_3d()
@@ -355,13 +351,15 @@ SearchRequest {query, limit, year_start, year_end,
          min_dist=0.1, metric='cosine', random_state=42)
     Output: numpy array shape (N, 3)
     Papers without embeddings: x=offset*0.5, y=10.0, z=0.0, cluster_id=-1
+    Execution: asyncio.to_thread() — non-blocking event loop
     |
     v
 [Step 4] PaperClusterer.cluster()
-    Input:  numpy array shape (N, 768)
+    Input:  numpy array shape (N, 3) — UMAP 3D coordinates
     HDBSCAN(min_cluster_size=request.min_cluster_size,
             metric='euclidean', cluster_selection_method='eom')
     Output: (N,) array of cluster labels  (-1 = noise)
+    Execution: asyncio.to_thread() — non-blocking event loop
     |
     ├── label_clusters()
     │     Collect OA Topics from cluster members
@@ -378,6 +376,7 @@ SearchRequest {query, limit, year_start, year_end,
     Keep pairs where similarity >= threshold (default 0.7)
     Top max_edges_per_node (default 10) per paper
     Deduplicate: emit edge only where i < j
+    Execution: asyncio.to_thread() — non-blocking event loop
     Output: List[{source, target, similarity}]
     |
     v
