@@ -141,7 +141,7 @@ class DataFusionService:
     2. S2 search (supplementary) - provides TLDR + embeddings
     3. DOI-based dedup + merge
     4. Abstract fallback: OA abstract -> S2 TLDR -> "No abstract available"
-    5. Get SPECTER2 embeddings from S2 batch API
+    5. Log embedding coverage
     6. Return unified paper list
     """
 
@@ -192,6 +192,7 @@ class DataFusionService:
                 limit=min(limit, 100),
                 year_range=year_range,
                 fields_of_study=fields,
+                include_embedding=True,  # Request SPECTER2 embeddings inline
             )
             logger.info(f"S2 search returned {len(s2_results)} results for '{query}'")
         except SemanticScholarRateLimitError as e:
@@ -205,25 +206,9 @@ class DataFusionService:
 
         # 4. Abstract fallback applied during merge
 
-        # 5. Get SPECTER2 embeddings for papers missing them
-        papers_needing_embeddings = [
-            p for p in merged
-            if p.embedding is None and p.s2_paper_id
-        ]
-        if papers_needing_embeddings:
-            s2_ids = [p.s2_paper_id for p in papers_needing_embeddings if p.s2_paper_id]
-            if s2_ids:
-                try:
-                    embedded_papers = await self.s2_client.get_specter2_embeddings(s2_ids)
-                    embedding_map = {p.paper_id: p.embedding for p in embedded_papers if p.embedding}
-                    for paper in papers_needing_embeddings:
-                        if paper.s2_paper_id and paper.s2_paper_id in embedding_map:
-                            paper.embedding = embedding_map[paper.s2_paper_id]
-                    logger.info(f"Fetched {len(embedding_map)} SPECTER2 embeddings")
-                except SemanticScholarRateLimitError as e:
-                    logger.warning(f"S2 rate limited ({e.retry_after}s), skipping embeddings")
-                except Exception as e:
-                    logger.warning(f"Failed to fetch SPECTER2 embeddings: {e}")
+        # 5. Log embedding coverage (embeddings now included in S2 search response)
+        papers_with_emb = sum(1 for p in merged if p.embedding is not None)
+        logger.info(f"{papers_with_emb}/{len(merged)} papers have embeddings after merge")
 
         # 6. Return unified paper list (up to limit)
         return merged[:limit]

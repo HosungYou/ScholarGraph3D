@@ -37,10 +37,12 @@ class CachedLLMProvider(BaseLLMProvider):
         provider: BaseLLMProvider,
         cache_enabled: bool = True,
         default_ttl: int = 3600,
+        max_size: int = 200,
     ):
         self._provider = provider
         self._cache_enabled = cache_enabled
         self._default_ttl = default_ttl
+        self._max_size = max_size
         # Cache: {key: (LLMResponse, expiry_timestamp)}
         self._cache: Dict[str, Tuple[LLMResponse, float]] = {}
 
@@ -92,6 +94,20 @@ class CachedLLMProvider(BaseLLMProvider):
         """Store a response in the cache with TTL."""
         effective_ttl = ttl if ttl is not None else self._default_ttl
         self._cache[key] = (response, time.time() + effective_ttl)
+
+        # Enforce max size
+        if len(self._cache) > self._max_size:
+            self._cleanup_expired()
+            if len(self._cache) > self._max_size:
+                # Evict oldest 25%
+                sorted_keys = sorted(
+                    self._cache.keys(),
+                    key=lambda k: self._cache[k][1],  # sort by expiry time
+                )
+                evict_count = len(self._cache) // 4
+                for k in sorted_keys[:evict_count]:
+                    del self._cache[k]
+                logger.debug(f"LLM cache evicted {evict_count} entries (max_size={self._max_size})")
 
     def _cleanup_expired(self) -> None:
         """Remove expired entries. Called periodically to prevent unbounded growth."""
@@ -233,6 +249,7 @@ def wrap_with_cache(
     provider: BaseLLMProvider,
     enabled: bool = True,
     default_ttl: int = 3600,
+    max_size: int = 200,
 ) -> BaseLLMProvider:
     """
     Convenience function to wrap a provider with caching.
@@ -241,6 +258,7 @@ def wrap_with_cache(
         provider: The LLM provider to wrap.
         enabled: Whether caching is enabled.
         default_ttl: Default TTL in seconds (default: 1 hour).
+        max_size: Maximum number of cached entries before eviction (default: 200).
 
     Returns:
         CachedLLMProvider wrapping the original, or the original if disabled.
@@ -252,4 +270,5 @@ def wrap_with_cache(
         provider=provider,
         cache_enabled=enabled,
         default_ttl=default_ttl,
+        max_size=max_size,
     )

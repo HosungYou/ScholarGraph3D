@@ -55,8 +55,8 @@ class Database:
 
     async def connect(
         self,
-        min_size: int = 2,
-        max_size: int = 5,
+        min_size: int = 1,
+        max_size: int = 3,
         command_timeout: float = 30.0,
     ) -> None:
         """Create connection pool."""

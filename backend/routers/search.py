@@ -9,6 +9,7 @@ Main search endpoint that orchestrates:
 5. Citation edge fetching
 """
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -208,11 +209,11 @@ async def search_papers(request: SearchRequest, db: Database = Depends(get_db)):
 
         # 3. UMAP 3D reduction
         reducer = EmbeddingReducer()
-        coords_3d = reducer.reduce_to_3d(embeddings)
+        coords_3d = await asyncio.to_thread(reducer.reduce_to_3d, embeddings)
 
         # 4. HDBSCAN clustering
         clusterer = PaperClusterer()
-        cluster_labels = clusterer.cluster(embeddings, min_cluster_size=request.min_cluster_size)
+        cluster_labels = await asyncio.to_thread(clusterer.cluster, coords_3d, request.min_cluster_size)
 
         paper_dicts = [p.to_dict() for p in papers_with_embeddings]
         cluster_meta = clusterer.label_clusters(paper_dicts, cluster_labels)
@@ -220,9 +221,10 @@ async def search_papers(request: SearchRequest, db: Database = Depends(get_db)):
 
         # 5. Similarity edges
         sim_computer = SimilarityComputer()
-        sim_edges = sim_computer.compute_edges(
+        sim_edges = await asyncio.to_thread(
+            sim_computer.compute_edges,
             embeddings, paper_ids,
-            threshold=request.similarity_threshold,
+            request.similarity_threshold,
         )
 
         # Build nodes
