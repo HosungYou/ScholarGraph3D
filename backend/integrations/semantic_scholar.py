@@ -164,10 +164,11 @@ class SemanticScholarClient:
                 if response.status_code == 429:
                     retry_after = int(response.headers.get("Retry-After", 60))
                     last_retry_after = retry_after
-                    if attempt == self.max_retries - 1:
+                    # Cap sleep to 5s to avoid Render 30s request timeout
+                    if retry_after > 5 or attempt == self.max_retries - 1:
                         raise SemanticScholarRateLimitError(retry_after=retry_after)
                     logger.warning(f"S2 rate limited, waiting {retry_after}s")
-                    await asyncio.sleep(retry_after)
+                    await asyncio.sleep(min(retry_after, 5))
                     continue
 
                 response.raise_for_status()

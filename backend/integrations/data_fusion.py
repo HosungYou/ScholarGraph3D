@@ -10,7 +10,11 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple
 
 from .openalex import OpenAlexClient, OpenAlexWork
-from .semantic_scholar import SemanticScholarClient, SemanticScholarPaper
+from .semantic_scholar import (
+    SemanticScholarClient,
+    SemanticScholarPaper,
+    SemanticScholarRateLimitError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -180,14 +184,20 @@ class DataFusionService:
         )
         logger.info(f"OA search returned {len(oa_results)} results for '{query}'")
 
-        # 2. S2 search (supplementary)
-        s2_results = await self.s2_client.search_papers(
-            query=query,
-            limit=min(limit, 100),
-            year_range=year_range,
-            fields_of_study=fields,
-        )
-        logger.info(f"S2 search returned {len(s2_results)} results for '{query}'")
+        # 2. S2 search (supplementary — graceful on rate limit)
+        s2_results: List[SemanticScholarPaper] = []
+        try:
+            s2_results = await self.s2_client.search_papers(
+                query=query,
+                limit=min(limit, 100),
+                year_range=year_range,
+                fields_of_study=fields,
+            )
+            logger.info(f"S2 search returned {len(s2_results)} results for '{query}'")
+        except SemanticScholarRateLimitError as e:
+            logger.warning(f"S2 rate limited ({e.retry_after}s), continuing with OA-only results")
+        except Exception as e:
+            logger.warning(f"S2 search failed, continuing with OA-only: {e}")
 
         # 3. DOI-based dedup + merge
         merged = self._merge_results(oa_results, s2_results)
@@ -210,6 +220,8 @@ class DataFusionService:
                         if paper.s2_paper_id and paper.s2_paper_id in embedding_map:
                             paper.embedding = embedding_map[paper.s2_paper_id]
                     logger.info(f"Fetched {len(embedding_map)} SPECTER2 embeddings")
+                except SemanticScholarRateLimitError as e:
+                    logger.warning(f"S2 rate limited ({e.retry_after}s), skipping embeddings")
                 except Exception as e:
                     logger.warning(f"Failed to fetch SPECTER2 embeddings: {e}")
 

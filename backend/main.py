@@ -95,9 +95,13 @@ if settings.environment == "development":
         "http://localhost:8000",
     ]))
 
+# Allow all Vercel preview/production URLs via regex
+_cors_origin_regex = r"https://.*\.vercel\.app"
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
+    allow_origin_regex=_cors_origin_regex,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
