@@ -93,3 +93,76 @@ export const INTENT_COLORS: Record<string, string> = {
   supports: '#2ECC71',
   contradicts: '#E74C3C',
 };
+
+// ─── Phase 2: Trend Analysis ────────────────────────────────────────
+
+export interface ClusterTrend {
+  cluster_id: number;
+  cluster_label: string;
+  classification: 'emerging' | 'stable' | 'declining';
+  paper_count: number;
+  year_range: [number, number];
+  year_distribution: Record<number, number>;
+  trend_strength: number;
+  velocity: number;
+  representative_papers: string[];
+}
+
+export interface TrendAnalysis {
+  emerging: ClusterTrend[];
+  stable: ClusterTrend[];
+  declining: ClusterTrend[];
+  summary: {
+    total_papers: number;
+    year_range: [number, number];
+    cluster_count: number;
+  };
+}
+
+// ─── Phase 2: Gap Analysis ──────────────────────────────────────────
+
+export interface StructuralGap {
+  gap_id: string;
+  cluster_a: { id: number; label: string; paper_count: number };
+  cluster_b: { id: number; label: string; paper_count: number };
+  gap_strength: number;
+  bridge_papers: { paper_id: string; title: string; score: number }[];
+  potential_edges: { source: string; target: string; similarity: number }[];
+  research_questions: string[];
+}
+
+export interface GapAnalysis {
+  gaps: StructuralGap[];
+  summary: { total_gaps: number; avg_gap_strength: number };
+}
+
+// ─── Phase 2: Chat ──────────────────────────────────────────────────
+
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  citations?: { paper_id: string; title: string; index: number }[];
+  highlighted_papers?: string[];
+  timestamp: string;
+}
+
+export interface ChatResponse {
+  answer: string;
+  citations: { paper_id: string; title: string; index: number }[];
+  highlighted_papers: string[];
+  suggested_followups: string[];
+}
+
+// ─── Phase 2: LLM Settings ─────────────────────────────────────────
+
+export interface LLMSettings {
+  provider: 'openai' | 'anthropic' | 'google' | 'groq';
+  api_key: string;
+  model?: string;
+}
+
+export const TREND_COLORS: Record<string, string> = {
+  emerging: '#2ECC71',
+  stable: '#4A90D9',
+  declining: '#E74C3C',
+};

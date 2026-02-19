@@ -82,3 +82,32 @@ CREATE TABLE watch_queries (
 );
 
 CREATE INDEX idx_watch_queries_user ON watch_queries(user_id);
+
+-- ==================== Phase 2: Chat History ====================
+
+-- Chat conversations: groups of messages in a GraphRAG session
+CREATE TABLE IF NOT EXISTS chat_conversations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID,
+    graph_id UUID REFERENCES user_graphs(id) ON DELETE SET NULL,
+    title TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_chat_conversations_user ON chat_conversations(user_id);
+CREATE INDEX idx_chat_conversations_graph ON chat_conversations(graph_id);
+
+-- Chat messages: individual messages within a conversation
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    conversation_id UUID REFERENCES chat_conversations(id) ON DELETE CASCADE,
+    role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+    content TEXT NOT NULL,
+    citations JSONB,
+    highlighted_papers TEXT[],
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_chat_messages_conversation ON chat_messages(conversation_id);
+CREATE INDEX idx_chat_messages_created ON chat_messages(created_at);

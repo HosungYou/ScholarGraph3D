@@ -32,6 +32,18 @@ class Settings(BaseSettings):
     # Redis (Upstash)
     redis_url: str = ""
 
+    # LLM Providers (Phase 2 - users bring their own keys)
+    default_llm_provider: str = "groq"
+    default_llm_model: str = "llama-3.3-70b-versatile"
+    # Server-side fallback keys (optional)
+    openai_api_key: str = ""
+    anthropic_api_key: str = ""
+    google_api_key: str = ""
+    groq_api_key: str = ""
+    # LLM Caching
+    llm_cache_enabled: bool = True
+    llm_cache_ttl: int = 3600
+
     # CORS
     cors_origins: str = "http://localhost:3000,http://localhost:3001"
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useCallback, Suspense } from 'react';
+import { useEffect, useCallback, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -11,7 +11,15 @@ import PaperDetailPanel from '@/components/graph/PaperDetailPanel';
 import ClusterPanel from '@/components/graph/ClusterPanel';
 import SearchBar from '@/components/graph/SearchBar';
 import GraphControls from '@/components/graph/GraphControls';
+import TrendPanel from '@/components/analysis/TrendPanel';
+import GapPanel from '@/components/analysis/GapPanel';
+import ChatPanel from '@/components/chat/ChatPanel';
+import LLMSettingsModal, {
+  loadLLMSettings,
+} from '@/components/settings/LLMSettingsModal';
 import type { Paper } from '@/types';
+
+type LeftTab = 'clusters' | 'trends' | 'gaps';
 
 function ExploreContent() {
   const searchParams = useSearchParams();
@@ -28,11 +36,26 @@ function ExploreContent() {
     graphData,
     selectedPaper,
     isLoading,
+    llmSettings,
     setGraphData,
     selectPaper,
     setLoading,
     setError,
+    setLLMSettings,
   } = useGraphStore();
+
+  // Local UI state
+  const [leftTab, setLeftTab] = useState<LeftTab>('clusters');
+  const [showChat, setShowChat] = useState(false);
+  const [showLLMModal, setShowLLMModal] = useState(false);
+
+  // Load LLM settings from localStorage on mount
+  useEffect(() => {
+    const saved = loadLLMSettings();
+    if (saved) {
+      setLLMSettings(saved);
+    }
+  }, [setLLMSettings]);
 
   const { data, isLoading: queryLoading, error: queryError } = useQuery({
     queryKey: ['search', query, yearMin, yearMax, field],
@@ -75,6 +98,10 @@ function ExploreContent() {
     []
   );
 
+  // Right panel: show paper detail OR chat
+  const showPaperDetail = selectedPaper && !showChat;
+  const showChatPanel = showChat;
+
   return (
     <div className="h-screen flex flex-col bg-background">
       {/* Top bar with search */}
@@ -84,14 +111,78 @@ function ExploreContent() {
             SG3D
           </a>
           <SearchBar />
+
+          {/* AI Analysis toolbar */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {/* Chat toggle */}
+            <button
+              onClick={() => setShowChat(!showChat)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                showChat
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-800 text-gray-400 hover:text-gray-200 hover:bg-gray-700 border border-gray-700'
+              }`}
+              title="Toggle AI Chat"
+            >
+              &#128172; Chat
+            </button>
+
+            {/* LLM Settings */}
+            <button
+              onClick={() => setShowLLMModal(true)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                llmSettings
+                  ? 'bg-green-900/20 text-green-400 border-green-800/40 hover:bg-green-900/30'
+                  : 'bg-gray-800 text-gray-400 border-gray-700 hover:text-gray-200 hover:bg-gray-700'
+              }`}
+              title="LLM Settings"
+            >
+              &#9881; {llmSettings ? llmSettings.provider : 'LLM'}
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Main content area */}
       <div className="flex-1 flex overflow-hidden relative">
-        {/* Left panel: clusters */}
-        <div className="w-72 flex-shrink-0 border-r border-border/30 glass overflow-y-auto">
-          <ClusterPanel />
+        {/* Left panel: tabbed sidebar */}
+        <div className="w-72 flex-shrink-0 border-r border-border/30 glass flex flex-col">
+          {/* Tab buttons */}
+          <div className="flex border-b border-border/30 flex-shrink-0">
+            {(
+              [
+                { key: 'clusters', label: 'Clusters' },
+                { key: 'trends', label: 'Trends' },
+                { key: 'gaps', label: 'Gaps' },
+              ] as const
+            ).map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setLeftTab(tab.key)}
+                className={`flex-1 px-3 py-2.5 text-xs font-medium transition-all relative ${
+                  leftTab === tab.key
+                    ? 'text-gray-100'
+                    : 'text-gray-500 hover:text-gray-300'
+                }`}
+              >
+                {tab.label}
+                {leftTab === tab.key && (
+                  <motion.div
+                    layoutId="leftTabIndicator"
+                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500"
+                    transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                  />
+                )}
+              </button>
+            ))}
+          </div>
+
+          {/* Tab content */}
+          <div className="flex-1 overflow-y-auto">
+            {leftTab === 'clusters' && <ClusterPanel />}
+            {leftTab === 'trends' && <TrendPanel />}
+            {leftTab === 'gaps' && <GapPanel />}
+          </div>
         </div>
 
         {/* Center: 3D Graph */}
@@ -143,10 +234,11 @@ function ExploreContent() {
           )}
         </div>
 
-        {/* Right panel: paper detail */}
-        <AnimatePresence>
-          {selectedPaper && (
+        {/* Right panel: paper detail OR chat */}
+        <AnimatePresence mode="wait">
+          {showPaperDetail && (
             <motion.div
+              key="paper-detail"
               initial={{ x: 380, opacity: 0 }}
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: 380, opacity: 0 }}
@@ -160,8 +252,27 @@ function ExploreContent() {
               />
             </motion.div>
           )}
+
+          {showChatPanel && (
+            <motion.div
+              key="chat-panel"
+              initial={{ x: 380, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: 380, opacity: 0 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 250 }}
+              className="w-96 flex-shrink-0 border-l border-border/30 glass flex flex-col"
+            >
+              <ChatPanel />
+            </motion.div>
+          )}
         </AnimatePresence>
       </div>
+
+      {/* LLM Settings Modal */}
+      <LLMSettingsModal
+        isOpen={showLLMModal}
+        onClose={() => setShowLLMModal(false)}
+      />
     </div>
   );
 }

@@ -1,5 +1,14 @@
 import { create } from 'zustand';
-import type { Paper, GraphEdge, Cluster, GraphData } from '@/types';
+import type {
+  Paper,
+  GraphEdge,
+  Cluster,
+  GraphData,
+  TrendAnalysis,
+  GapAnalysis,
+  ChatMessage,
+  LLMSettings,
+} from '@/types';
 
 interface GraphStore {
   graphData: GraphData | null;
@@ -9,6 +18,14 @@ interface GraphStore {
   hoveredPaper: Paper | null;
   isLoading: boolean;
   error: string | null;
+
+  // Phase 2 state
+  trendAnalysis: TrendAnalysis | null;
+  gapAnalysis: GapAnalysis | null;
+  chatMessages: ChatMessage[];
+  llmSettings: LLMSettings | null;
+  activeTab: 'clusters' | 'trends' | 'gaps' | 'chat';
+  highlightedPaperIds: Set<string>;
 
   // Visibility toggles
   showCitationEdges: boolean;
@@ -32,6 +49,16 @@ interface GraphStore {
   toggleSimilarityEdges: () => void;
   toggleClusterHulls: () => void;
   toggleLabels: () => void;
+
+  // Phase 2 actions
+  setTrendAnalysis: (trends: TrendAnalysis | null) => void;
+  setGapAnalysis: (gaps: GapAnalysis | null) => void;
+  addChatMessage: (message: ChatMessage) => void;
+  clearChat: () => void;
+  setLLMSettings: (settings: LLMSettings | null) => void;
+  setActiveTab: (tab: 'clusters' | 'trends' | 'gaps' | 'chat') => void;
+  setHighlightedPaperIds: (ids: Set<string>) => void;
+  clearHighlightedPaperIds: () => void;
 }
 
 export const useGraphStore = create<GraphStore>((set, get) => ({
@@ -42,6 +69,14 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
   hoveredPaper: null,
   isLoading: false,
   error: null,
+
+  // Phase 2
+  trendAnalysis: null,
+  gapAnalysis: null,
+  chatMessages: [],
+  llmSettings: null,
+  activeTab: 'clusters',
+  highlightedPaperIds: new Set<string>(),
 
   showCitationEdges: true,
   showSimilarityEdges: true,
@@ -106,4 +141,16 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
   toggleClusterHulls: () =>
     set((s) => ({ showClusterHulls: !s.showClusterHulls })),
   toggleLabels: () => set((s) => ({ showLabels: !s.showLabels })),
+
+  // Phase 2 actions
+  setTrendAnalysis: (trends) => set({ trendAnalysis: trends }),
+  setGapAnalysis: (gaps) => set({ gapAnalysis: gaps }),
+  addChatMessage: (message) =>
+    set((s) => ({ chatMessages: [...s.chatMessages, message] })),
+  clearChat: () => set({ chatMessages: [] }),
+  setLLMSettings: (settings) => set({ llmSettings: settings }),
+  setActiveTab: (tab) => set({ activeTab: tab }),
+  setHighlightedPaperIds: (ids) => set({ highlightedPaperIds: ids }),
+  clearHighlightedPaperIds: () =>
+    set({ highlightedPaperIds: new Set<string>() }),
 }));
