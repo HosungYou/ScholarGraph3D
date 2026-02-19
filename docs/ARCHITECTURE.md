@@ -1118,7 +1118,512 @@ For real-time collaborative graph editing:
 
 ---
 
-## 14. Phase 1.5 — Visualization Enhancement System (v0.1.5)
+## 14. Phase 2 — AI Premium & Analysis System (v0.2.0)
+
+Added in parallel with Phase 1.5 enhancements. Includes LLM multi-provider support, GraphRAG chat, trend analysis, and gap detection.
+
+> See [CLAUDE.md](../CLAUDE.md#llm-provider-architecture-phase-2) for provider architecture.
+
+---
+
+## 15. Phase 3 — Real-Time & Natural Language (v0.3.0)
+
+Added in release 2026-02-19. Includes natural language search with Groq, SSE progress streaming, citation context modals, rate limiting, and analytics.
+
+### 15.1 Natural Language Search Pipeline (Track 3)
+
+`POST /api/search/natural` enables freeform English queries processed through a semantic understanding layer before structured search.
+
+#### Pipeline Flow
+
+```
+Natural Language Query
+    |
+    v
+[Groq LLaMA 3.3-70b] (query_parser.py)
+    |-- Extract: keywords, date range, field filters, intent
+    |-- Generate: 3-5 expanded query variants
+    |
+    v
+[query_normalizer.py]
+    |-- Remove stopwords (English, scientific domain)
+    |-- Normalize: "transformer models" → "transformer"
+    |-- Canonicalize: "deep learning" → {keywords: ["deep learning"]}
+    |
+    v
+[Parallel Expanded Search]
+    |-- OA search with each variant (top-3 papers per variant)
+    |-- S2 search with primary query + variants
+    |-- Pool results: deduplicate, merge relevance scores
+    |
+    v
+[Fused Graph]
+    |-- Standard pipeline: DOI merge → UMAP → HDBSCAN → similarity
+    |-- Return: GraphResponse with `query_type: "natural"`
+```
+
+**Request:**
+```json
+{
+  "query": "What are the latest advances in making transformers more efficient?",
+  "groq_api_key": "optional, uses backend key if not provided",
+  "limit": 200
+}
+```
+
+**Response:** Same `GraphResponse` as `POST /api/search` with additional field:
+```json
+{
+  "nodes": [...],
+  "edges": [...],
+  "clusters": [...],
+  "meta": {
+    "query_type": "natural",
+    "normalized_keywords": ["transformers", "efficiency"],
+    "expanded_queries": ["transformer efficiency", "efficient attention", "..."],
+    "elapsed_seconds": 4.2
+  }
+}
+```
+
+#### Services
+
+**`services/query_normalizer.py`**
+```python
+class QueryNormalizer:
+    def normalize(query: str) -> Dict[str, Any]:
+        # Tokenize, remove stopwords, extract entities
+        # Return: {keywords, year_min, year_max, fields, intent}
+
+    def has_date_filter(query: str) -> Tuple[int, int] | None:
+        # Detect "since 2020", "2018-2023", etc.
+
+    def extract_fields(query: str) -> List[str]:
+        # Detect "in biology", "physics papers", etc.
+```
+
+**`services/query_parser.py`**
+```python
+class QueryParser:
+    def parse_with_groq(query: str, groq_api_key: str) -> ParsedQuery:
+        # POST to Groq API (LLaMA 3.3-70b)
+        # Prompt: Extract structure + generate 3 expanded variants
+        # Return: ParsedQuery(keywords, expanded_queries, year_min, year_max, fields)
+
+    def fallback_parse(query: str) -> ParsedQuery:
+        # Regex + QueryNormalizer fallback if Groq unavailable
+```
+
+**Integration in `routers/search.py`:**
+```python
+@router.post("/api/search/natural")
+async def search_natural(
+    req: NaturalSearchRequest,
+    db: Database = Depends(get_db)
+) -> GraphResponse:
+    """Natural language search with Groq parsing."""
+    parsed = await query_parser.parse_with_groq(req.query, req.groq_api_key)
+    # Execute DataFusionService with parsed.keywords + parsed.expanded_queries
+    # Return same GraphResponse pipeline
+```
+
+### 15.2 SSE Progress Stream (Track 5)
+
+`GET /api/search/stream?q=...` streams 8-stage progress events to the frontend via Server-Sent Events.
+
+#### Event Sequence
+
+```
+Client: GET /api/search/stream?q=transformers
+    |
+    v
+Server: Content-Type: text/event-stream
+
+event: start
+data: {"stage": "init", "progress": 0.0, "message": "Starting search..."}
+
+event: stage
+data: {"stage": "fetch", "progress": 0.3, "message": "Fetching from OpenAlex and Semantic Scholar"}
+
+event: stage
+data: {"stage": "embed", "progress": 0.6, "message": "Computing embeddings..."}
+
+event: stage
+data: {"stage": "layout", "progress": 0.75, "message": "Reducing to 3D space..."}
+
+event: stage
+data: {"stage": "cluster", "progress": 0.85, "message": "Clustering papers..."}
+
+event: stage
+data: {"stage": "edges", "progress": 0.92, "message": "Computing similarity edges..."}
+
+event: complete
+data: {"stage": "done", "progress": 1.0, "message": "Complete", "nodes": [...], "edges": [...], "clusters": [...], "meta": {...}}
+
+event: error
+data: {"error": "Rate limit exceeded"}
+```
+
+#### Implementation
+
+**`routers/search.py` streaming handler:**
+```python
+@router.get("/api/search/stream")
+async def search_stream(q: str, db: Database = Depends(get_db)):
+    """Stream search progress via SSE."""
+    async def event_generator():
+        yield f"event: start\ndata: {json.dumps({'stage': 'init', 'progress': 0})}\n\n"
+
+        # Step 1-2: Fetch + Embed
+        yield f"event: stage\ndata: {json.dumps({'stage': 'fetch', 'progress': 0.3})}\n\n"
+        papers = await data_fusion_service.search(q)
+
+        yield f"event: stage\ndata: {json.dumps({'stage': 'embed', 'progress': 0.6})}\n\n"
+        # (embeddings already fetched in data_fusion)
+
+        # Step 3-5: UMAP, HDBSCAN, Similarity
+        yield f"event: stage\ndata: {json.dumps({'stage': 'layout', 'progress': 0.75})}\n\n"
+        coords_3d = await embedding_reducer.reduce_to_3d(papers)
+
+        yield f"event: stage\ndata: {json.dumps({'stage': 'cluster', 'progress': 0.85})}\n\n"
+        clusters = await paper_clusterer.cluster(coords_3d)
+
+        yield f"event: stage\ndata: {json.dumps({'stage': 'edges', 'progress': 0.92})}\n\n"
+        edges = await similarity_computer.compute_edges(papers)
+
+        # Return complete graph
+        graph = build_graph_response(papers, coords_3d, clusters, edges)
+        yield f"event: complete\ndata: {json.dumps({'stage': 'done', 'progress': 1.0, 'data': graph})}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+```
+
+**Frontend consumption** (lib/api.ts):
+```typescript
+export async function* searchStream(query: string) {
+  const response = await fetch(`/api/search/stream?q=${encodeURIComponent(query)}`);
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value);
+    const lines = buffer.split('\n\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      if (line.startsWith('event:')) {
+        const event = line.match(/event: (\w+)/)?.[1];
+        const data = JSON.parse(line.match(/data: (.+)/)?.[1] || '{}');
+        yield { event, data };
+      }
+    }
+  }
+}
+```
+
+### 15.3 Citation Context Modal (Track 4)
+
+When user clicks a citation edge in the 3D graph, `CitationContextModal` displays the citation's context sentence and metadata.
+
+#### Component Flow
+
+```
+ScholarGraph3D (3D canvas)
+    |
+    +-- onLinkClick event (react-force-graph-3d)
+    |
+    v
+Custom Event: citationEdgeClick
+    |
+    +-- dispatch(window.CustomEvent('citationEdgeClick', {
+    |     detail: {
+    |       citing_paper_id: "0",
+    |       cited_paper_id: "5",
+    |       intent: "methodology",
+    |       context: "Our approach builds on the methodology from..."
+    |     }
+    |   }))
+    |
+    v
+app/explore/page.tsx — window.addEventListener('citationEdgeClick')
+    |
+    v
+CitationContextModal (new component)
+    |-- Show citing paper title + year
+    |-- Show cited paper title + year
+    |-- Highlight intent badge (color-coded)
+    |-- Display context sentence (extracted from S2 citation API)
+    |-- Button: "View Citing Paper" (focus camera on citing_paper_id)
+    |-- Button: "View Cited Paper" (focus camera on cited_paper_id)
+```
+
+**`components/graph/CitationContextModal.tsx`:**
+```typescript
+interface CitationContextModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  citingPaper: Paper | null;
+  citedPaper: Paper | null;
+  intent: string;
+  context: string;
+}
+
+const intentColors: Record<string, string> = {
+  methodology: '#9B59B6',
+  background: '#95A5A6',
+  result_comparison: '#4A90D9',
+  supports: '#2ECC71',
+  contradicts: '#E74C3C'
+};
+
+export const CitationContextModal: React.FC<CitationContextModalProps> = ({
+  isOpen, onClose, citingPaper, citedPaper, intent, context
+}) => {
+  if (!isOpen || !citingPaper || !citedPaper) return null;
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose}>
+      <div className="bg-slate-900 p-6 rounded-lg">
+        <div className="flex items-center gap-2">
+          <div className="w-1" style={{ backgroundColor: intentColors[intent] }} />
+          <h3 className="text-lg font-semibold">{intent}</h3>
+        </div>
+
+        <div className="mt-4 space-y-3">
+          <div>
+            <p className="text-xs text-slate-400">Citing</p>
+            <p className="text-sm">{citingPaper.title} ({citingPaper.year})</p>
+          </div>
+          <div className="text-center text-slate-500">↓ cites ↓</div>
+          <div>
+            <p className="text-xs text-slate-400">Cited</p>
+            <p className="text-sm">{citedPaper.title} ({citedPaper.year})</p>
+          </div>
+        </div>
+
+        <div className="mt-4 bg-slate-800 p-3 rounded text-sm text-slate-200 italic">
+          "{context}"
+        </div>
+
+        <div className="mt-4 flex gap-2">
+          <button onClick={() => window.dispatchEvent(new CustomEvent('focusPaper', { detail: citingPaper.id }))}>
+            View Citing
+          </button>
+          <button onClick={() => window.dispatchEvent(new CustomEvent('focusPaper', { detail: citedPaper.id }))}>
+            View Cited
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+};
+```
+
+### 15.4 Middleware (Track 6)
+
+Two new middleware layers enforce rate limiting and track analytics.
+
+#### Rate Limiting Middleware
+
+**`middleware/rate_limiter.py`**
+```python
+from collections import defaultdict
+from time import time
+
+class SlidingWindowRateLimiter:
+    """Token bucket per IP with 60-second sliding window."""
+
+    def __init__(self, max_requests: int, window_seconds: int):
+        self.max_requests = max_requests
+        self.window_seconds = window_seconds
+        self.requests: Dict[str, List[float]] = defaultdict(list)
+
+    def is_allowed(self, ip: str) -> bool:
+        now = time()
+        # Remove old requests outside window
+        self.requests[ip] = [t for t in self.requests[ip] if now - t < self.window_seconds]
+
+        if len(self.requests[ip]) < self.max_requests:
+            self.requests[ip].append(now)
+            return True
+        return False
+
+# Per-endpoint rate limits
+RATE_LIMITS = {
+    "/api/search": (60, 3600),           # 60 searches/hour
+    "/api/search/natural": (60, 3600),   # 60 NL searches/hour
+    "/api/chat": (20, 3600),             # 20 AI chats/hour
+    "/api/chat/stream": (20, 3600),      # 20 streamed chats/hour
+}
+
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    ip = request.client.host
+    endpoint = request.url.path
+
+    if endpoint in RATE_LIMITS:
+        max_req, window_sec = RATE_LIMITS[endpoint]
+        limiter = SlidingWindowRateLimiter(max_req, window_sec)
+
+        if not limiter.is_allowed(ip):
+            return JSONResponse(
+                {"error": "Rate limit exceeded"},
+                status_code=429,
+                headers={"Retry-After": str(window_sec)}
+            )
+
+    return await call_next(request)
+```
+
+#### Analytics Middleware
+
+**`middleware/analytics.py`**
+```python
+import hashlib
+from datetime import datetime
+
+class SearchAnalytics:
+    """Track search queries for trend analysis."""
+
+    async def log_search(self, query: str, ip: str, result_count: int, elapsed_ms: float):
+        """Hash IP for privacy; store query, count, latency."""
+        ip_hash = hashlib.sha256(ip.encode()).hexdigest()[:16]
+
+        await db.execute(
+            """
+            INSERT INTO search_analytics (ip_hash, query, result_count, elapsed_ms, created_at)
+            VALUES ($1, $2, $3, $4, NOW())
+            """,
+            ip_hash, query, result_count, elapsed_ms
+        )
+
+@app.middleware("http")
+async def analytics_middleware(request: Request, call_next):
+    if request.url.path.startswith("/api/search"):
+        ip = request.client.host
+        start = time.time()
+        response = await call_next(request)
+        elapsed = (time.time() - start) * 1000
+
+        if response.status_code == 200:
+            body = json.loads(await response.body())
+            query = request.query_params.get("q", "")
+            result_count = len(body.get("nodes", []))
+
+            await search_analytics.log_search(query, ip, result_count, elapsed)
+
+        return response
+
+    return await call_next(request)
+```
+
+### 15.5 Frontend Server Component Split
+
+`app/layout.tsx` refactored to use Next.js Server Components with client-side provider injection.
+
+**`app/layout.tsx` (Server Component):**
+```typescript
+import { Metadata } from 'next';
+import { Providers } from './providers';
+
+export const metadata: Metadata = {
+  title: 'ScholarGraph3D',
+  description: '3D academic paper graph visualization',
+  viewport: 'width=device-width, initial-scale=1.0',
+  manifest: '/manifest.json',
+  icons: {
+    icon: '/favicon.ico',
+    apple: '/apple-icon.png'
+  }
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <meta charSet="utf-8" />
+        <meta httpEquiv="x-ua-compatible" content="ie=edge" />
+      </head>
+      <body className="bg-slate-950 text-slate-100">
+        <Providers>
+          {children}
+        </Providers>
+      </body>
+    </html>
+  );
+}
+```
+
+**`app/providers.tsx` (Client Component):**
+```typescript
+'use client';
+
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { AuthProvider } from '@/lib/auth-context';
+import { ReactNode } from 'react';
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 min
+      gcTime: 1000 * 60 * 10, // 10 min (formerly cacheTime)
+    }
+  }
+});
+
+interface ProvidersProps {
+  children: ReactNode;
+}
+
+export function Providers({ children }: ProvidersProps) {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        {children}
+      </AuthProvider>
+    </QueryClientProvider>
+  );
+}
+```
+
+**Benefits:**
+- `metadata` export available at root level (Server Component feature)
+- All client hydration logic centralized in single `Providers` component
+- Reduces layout.tsx bundle footprint (no client code in root)
+- Easier auth context updates without recompiling layout
+
+### 15.6 Database Schema Extensions
+
+New tables support analytics and enhanced citation tracking.
+
+**`search_analytics` table:**
+```sql
+CREATE TABLE search_analytics (
+    id              BIGSERIAL PRIMARY KEY,
+    ip_hash         TEXT NOT NULL,                 -- SHA-256(IP) first 16 chars
+    query           TEXT,                          -- Truncated search query
+    result_count    INT,                           -- Papers returned
+    elapsed_ms      FLOAT,                         -- Query latency
+    created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX idx_analytics_created ON search_analytics(created_at);
+CREATE INDEX idx_analytics_query ON search_analytics(query);
+```
+
+**`citations` table enhancements:**
+New columns added via migration:
+```sql
+ALTER TABLE citations ADD COLUMN context TEXT;           -- Citation sentence
+ALTER TABLE citations ADD COLUMN is_influential BOOLEAN DEFAULT FALSE;  -- S2 flag
+```
+
+---
+
+## 16. Phase 1.5 — Visualization Enhancement System (v0.1.5)
 
 Added in commit `485e099` (2026-02-19). All changes are additive; no existing Phase 1 behaviour was removed.
 

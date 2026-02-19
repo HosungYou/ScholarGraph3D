@@ -219,9 +219,9 @@ Detailed health check with subsystem status.
 
 **Response 503:** Returns same structure with `"status": "unhealthy"` when database is disconnected.
 
-### 4.2 Search Endpoint
+### 4.2 Search Endpoints
 
-> Implements [PRD.md US-01](./PRD.md#phase-1-mvp--v010--v050) (search), [US-02](./PRD.md#phase-1-mvp--v010--v050) (3D viz), [US-03](./PRD.md#phase-1-mvp--v010--v050) (clustering).
+> Implements [PRD.md US-01](./PRD.md#phase-1-mvp--v010--v050) (search), [US-02](./PRD.md#phase-1-mvp--v010--v050) (3D viz), [US-03](./PRD.md#phase-1-mvp--v050) (clustering), [US-XX](./PRD.md) (natural language, v0.3.0).
 
 #### `POST /api/search`
 
@@ -303,6 +303,143 @@ Detailed health check with subsystem status.
     "similarity_edges": 234,
     "elapsed_seconds": 3.42
   }
+}
+```
+
+#### `POST /api/search/natural` (v0.3.0)
+
+**Auth:** None required (public)
+
+Natural language search with Groq LLaMA 3.3-70b query parsing. User writes freeform query; backend extracts structure and generates expanded queries.
+
+**Request Body:**
+```json
+{
+  "query": "What are the latest advances in making transformers more efficient?",
+  "groq_api_key": "gsk_... (optional; uses backend key if not provided)",
+  "limit": 200
+}
+```
+
+| Field | Type | Default | Constraints | Description |
+|-------|------|---------|-------------|-------------|
+| `query` | string | required | 1-500 chars | Natural language question or topic |
+| `groq_api_key` | string | null | | Optional user Groq API key (override) |
+| `limit` | int | 200 | 1-500 | Max papers to return |
+
+**Response 200 (GraphResponse):**
+Same as `POST /api/search` with enhanced `meta`:
+```json
+{
+  "nodes": [...],
+  "edges": [...],
+  "clusters": [...],
+  "meta": {
+    "query": "What are the latest advances in making transformers more efficient?",
+    "query_type": "natural",
+    "normalized_keywords": ["transformers", "efficiency", "optimization"],
+    "expanded_queries": [
+      "transformer efficiency",
+      "efficient attention mechanisms",
+      "lightweight transformers"
+    ],
+    "total": 187,
+    "with_embeddings": 165,
+    "clusters": 6,
+    "similarity_edges": 234,
+    "elapsed_seconds": 4.2
+  }
+}
+```
+
+#### `GET /api/search/stream?q=...` (v0.3.0)
+
+**Auth:** None required (public)
+
+Stream search progress via Server-Sent Events. Frontend receives real-time updates at each pipeline stage.
+
+**Query Parameters:**
+
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `q` | string | Yes | Search query (same as `POST /api/search`) |
+| `limit` | int | No | Max papers (default 200) |
+| `year_start` | int | No | Filter: earliest year |
+| `year_end` | int | No | Filter: latest year |
+
+**Response: 200 text/event-stream**
+
+Event stream with 8 stages:
+
+```
+event: start
+data: {"stage": "init", "progress": 0.0, "message": "Initializing search..."}
+
+event: stage
+data: {"stage": "fetch", "progress": 0.3, "message": "Fetching from OpenAlex and Semantic Scholar"}
+
+event: stage
+data: {"stage": "embed", "progress": 0.6, "message": "Computing SPECTER2 embeddings..."}
+
+event: stage
+data: {"stage": "layout", "progress": 0.75, "message": "Reducing to 3D space with UMAP..."}
+
+event: stage
+data: {"stage": "cluster", "progress": 0.85, "message": "Clustering with HDBSCAN..."}
+
+event: stage
+data: {"stage": "edges", "progress": 0.92, "message": "Computing similarity edges..."}
+
+event: complete
+data: {
+  "stage": "done",
+  "progress": 1.0,
+  "message": "Complete",
+  "data": {
+    "nodes": [...],
+    "edges": [...],
+    "clusters": [...],
+    "meta": {...}
+  }
+}
+```
+
+**Error event:**
+```
+event: error
+data: {"error": "Rate limit exceeded", "retry_after_seconds": 3600}
+```
+
+**Frontend consumption (TypeScript):**
+```typescript
+async function* searchStream(query: string) {
+  const response = await fetch(`/api/search/stream?q=${encodeURIComponent(query)}`);
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value);
+    const lines = buffer.split('\n\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      if (line.startsWith('event:')) {
+        const event = line.match(/event: (\w+)/)?.[1];
+        const data = JSON.parse(line.match(/data: (.+)/)?.[1] || '{}');
+        yield { event, data };
+      }
+    }
+  }
+}
+
+// Usage
+for await (const { event, data } of searchStream('transformers')) {
+  if (event === 'stage') console.log(`${data.progress * 100}% — ${data.message}`);
+  if (event === 'complete') console.log('Graph ready:', data.data);
 }
 ```
 
@@ -951,6 +1088,17 @@ PostgreSQL RLS policies on `user_graphs` table ensure users can only access thei
 | Frontend JS heap | <200MB |
 | Three.js GPU memory (500 nodes) | <100MB |
 | Zustand store (500-paper graph) | <10MB |
+
+---
+
+## Phase Status
+
+| Phase | Version | Status | Features |
+|-------|---------|--------|----------|
+| **Phase 1 (MVP)** | v0.1.0–v0.1.4 | ✅ Complete | Keyword search, 3D visualization, HDBSCAN clustering, paper details, citation expansion, graph save/load |
+| **Phase 1.5 (Viz)** | v0.1.5 | ✅ Complete | 3-tier dimming, centrality-based labels, bridge/OA/bloom node layers, ghost edges, gap overlay, cluster visibility, stable expand |
+| **Phase 2 (AI)** | v0.2.0 | ✅ Complete | LLM multi-provider (OpenAI/Anthropic/Google/Groq), GraphRAG chat, trend analysis, gap detection |
+| **Phase 3 (Real-time)** | v0.3.0 | ✅ Complete | Natural language search (Groq), SSE progress stream, citation context modal, rate limiting (60/hr search, 20/hr AI, 2× auth), analytics logging, SEO |
 
 ---
 

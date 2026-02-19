@@ -189,4 +189,4 @@ Patterns: CachedLLMProvider (decorator, in-memory TTL), CircuitBreaker (5 failur
 - Phase 1 (MVP): v0.1.0 — search, 3D viz, clustering, paper detail, citation expand, graph save
 - Phase 1.5 (Viz Enhancement): v0.1.5 — 3-tier dimming, centrality labels, bridge/OA/bloom node layers, ghost edges, gap overlay, per-cluster visibility, stable expand (commit 485e099)
 - Phase 2 (AI Premium): v0.2.0 — LLM providers, GraphRAG chat, trend analysis, gap analysis
-- Phase 3 (Real-time): v0.3.0 — watch queries + Resend email, citation intent (S2 + LLM), lit review + PDF
+- Phase 3 (Real-time): v0.3.0 ✅ — natural language search (Groq), SSE progress stream, citation context modal, rate limiting, analytics, SEO
