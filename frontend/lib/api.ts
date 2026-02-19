@@ -10,6 +10,9 @@ import type {
   LLMSettings,
   Cluster,
   GraphEdge,
+  WatchQuery,
+  CitationIntent,
+  LitReview,
 } from '@/types';
 import { getSession } from './supabase';
 
@@ -156,6 +159,102 @@ export const api = {
         history: history?.map((m) => ({ role: m.role, content: m.content })),
       }),
     }),
+
+  // ─── Phase 3: Watch Queries ────────────────────────────────────────
+
+  listWatchQueries: (): Promise<WatchQuery[]> =>
+    request<WatchQuery[]>(`${API_BASE}/api/watch`),
+
+  createWatchQuery: (
+    query: string,
+    filters: object,
+    notifyEmail: boolean
+  ): Promise<WatchQuery> =>
+    request<WatchQuery>(`${API_BASE}/api/watch`, {
+      method: 'POST',
+      body: JSON.stringify({ query, filters, notify_email: notifyEmail }),
+    }),
+
+  deleteWatchQuery: async (id: string): Promise<void> => {
+    const authHeaders = await getAuthHeaders();
+    const response = await fetch(`${API_BASE}/api/watch/${id}`, {
+      method: 'DELETE',
+      headers: { ...authHeaders },
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to delete watch query: ${response.status}`);
+    }
+  },
+
+  triggerWatchCheck: (): Promise<{ total_queries: number; new_papers: number }> =>
+    request<{ total_queries: number; new_papers: number }>(
+      `${API_BASE}/api/watch/check`,
+      { method: 'POST' }
+    ),
+
+  // ─── Phase 3: Citation Intent ────────────────────────────────────
+
+  getCitationIntents: (
+    paperId: string,
+    enhanced?: boolean,
+    llm?: LLMSettings
+  ): Promise<CitationIntent[]> =>
+    request<CitationIntent[]>(
+      `${API_BASE}/api/papers/${paperId}/citation-intents`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ enhanced: enhanced ?? false, llm }),
+      }
+    ),
+
+  // ─── Phase 3: Literature Review ──────────────────────────────────
+
+  generateLitReview: (
+    graphData: GraphData,
+    llm: LLMSettings,
+    options?: {
+      includeTrends?: boolean;
+      includeGaps?: boolean;
+      citationStyle?: string;
+    }
+  ): Promise<LitReview> =>
+    request<LitReview>(`${API_BASE}/api/lit-review/generate`, {
+      method: 'POST',
+      body: JSON.stringify({
+        graph_data: {
+          paper_ids: graphData.nodes.map((n) => n.id),
+          clusters: graphData.clusters,
+          edges: graphData.edges,
+        },
+        llm,
+        options: {
+          include_trends: options?.includeTrends ?? true,
+          include_gaps: options?.includeGaps ?? true,
+          citation_style: options?.citationStyle ?? 'APA',
+        },
+      }),
+    }),
+
+  exportLitReviewPdf: async (markdown: string): Promise<Blob> => {
+    const authHeaders = await getAuthHeaders();
+    const response = await fetch(`${API_BASE}/api/lit-review/export-pdf`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders,
+      },
+      body: JSON.stringify({ markdown }),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(
+        error.detail || error.message || `PDF export failed: ${response.status}`
+      );
+    }
+    return response.blob();
+  },
+
+  // ─── Phase 2: Chat (continued) ──────────────────────────────────
 
   streamChatMessage: async (
     query: string,

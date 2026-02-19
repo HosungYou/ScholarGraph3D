@@ -12,7 +12,8 @@ import {
 import dynamic from 'next/dynamic';
 import * as THREE from 'three';
 import { useGraphStore } from '@/hooks/useGraphStore';
-import type { Paper, GraphEdge } from '@/types';
+import type { Paper, GraphEdge, CitationIntent } from '@/types';
+import { ENHANCED_INTENT_COLORS } from '@/types';
 
 const ForceGraph3D = dynamic(() => import('react-force-graph-3d'), {
   ssr: false,
@@ -69,6 +70,8 @@ interface ForceGraphLink {
   width: number;
   edgeType: 'citation' | 'similarity';
   dashed: boolean;
+  intentLabel?: string;
+  intentContext?: string;
 }
 
 export interface ScholarGraph3DRef {
@@ -121,6 +124,8 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     showSimilarityEdges,
     showClusterHulls,
     showLabels,
+    citationIntents,
+    showEnhancedIntents,
     selectPaper,
     setHoveredPaper,
     toggleMultiSelect,
@@ -193,24 +198,53 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       return true;
     });
 
+    // Build intent lookup from store citationIntents
+    const intentMap = new Map<string, CitationIntent>();
+    citationIntents.forEach((ci) => {
+      intentMap.set(`${ci.citing_id}-${ci.cited_id}`, ci);
+    });
+
     const links: ForceGraphLink[] = filteredEdges.map((edge) => {
       const isSimilarity = edge.type === 'similarity';
-      const intentColor = edge.intent
-        ? INTENT_COLOR_MAP[edge.intent]
-        : undefined;
+
+      // Determine intent color: enhanced > basic > edge.intent > default
+      let intentColor: string | undefined;
+      let intentLabel: string | undefined;
+      let intentContext: string | undefined;
+      let isInfluential = false;
+
+      const ci = intentMap.get(`${edge.source}-${edge.target}`) ||
+                 intentMap.get(`${edge.target}-${edge.source}`);
+
+      if (ci) {
+        isInfluential = ci.is_influential;
+        intentContext = ci.context;
+        if (showEnhancedIntents && ci.enhanced_intent) {
+          intentColor = ENHANCED_INTENT_COLORS[ci.enhanced_intent];
+          intentLabel = ci.enhanced_intent;
+        } else if (ci.basic_intent) {
+          intentColor = INTENT_COLOR_MAP[ci.basic_intent];
+          intentLabel = ci.basic_intent;
+        }
+      } else if (edge.intent) {
+        intentColor = INTENT_COLOR_MAP[edge.intent];
+        intentLabel = edge.intent;
+      }
 
       return {
         source: edge.source,
         target: edge.target,
         color: intentColor || (isSimilarity ? '#4A90D9' : '#8890a5'),
-        width: isSimilarity ? 0.5 : 1 + edge.weight * 2,
+        width: isSimilarity ? 0.5 : isInfluential ? 2 + edge.weight * 2 : 1 + edge.weight * 2,
         edgeType: edge.type,
         dashed: isSimilarity,
+        intentLabel,
+        intentContext,
       };
     });
 
     return { nodes, links };
-  }, [graphData, yearRange, showCitationEdges, showSimilarityEdges]);
+  }, [graphData, yearRange, showCitationEdges, showSimilarityEdges, citationIntents, showEnhancedIntents]);
 
   // Node rendering
   const nodeThreeObject = useCallback(
@@ -676,6 +710,23 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         linkOpacity={0.6}
         linkThreeObject={linkThreeObject as never}
         linkPositionUpdate={linkPositionUpdate as never}
+        linkLabel={(linkData: unknown) => {
+          const link = linkData as ForceGraphLink;
+          if (!link.intentLabel) return '';
+          const contextSnippet = link.intentContext
+            ? `<div style="color: #8890a5; font-size: 10px; margin-top: 4px; max-width: 250px;">${
+                link.intentContext.length > 120
+                  ? link.intentContext.substring(0, 120) + '...'
+                  : link.intentContext
+              }</div>`
+            : '';
+          return `
+            <div style="background: rgba(10,14,26,0.92); padding: 8px 12px; border-radius: 6px; font-family: system-ui; font-size: 11px; border: 1px solid rgba(42,48,80,0.6);">
+              <div style="color: ${link.color}; font-weight: bold; text-transform: capitalize;">${link.intentLabel.replace('_', ' ')}</div>
+              ${contextSnippet}
+            </div>
+          `;
+        }}
         linkDirectionalArrowLength={3}
         linkDirectionalArrowRelPos={1}
         backgroundColor="#0a0e1a"

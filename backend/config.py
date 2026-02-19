@@ -44,6 +44,14 @@ class Settings(BaseSettings):
     llm_cache_enabled: bool = True
     llm_cache_ttl: int = 3600
 
+    # Email (Resend)
+    resend_api_key: str = ""
+    notification_from_email: str = "notifications@scholargraph3d.com"
+
+    # Watch Queries
+    watch_cron_secret: str = ""  # Secret for cron endpoint auth
+    watch_check_interval_days: int = 7
+
     # CORS
     cors_origins: str = "http://localhost:3000,http://localhost:3001"
 

@@ -8,6 +8,9 @@ import type {
   GapAnalysis,
   ChatMessage,
   LLMSettings,
+  WatchQuery,
+  CitationIntent,
+  LitReview,
 } from '@/types';
 
 interface GraphStore {
@@ -24,8 +27,14 @@ interface GraphStore {
   gapAnalysis: GapAnalysis | null;
   chatMessages: ChatMessage[];
   llmSettings: LLMSettings | null;
-  activeTab: 'clusters' | 'trends' | 'gaps' | 'chat';
+  activeTab: 'clusters' | 'trends' | 'gaps' | 'chat' | 'watch';
   highlightedPaperIds: Set<string>;
+
+  // Phase 3 state
+  watchQueries: WatchQuery[];
+  citationIntents: CitationIntent[];
+  litReview: LitReview | null;
+  showEnhancedIntents: boolean;
 
   // Visibility toggles
   showCitationEdges: boolean;
@@ -56,9 +65,17 @@ interface GraphStore {
   addChatMessage: (message: ChatMessage) => void;
   clearChat: () => void;
   setLLMSettings: (settings: LLMSettings | null) => void;
-  setActiveTab: (tab: 'clusters' | 'trends' | 'gaps' | 'chat') => void;
+  setActiveTab: (tab: 'clusters' | 'trends' | 'gaps' | 'chat' | 'watch') => void;
   setHighlightedPaperIds: (ids: Set<string>) => void;
   clearHighlightedPaperIds: () => void;
+
+  // Phase 3 actions
+  setWatchQueries: (queries: WatchQuery[]) => void;
+  addWatchQuery: (query: WatchQuery) => void;
+  removeWatchQuery: (id: string) => void;
+  setCitationIntents: (intents: CitationIntent[]) => void;
+  setLitReview: (review: LitReview | null) => void;
+  setShowEnhancedIntents: (show: boolean) => void;
 }
 
 export const useGraphStore = create<GraphStore>((set, get) => ({
@@ -77,6 +94,12 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
   llmSettings: null,
   activeTab: 'clusters',
   highlightedPaperIds: new Set<string>(),
+
+  // Phase 3
+  watchQueries: [],
+  citationIntents: [],
+  litReview: null,
+  showEnhancedIntents: false,
 
   showCitationEdges: true,
   showSimilarityEdges: true,
@@ -153,4 +176,16 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
   setHighlightedPaperIds: (ids) => set({ highlightedPaperIds: ids }),
   clearHighlightedPaperIds: () =>
     set({ highlightedPaperIds: new Set<string>() }),
+
+  // Phase 3 actions
+  setWatchQueries: (queries) => set({ watchQueries: queries }),
+  addWatchQuery: (query) =>
+    set((s) => ({ watchQueries: [...s.watchQueries, query] })),
+  removeWatchQuery: (id) =>
+    set((s) => ({
+      watchQueries: s.watchQueries.filter((q) => q.id !== id),
+    })),
+  setCitationIntents: (intents) => set({ citationIntents: intents }),
+  setLitReview: (review) => set({ litReview: review }),
+  setShowEnhancedIntents: (show) => set({ showEnhancedIntents: show }),
 }));

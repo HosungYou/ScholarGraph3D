@@ -14,12 +14,14 @@ import GraphControls from '@/components/graph/GraphControls';
 import TrendPanel from '@/components/analysis/TrendPanel';
 import GapPanel from '@/components/analysis/GapPanel';
 import ChatPanel from '@/components/chat/ChatPanel';
+import WatchQueryPanel from '@/components/watch/WatchQueryPanel';
+import LitReviewPanel from '@/components/litreview/LitReviewPanel';
 import LLMSettingsModal, {
   loadLLMSettings,
 } from '@/components/settings/LLMSettingsModal';
 import type { Paper } from '@/types';
 
-type LeftTab = 'clusters' | 'trends' | 'gaps';
+type LeftTab = 'clusters' | 'trends' | 'gaps' | 'watch';
 
 function ExploreContent() {
   const searchParams = useSearchParams();
@@ -37,17 +39,20 @@ function ExploreContent() {
     selectedPaper,
     isLoading,
     llmSettings,
+    showEnhancedIntents,
     setGraphData,
     selectPaper,
     setLoading,
     setError,
     setLLMSettings,
+    setShowEnhancedIntents,
   } = useGraphStore();
 
   // Local UI state
   const [leftTab, setLeftTab] = useState<LeftTab>('clusters');
   const [showChat, setShowChat] = useState(false);
   const [showLLMModal, setShowLLMModal] = useState(false);
+  const [showLitReview, setShowLitReview] = useState(false);
 
   // Load LLM settings from localStorage on mount
   useEffect(() => {
@@ -127,6 +132,28 @@ function ExploreContent() {
               &#128172; Chat
             </button>
 
+            {/* Literature Review */}
+            <button
+              onClick={() => setShowLitReview(true)}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all bg-gray-800 text-gray-400 hover:text-gray-200 hover:bg-gray-700 border border-gray-700"
+              title="Generate Literature Review"
+            >
+              &#128214; Lit Review
+            </button>
+
+            {/* Intent Colors toggle */}
+            <button
+              onClick={() => setShowEnhancedIntents(!showEnhancedIntents)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                showEnhancedIntents
+                  ? 'bg-purple-900/20 text-purple-400 border-purple-800/40 hover:bg-purple-900/30'
+                  : 'bg-gray-800 text-gray-400 border-gray-700 hover:text-gray-200 hover:bg-gray-700'
+              }`}
+              title="Toggle Enhanced Citation Intent Colors"
+            >
+              &#127912; Intents
+            </button>
+
             {/* LLM Settings */}
             <button
               onClick={() => setShowLLMModal(true)}
@@ -154,6 +181,7 @@ function ExploreContent() {
                 { key: 'clusters', label: 'Clusters' },
                 { key: 'trends', label: 'Trends' },
                 { key: 'gaps', label: 'Gaps' },
+                { key: 'watch', label: 'Watch' },
               ] as const
             ).map((tab) => (
               <button
@@ -182,6 +210,7 @@ function ExploreContent() {
             {leftTab === 'clusters' && <ClusterPanel />}
             {leftTab === 'trends' && <TrendPanel />}
             {leftTab === 'gaps' && <GapPanel />}
+            {leftTab === 'watch' && <WatchQueryPanel />}
           </div>
         </div>
 
@@ -267,6 +296,11 @@ function ExploreContent() {
           )}
         </AnimatePresence>
       </div>
+
+      {/* Literature Review Overlay */}
+      {showLitReview && (
+        <LitReviewPanel onClose={() => setShowLitReview(false)} />
+      )}
 
       {/* LLM Settings Modal */}
       <LLMSettingsModal

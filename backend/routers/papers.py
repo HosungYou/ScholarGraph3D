@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from config import settings
 from database import Database, get_db
 from integrations.semantic_scholar import SemanticScholarClient, SemanticScholarPaper
+from services.citation_intent import CitationIntentService
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -191,3 +192,82 @@ async def expand_paper(
         )
     finally:
         await client.close()
+
+
+# ==================== Citation Intent ====================
+
+
+class CitationIntent(BaseModel):
+    citing_id: str
+    citing_title: str = ""
+    cited_id: str
+    intent: str
+    enhanced_intent: Optional[str] = None
+    is_influential: bool = False
+    confidence: Optional[float] = None
+    reasoning: Optional[str] = None
+    context: str = ""
+    source: str = "s2"
+
+
+@router.get("/api/papers/{paper_id}/intents", response_model=List[CitationIntent])
+async def get_citation_intents(
+    paper_id: str,
+    enhanced: bool = Query(default=False, description="Use LLM for enhanced intent classification"),
+    provider: Optional[str] = Query(default=None, description="LLM provider (required if enhanced=true)"),
+    api_key: Optional[str] = Query(default=None, description="LLM API key (required if enhanced=true)"),
+):
+    """
+    Get citation intents for a paper.
+
+    Basic mode (free): Returns S2 citation intents (methodology, background, result_comparison).
+    Enhanced mode (premium): Uses LLM to classify intents more granularly
+    (supports, contradicts, extends, applies, compares). Requires provider + api_key.
+    """
+    s2_client = _create_s2_client()
+    svc = CitationIntentService()
+
+    try:
+        # Get basic S2 intents
+        intents = await svc.get_basic_intents(paper_id, s2_client)
+
+        if not intents:
+            return []
+
+        # Optionally enhance with LLM
+        if enhanced:
+            if not provider or not api_key:
+                raise HTTPException(
+                    status_code=400,
+                    detail="provider and api_key are required when enhanced=true",
+                )
+
+            try:
+                from llm.user_provider import create_provider_from_request
+
+                llm_provider = create_provider_from_request(provider=provider, api_key=api_key)
+                try:
+                    intents = await svc.enhance_intents_with_llm(intents, llm_provider)
+                finally:
+                    await llm_provider.close()
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e))
+
+        return [
+            CitationIntent(
+                citing_id=i["citing_id"],
+                citing_title=i.get("citing_title", ""),
+                cited_id=i["cited_id"],
+                intent=i["intent"],
+                enhanced_intent=i.get("enhanced_intent"),
+                is_influential=i.get("is_influential", False),
+                confidence=i.get("confidence"),
+                reasoning=i.get("reasoning"),
+                context=i.get("context", ""),
+                source=i.get("source", "s2"),
+            )
+            for i in intents
+        ]
+
+    finally:
+        await s2_client.close()

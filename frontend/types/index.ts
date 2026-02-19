@@ -166,3 +166,60 @@ export const TREND_COLORS: Record<string, string> = {
   stable: '#4A90D9',
   declining: '#E74C3C',
 };
+
+// ─── Phase 3: Watch Queries ─────────────────────────────────────────
+
+export interface WatchQuery {
+  id: string;
+  query: string;
+  filters: {
+    year_min?: number;
+    year_max?: number;
+    field?: string;
+    venue?: string;
+  };
+  notify_email: boolean;
+  last_checked?: string;
+  new_paper_count?: number;
+  created_at: string;
+}
+
+// ─── Phase 3: Citation Intent (Enhanced) ────────────────────────────
+
+export interface CitationIntent {
+  citing_id: string;
+  cited_id: string;
+  basic_intent?: 'methodology' | 'background' | 'result_comparison';
+  enhanced_intent?: 'supports' | 'contradicts' | 'extends' | 'applies' | 'compares';
+  confidence?: number;
+  context?: string;
+  is_influential: boolean;
+}
+
+export const ENHANCED_INTENT_COLORS: Record<string, string> = {
+  supports: '#2ECC71',     // green
+  contradicts: '#E74C3C',  // red
+  extends: '#3498DB',      // blue
+  applies: '#9B59B6',      // purple
+  compares: '#F39C12',     // orange
+};
+
+// ─── Phase 3: Literature Review ─────────────────────────────────────
+
+export interface LitReviewSection {
+  heading: string;
+  content: string;
+  paper_refs: string[];
+}
+
+export interface LitReview {
+  title: string;
+  sections: LitReviewSection[];
+  references: string[];
+  markdown: string;
+  metadata: {
+    paper_count: number;
+    cluster_count: number;
+    generation_time: number;
+  };
+}
