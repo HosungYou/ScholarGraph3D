@@ -79,14 +79,21 @@ backend/
 │   ├── user_provider.py     # Factory for user-provided API keys
 │   ├── cached_provider.py   # Transparent caching decorator
 │   └── circuit_breaker.py   # Fault tolerance (CLOSED→OPEN→HALF_OPEN)
+├── services/                    # Phase 3
+│   ├── watch_service.py         # Watch query execution + OA search + similarity filter
+│   ├── email_service.py         # Resend API email digests
+│   ├── citation_intent.py       # S2 basic + LLM-enhanced 5-class intents
+│   └── lit_review.py            # LLM lit review generation + weasyprint PDF
 ├── routers/
 │   ├── search.py        # POST /api/search → full graph pipeline
-│   ├── papers.py        # Paper detail, citations, references, expand
+│   ├── papers.py        # Paper detail, citations, references, expand, intents
 │   ├── graphs.py        # CRUD saved graphs (auth required)
 │   ├── analysis.py      # Phase 2: POST /api/analysis/trends, gaps, hypotheses
-│   └── chat.py          # Phase 2: POST /api/chat + /api/chat/stream (SSE)
+│   ├── chat.py          # Phase 2: POST /api/chat + /api/chat/stream (SSE)
+│   ├── watch.py         # Phase 3: /api/watch CRUD + /api/watch/cron
+│   └── lit_review.py    # Phase 3: /api/lit-review/generate + export-pdf
 └── database/
-    └── 001_initial_schema.sql  # papers, citations, user_graphs, search_cache, chat_*
+    └── 001_initial_schema.sql  # papers, citations, user_graphs, search_cache, chat_*, watch_queries
 ```
 
 ### Frontend Directory
@@ -109,8 +116,12 @@ frontend/
 │   │   └── GapPanel.tsx          # Gap strength, bridge papers, hypotheses
 │   ├── chat/                     # Phase 2
 │   │   └── ChatPanel.tsx         # GraphRAG streaming chat with [N] citations
-│   └── settings/                 # Phase 2
-│       └── LLMSettingsModal.tsx  # 4-provider API key management (localStorage)
+│   ├── settings/                 # Phase 2
+│   │   └── LLMSettingsModal.tsx  # 4-provider API key management (localStorage)
+│   ├── watch/                    # Phase 3
+│   │   └── WatchQueryPanel.tsx   # Watch query CRUD, filters, check-now
+│   └── litreview/                # Phase 3
+│       └── LitReviewPanel.tsx    # Full-overlay lit review, TOC, PDF download
 ├── hooks/useGraphStore.ts    # Zustand state (Phase 1 + 2 combined)
 ├── lib/
 │   ├── api.ts               # Backend API client (search + analysis + chat)
@@ -170,4 +181,4 @@ Patterns: CachedLLMProvider (decorator, in-memory TTL), CircuitBreaker (5 failur
 
 - Phase 1 (MVP): v0.1.0 — search, 3D viz, clustering, paper detail, citation expand, graph save
 - Phase 2 (AI Premium): v0.2.0 — LLM providers, GraphRAG chat, trend analysis, gap analysis
-- Phase 3 (Real-time): Planned — watch queries, citation intent, lit review generation
+- Phase 3 (Real-time): v0.3.0 — watch queries + Resend email, citation intent (S2 + LLM), lit review + PDF
