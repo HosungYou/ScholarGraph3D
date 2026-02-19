@@ -69,7 +69,7 @@ interface ForceGraphLink {
   target: string | ForceGraphNode;
   color: string;
   width: number;
-  edgeType: 'citation' | 'similarity';
+  edgeType: 'citation' | 'similarity' | 'ghost';
   dashed: boolean;
   intentLabel?: string;
   intentContext?: string;

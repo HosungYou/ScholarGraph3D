@@ -1118,4 +1118,169 @@ For real-time collaborative graph editing:
 
 ---
 
+## 14. Phase 1.5 — Visualization Enhancement System (v0.1.5)
+
+Added in commit `485e099` (2026-02-19). All changes are additive; no existing Phase 1 behaviour was removed.
+
+### 14.1 New Backend Modules
+
+#### `backend/graph/bridge_detector.py`
+
+Detects papers that act as topological bridges between clusters.
+
+```
+detect_bridge_nodes(nodes, edges, top_percentile=0.05) → Set[str]
+
+Algorithm:
+  1. Build node→cluster map from nodes list
+  2. For each edge (source, target) where source_cluster ≠ target_cluster:
+       bridge_score[source] += 1
+       bridge_score[target] += 1
+  3. Only count nodes that bridge ≥ 2 distinct clusters
+  4. Return top `top_percentile` (5%) of scorers (min 1 node)
+
+Used by: routers/search.py — marks GraphNode.is_bridge = True before response
+```
+
+#### `backend/graph/incremental_layout.py`
+
+Stable graph expansion without UMAP re-run (nearest-neighbour interpolation).
+
+```
+place_new_paper(new_embedding, existing_nodes, k=3, jitter_scale=2.0) → (x, y, z)
+  → cosine similarity against all existing_nodes
+  → weighted average of top-k positions + Gaussian jitter
+
+assign_cluster(new_embedding, cluster_centroids, threshold=0.5) → int
+  → nearest centroid by cosine similarity; returns -1 if below threshold
+
+compute_cluster_centroids(nodes) → Dict[int, np.ndarray]
+  → mean SPECTER2 embedding per cluster_id
+
+Used by: routers/papers.py POST /api/papers/{id}/expand-stable
+```
+
+#### `backend/routers/papers.py` — new endpoint
+
+```
+POST /api/papers/{paper_id}/expand-stable
+Body: { existing_nodes: GraphNodeInput[], existing_edges: EdgeInput[] }
+Returns: { nodes: StableExpandNode[], edges: EdgeOut[] }
+
+StableExpandNode adds: initial_x, initial_y, initial_z, cluster_id
+  → frontend uses these coords to insert without layout jump
+```
+
+#### `backend/routers/search.py` — bridge detection addition
+
+`GraphNode` schema gains `is_bridge: bool = False`. After graph build, `detect_bridge_nodes()` runs and sets the flag. `meta` dict gains `"bridge_nodes": int` count.
+
+---
+
+### 14.2 Frontend State Extensions (`hooks/useGraphStore.ts`)
+
+New state fields added to the Zustand store:
+
+| Field | Type | Default | Purpose |
+|-------|------|---------|---------|
+| `showBloom` | `boolean` | `false` | Bloom/glow halo on selected node |
+| `showGhostEdges` | `boolean` | `false` | Orange dashed potential-citation edges |
+| `showGapOverlay` | `boolean` | `false` | Coloured gap lines between cluster centroids |
+| `hiddenClusterIds` | `Set<number>` | `new Set()` | Per-cluster visibility toggle |
+| `bridgeNodeIds` | `Set<string>` | `new Set()` | Pre-computed bridge paper IDs |
+
+New actions: `toggleBloom`, `toggleGhostEdges`, `toggleGapOverlay`, `toggleClusterVisibility(id)`, `setBridgeNodeIds(ids)`, `addNodesStable(expansion)`.
+
+`addNodesStable` deduplicates by ID and uses `initial_x/y/z` from the backend response, preventing position jumps.
+
+---
+
+### 14.3 Visualization Enhancements (`ScholarGraph3D.tsx`)
+
+#### 3-Tier Dimming (focus system)
+
+When a paper is selected:
+- **Selected node**: 100% opacity + gold `#FFD700` colour
+- **Direct neighbours**: 60% opacity, teal highlight
+- **All others**: 15% opacity
+
+#### Centrality-Based Labels
+
+Labels are shown only for nodes satisfying: `isSelected || isHighlighted || citationPercentile > 0.8`
+
+Font size scales: `10 + 18 * citationPercentile` px (10 px–28 px range).
+
+#### Per-Node Visual Layers (Three.js geometry groups)
+
+Each node `nodeThreeObject` may render up to 4 layers:
+
+| Condition | Layer | Geometry | Colour |
+|-----------|-------|----------|--------|
+| Always | Core sphere | `SphereGeometry(r, 16, 16)` | Field colour |
+| `is_bridge` | Gold glow | `SphereGeometry(1.5r, 8, 8)` | `#FFD700`, opacity 0.15 |
+| `is_open_access` | OA ring | `RingGeometry(1.1r, 1.3r, 32)` | `#2ECC71`, opacity 0.7 |
+| `citationPercentile > 0.9` | Citation aura | `SphereGeometry(1.5r, 8, 8)` | `#FFD700`, opacity 0.12 |
+| `showBloom && isSelected` | Bloom halo | `SphereGeometry(1.3r, 8, 8)` | Node colour, opacity 0.12 |
+
+#### Ghost Edges
+
+When `showGhostEdges` is enabled, similarity edges with `weight > 0.75` that have no corresponding citation edge are rendered as orange (`#FF8C00`) dashed lines. Filtered out otherwise for performance.
+
+#### Gap Overlay
+
+When `showGapOverlay` is enabled, a `useEffect` runs a 1500 ms interval that:
+1. Computes live cluster centroids from node 3D positions
+2. Iterates all cluster pairs; counts cross-cluster edges to derive `density`
+3. Renders `LineDashedMaterial` lines coloured by density:
+   - `density < 0.05` → Red `#FF4444` (strong gap, high research opportunity)
+   - `density < 0.10` → Amber `#FFD700` (medium gap)
+   - `density ≥ 0.10` → Green `#44FF44` (weak gap)
+4. Adds a pulsing `SphereGeometry` hotspot at the midpoint:
+   `scale = 1 + sin(Date.now() * 0.003) * 0.3` via `requestAnimationFrame`
+
+Overlay objects are added to `gapOverlayRef` and cleaned up on toggle/unmount.
+
+#### Hidden Cluster Filtering
+
+`forceGraphData` useMemo filters out nodes whose `cluster_id` is in `hiddenClusterIds` before passing to the graph engine.
+
+---
+
+### 14.4 UI Controls
+
+#### `GraphControls.tsx` — new toggle buttons
+
+| Button | Icon | Store action | Default |
+|--------|------|-------------|---------|
+| Bloom Effect | `Sun` / `SunDim` | `toggleBloom` | OFF |
+| Ghost Edges | `Zap` | `toggleGhostEdges` | OFF |
+| Gap Overlay | `Target` | `toggleGapOverlay` | OFF |
+
+#### `ClusterPanel.tsx` — enhancements
+
+- **Edge count badge**: `clusterEdgeCounts` useMemo counts intra-cluster edges
+- **Density bar**: relative width `(edgeCount / maxEdges) * 100%` in cluster colour
+- **Visibility toggle**: Eye/EyeOff button calls `toggleClusterVisibility(cluster.id)`; hidden clusters fade to 40% opacity in panel
+- **Focus button**: Dispatches `window.dispatchEvent(new CustomEvent('focusCluster', { detail: { clusterId } }))` — handled in `explore/page.tsx` → `graphRef.current?.focusOnCluster()`
+
+#### `explore/page.tsx` — camera event wiring
+
+`useRef<ScholarGraph3DRef>` + two `window` event listeners:
+- `resetCamera` → `graphRef.current?.resetCamera()`
+- `focusCluster` → `graphRef.current?.focusOnCluster(clusterId)`
+
+---
+
+### 14.5 Decision Log Additions
+
+| Decision | Rationale |
+|----------|-----------|
+| Nearest-neighbour interpolation over UMAP re-run | Avoids global coordinate shift on expansion; ~5 ms/node vs. 2–10 s UMAP; no extra infrastructure |
+| Top-5% bridge threshold | Empirically balances signal vs. noise; configurable via `top_percentile` param |
+| Ghost edges default OFF | Performance: filtering happens in `forceGraphData` memo; large graphs (500+ nodes) can generate thousands of ghost edges |
+| Gap overlay 1500 ms interval | Balances live-position accuracy with CPU cost; centroid recalculation is O(n) |
+| Three.js geometry groups per node | Allows additive visual layers without reimplementing the node renderer; each layer is a child of the group returned by `nodeThreeObject` |
+
+---
+
 *This document is the authoritative source for system structure and design decisions. For product requirements, see [PRD.md](./PRD.md). For API contracts and database schema, see [SPEC.md](./SPEC.md). For test strategy, see [SDD/TDD Plan](./SDD_TDD_PLAN.md).*

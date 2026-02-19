@@ -64,12 +64,14 @@ backend/
 │   ├── openalex.py          # OA API client (credit tracking)
 │   └── data_fusion.py       # OA-first + S2 enrichment + DOI dedup
 ├── graph/
-│   ├── embedding_reducer.py # UMAP 3D (768→3 dims)
-│   ├── clusterer.py         # HDBSCAN + OA Topics labels
-│   ├── similarity.py        # Cosine similarity edges (>0.7)
-│   ├── trend_analyzer.py    # Phase 2: emerging/stable/declining classification
-│   ├── gap_detector.py      # Phase 2: inter-cluster gap detection + bridge papers
-│   └── graph_rag.py         # Phase 2: RAG context builder for LLM chat
+│   ├── embedding_reducer.py   # UMAP 3D (768→3 dims)
+│   ├── clusterer.py           # HDBSCAN + OA Topics labels
+│   ├── similarity.py          # Cosine similarity edges (>0.7)
+│   ├── bridge_detector.py     # Phase 1.5: cross-cluster bridge node detection (top-5%)
+│   ├── incremental_layout.py  # Phase 1.5: k-NN position interpolation for stable expand
+│   ├── trend_analyzer.py      # Phase 2: emerging/stable/declining classification
+│   ├── gap_detector.py        # Phase 2: inter-cluster gap detection + bridge papers
+│   └── graph_rag.py           # Phase 2: RAG context builder for LLM chat
 ├── llm/                     # Phase 2: Multi-provider LLM layer
 │   ├── base.py              # Abstract BaseLLMProvider + LLMResponse
 │   ├── openai_provider.py   # GPT-4o-mini / GPT-4o / GPT-4-turbo
@@ -85,8 +87,8 @@ backend/
 │   ├── citation_intent.py       # S2 basic + LLM-enhanced 5-class intents
 │   └── lit_review.py            # LLM lit review generation + weasyprint PDF
 ├── routers/
-│   ├── search.py        # POST /api/search → full graph pipeline
-│   ├── papers.py        # Paper detail, citations, references, expand, intents
+│   ├── search.py        # POST /api/search → full graph pipeline (+ is_bridge flag)
+│   ├── papers.py        # Paper detail, citations, references, expand, expand-stable, intents
 │   ├── graphs.py        # CRUD saved graphs (auth required)
 │   ├── analysis.py      # Phase 2: POST /api/analysis/trends, gaps, hypotheses
 │   ├── chat.py          # Phase 2: POST /api/chat + /api/chat/stream (SSE)
@@ -106,11 +108,11 @@ frontend/
 │   └── dashboard/        # Saved graphs
 ├── components/
 │   ├── graph/
-│   │   ├── ScholarGraph3D.tsx    # Main 3D component (706 lines)
+│   │   ├── ScholarGraph3D.tsx    # Main 3D component (Phase 1.5: dimming, labels, bridge/OA/bloom layers, ghost edges, gap overlay)
 │   │   ├── PaperDetailPanel.tsx  # Right panel paper details
-│   │   ├── ClusterPanel.tsx      # Left panel cluster list
+│   │   ├── ClusterPanel.tsx      # Left panel: density bar, edge count, visibility toggle, focus button
 │   │   ├── SearchBar.tsx         # Search input with filters
-│   │   └── GraphControls.tsx     # Floating toggle controls
+│   │   └── GraphControls.tsx     # Floating toggles: citation/similarity/hulls/labels/bloom/ghost/gap
 │   ├── analysis/                 # Phase 2
 │   │   ├── TrendPanel.tsx        # Emerging/stable/declining with sparklines
 │   │   └── GapPanel.tsx          # Gap strength, bridge papers, hypotheses
@@ -122,7 +124,7 @@ frontend/
 │   │   └── WatchQueryPanel.tsx   # Watch query CRUD, filters, check-now
 │   └── litreview/                # Phase 3
 │       └── LitReviewPanel.tsx    # Full-overlay lit review, TOC, PDF download
-├── hooks/useGraphStore.ts    # Zustand state (Phase 1 + 2 combined)
+├── hooks/useGraphStore.ts    # Zustand state (Phase 1 + 1.5 + 2: bloom/ghostEdges/gapOverlay/hiddenClusters/bridgeNodes)
 ├── lib/
 │   ├── api.ts               # Backend API client (search + analysis + chat)
 │   ├── auth-context.tsx      # Supabase auth context
@@ -138,8 +140,9 @@ Search endpoint returns: `{ nodes: Paper[], edges: GraphEdge[], clusters: Cluste
 ### Node Visual Mapping
 - Size: `Math.max(3, Math.log(citation_count + 1) * 3)`
 - Color: OA field → Physical Sciences=#4A90D9, Life Sciences=#2ECC71, Social Sciences=#E67E22, etc.
-- Opacity: `0.3 + 0.7 * ((year - minYear) / (maxYear - minYear))`
-- Label: First author last name + year (e.g., "Vaswani 2017")
+- Opacity: `0.3 + 0.7 * ((year - minYear) / (maxYear - minYear))` (base); 3-tier dimming on select
+- Label: First author last name + year (e.g., "Vaswani 2017"); shown only for top-20% citation papers
+- Phase 1.5 layers: bridge gold glow (is_bridge), OA ring (is_open_access), citation aura (top 10%), bloom halo (selected + showBloom)
 
 ### Data Fusion Strategy
 1. OpenAlex keyword search (primary, 10 credits/page)
@@ -184,5 +187,6 @@ Patterns: CachedLLMProvider (decorator, in-memory TTL), CircuitBreaker (5 failur
 ## Phase Status
 
 - Phase 1 (MVP): v0.1.0 — search, 3D viz, clustering, paper detail, citation expand, graph save
+- Phase 1.5 (Viz Enhancement): v0.1.5 — 3-tier dimming, centrality labels, bridge/OA/bloom node layers, ghost edges, gap overlay, per-cluster visibility, stable expand (commit 485e099)
 - Phase 2 (AI Premium): v0.2.0 — LLM providers, GraphRAG chat, trend analysis, gap analysis
 - Phase 3 (Real-time): v0.3.0 — watch queries + Resend email, citation intent (S2 + LLM), lit review + PDF
