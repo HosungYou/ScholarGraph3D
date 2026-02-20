@@ -304,8 +304,11 @@ async def search_papers(request: SearchRequest, db: Database = Depends(get_db)):
                 existing_edge_keys = {(e.source, e.target) for e in edges}
                 s2_id_set = set(s2_paper_ids)
 
-                # Limit to first 50 papers to avoid excessive API calls
-                batch_s2_ids = s2_paper_ids[:50]
+                # Limit to first 20 papers (highest citation count) to avoid excessive API calls
+                nodes_with_s2 = [(n, n.citation_count) for n in nodes if n.s2_paper_id]
+                nodes_with_s2.sort(key=lambda x: x[1], reverse=True)
+                batch_s2_ids = [n.s2_paper_id for n, _ in nodes_with_s2[:20]]
+                failed_count = 0
 
                 for s2_id in batch_s2_ids:
                     try:
@@ -328,11 +331,11 @@ async def search_papers(request: SearchRequest, db: Database = Depends(get_db)):
                                     ))
                                     existing_edge_keys.add(edge_key)
                                     citation_edges_added += 1
-                    except Exception as e:
-                        logger.debug(f"Citation enrichment failed for {s2_id}: {e}")
+                    except Exception:
+                        failed_count += 1
                         continue
 
-                logger.info(f"Citation enrichment: added {citation_edges_added} citation edges")
+                logger.info(f"Citation enrichment: added {citation_edges_added} edges ({failed_count} papers skipped)")
             except Exception as e:
                 logger.warning(f"Citation enrichment step failed: {e}")
 

@@ -177,6 +177,10 @@ class SemanticScholarClient:
             except SemanticScholarRateLimitError:
                 raise
             except httpx.HTTPStatusError as e:
+                # Don't retry 4xx client errors (except 429 handled above)
+                if e.response.status_code < 500:
+                    logger.debug(f"S2 client error {e.response.status_code} for {url}, not retrying")
+                    raise
                 if attempt == self.max_retries - 1:
                     logger.error(f"S2 HTTP error after {self.max_retries} attempts: {e}")
                     raise
