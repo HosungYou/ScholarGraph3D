@@ -107,14 +107,14 @@ frontend/
 ├── app/
 │   ├── page.tsx          # Landing page with search
 │   ├── explore/page.tsx  # Main 3-panel exploration (tabbed sidebar + chat)
-│   ├── explore/seed/page.tsx  # Phase 6: Seed paper exploration mode
+│   ├── explore/seed/page.tsx  # Seed paper exploration mode (resizable panels, expand animation, citation intents)
 │   ├── auth/             # Login/signup
 │   └── dashboard/        # Saved graphs
 ├── components/
 │   ├── graph/
-│   │   ├── ScholarGraph3D.tsx    # Main 3D component (Phase 1.5: dimming, labels, bridge/OA/bloom layers, ghost edges, gap overlay)
+│   │   ├── ScholarGraph3D.tsx    # Main 3D component (dimming, labels, bridge/OA/bloom layers, ghost edges, gap overlay, animateExpandNodes)
 │   │   ├── PaperDetailPanel.tsx  # Right panel paper details
-│   │   ├── ClusterPanel.tsx      # Left panel: density bar, edge count, visibility toggle, focus button
+│   │   ├── ClusterPanel.tsx      # Left panel: density bar, edge count, visibility toggle, focus, paper list, stats, node highlight
 │   │   ├── SearchBar.tsx         # Search input with filters
 │   │   └── GraphControls.tsx     # Floating toggles: citation/similarity/hulls/labels/bloom/ghost/gap
 │   ├── analysis/                 # Phase 2
@@ -212,3 +212,4 @@ Patterns: CachedLLMProvider (decorator, in-memory TTL), CircuitBreaker (5 failur
 - v0.7.0 ✅ — search system redesign (SPECTER2 ANN, RRF scoring, temporal Z-axis, HDBSCAN 50-dim fix, UI declutter)
 - v0.7.1 ✅ — hotfix: DOI lookup 404 (FastAPI route shadowing + missing S2 method)
 - Phase 7 (Stability + Philosophy): v0.7.x ✅ — HDBSCAN 768-dim fix, temporal Z-axis, RRF hybrid search, SPECTER2 adhoc_query ANN, PHILOSOPHY.md, TECH_PROOF.md, expand null-safety, landing page seed-paper redesign, DOI auto-detection
+- v0.8.0 (Viz & Interaction): ✅ — expand animation fix (fx/fy/fz + rAF), intent legend, responsive seed panels (localStorage), cluster panel redesign (paper list + stats + highlight), real S2 citation intents in seed mode
