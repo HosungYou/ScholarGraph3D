@@ -108,6 +108,15 @@ class SemanticScholarClient:
 
     PAPER_FIELDS_WITH_EMBEDDING = PAPER_FIELDS + ["embedding"]
 
+    # S2 does NOT support 'tldr' or 'embedding' as nested fields on
+    # /references and /citations endpoints (returns 400 Bad Request).
+    NESTED_PAPER_FIELDS = [
+        "paperId", "title", "abstract", "year", "venue",
+        "citationCount", "influentialCitationCount", "referenceCount",
+        "openAccessPdf", "externalIds", "authors", "fieldsOfStudy",
+        "publicationTypes",
+    ]
+
     def __init__(
         self,
         api_key: Optional[str] = None,
@@ -314,7 +323,8 @@ class SemanticScholarClient:
         include_embedding: bool = False,
     ) -> List[SemanticScholarPaper]:
         """Get papers that this paper references."""
-        fields = self.PAPER_FIELDS_WITH_EMBEDDING if include_embedding else self.PAPER_FIELDS
+        # Nested endpoints don't support tldr/embedding — always use NESTED_PAPER_FIELDS
+        fields = self.NESTED_PAPER_FIELDS
         encoded_id = quote(paper_id, safe=':/')
         url = f"{self.BASE_URL}/paper/{encoded_id}/references"
 
@@ -354,7 +364,8 @@ class SemanticScholarClient:
         include_embedding: bool = False,
     ) -> List[SemanticScholarPaper]:
         """Get papers that cite this paper."""
-        fields = self.PAPER_FIELDS_WITH_EMBEDDING if include_embedding else self.PAPER_FIELDS
+        # Nested endpoints don't support tldr/embedding — always use NESTED_PAPER_FIELDS
+        fields = self.NESTED_PAPER_FIELDS
         encoded_id = quote(paper_id, safe=':/')
         url = f"{self.BASE_URL}/paper/{encoded_id}/citations"
 

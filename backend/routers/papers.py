@@ -135,17 +135,26 @@ async def get_paper_by_doi(
     if doi_match:
         doi_clean = doi_match.group(0)
 
+    # For arXiv DOIs (10.48550/arXiv.*), try ARXIV: prefix first since S2
+    # often doesn't index these by DOI but does index by ArXiv ID.
+    arxiv_match = re.match(r'10\.48550/arXiv\.(.+)', doi_clean, re.IGNORECASE)
+
     s2_client = _create_s2_client()
 
     try:
-        # Look up by DOI using S2's DOI: prefix format
-        paper = await s2_client.get_paper(f"DOI:{doi_clean}")
+        paper = None
 
+        # Try ArXiv ID format first for arXiv DOIs
+        if arxiv_match:
+            arxiv_id = arxiv_match.group(1)
+            paper = await s2_client.get_paper(f"ARXIV:{arxiv_id}")
+
+        # Fall back to DOI: prefix
         if not paper:
-            raise HTTPException(status_code=404, detail=f"Paper not found for DOI: {doi_clean}")
+            paper = await s2_client.get_paper(f"DOI:{doi_clean}")
 
-        if not paper.paper_id:
-            raise HTTPException(status_code=404, detail=f"No Semantic Scholar ID for DOI: {doi_clean}")
+        if not paper or not paper.paper_id:
+            raise HTTPException(status_code=404, detail=f"Paper not found for DOI: {doi_clean}")
 
         return {
             "paper_id": paper.paper_id,
