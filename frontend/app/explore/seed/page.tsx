@@ -10,7 +10,7 @@ import PaperDetailPanel from '@/components/graph/PaperDetailPanel';
 import ClusterPanel from '@/components/graph/ClusterPanel';
 import GraphControls from '@/components/graph/GraphControls';
 import type { Paper } from '@/types';
-import { Search, ArrowLeft, Loader2, Network, GitBranch, Layers } from 'lucide-react';
+import { Search, ArrowLeft, Loader2, Network, GitBranch, Layers, Share2 } from 'lucide-react';
 
 function SeedExploreContent() {
   const searchParams = useSearchParams();
@@ -37,6 +37,7 @@ function SeedExploreContent() {
     seed_paper_id?: string;
     total?: number;
     citation_edges?: number;
+    similarity_edges?: number;
   } | null>(null);
 
   // Panel resize
@@ -114,9 +115,64 @@ function SeedExploreContent() {
       setIsExpanding(true);
       try {
         const result = await api.expandPaperStable(expandId, graphData?.nodes || [], graphData?.edges || []);
-        useGraphStore.getState().addNodesStable(result.nodes, result.edges);
         const count = result.nodes.length;
-        setExpandSuccess(count > 0 ? `${count} papers added` : 'No new papers found');
+
+        if (count > 0) {
+          // Get parent node position for expand animation
+          const parentNode = graphData?.nodes.find(
+            n => n.s2_paper_id === expandId ||
+                 (n.doi && `DOI:${n.doi}` === expandId) ||
+                 n.id === paper.id
+          );
+          const ox = parentNode?.x ?? 0;
+          const oy = parentNode?.y ?? 0;
+          const oz = parentNode?.z ?? 0;
+
+          // Save final target positions
+          const targets = new Map(
+            result.nodes.map(n => [n.id, { x: n.x, y: n.y, z: n.z }])
+          );
+
+          // Add nodes starting at parent position
+          const nodesAtOrigin = result.nodes.map(n => ({
+            ...n,
+            x: ox,
+            y: oy,
+            z: oz,
+          }));
+          useGraphStore.getState().addNodesStable(nodesAtOrigin, result.edges);
+
+          // Animate to final positions (10 steps over 600ms, ease-out cubic)
+          const steps = 10;
+          const duration = 600;
+          for (let i = 1; i <= steps; i++) {
+            setTimeout(() => {
+              const progress = i / steps;
+              const eased = 1 - Math.pow(1 - progress, 3);
+              const store = useGraphStore.getState();
+              if (!store.graphData) return;
+
+              const updatedNodes = store.graphData.nodes.map(node => {
+                const target = targets.get(node.id);
+                if (!target) return node;
+                return {
+                  ...node,
+                  x: ox + (target.x - ox) * eased,
+                  y: oy + (target.y - oy) * eased,
+                  z: oz + (target.z - oz) * eased,
+                };
+              });
+
+              useGraphStore.setState({
+                graphData: { ...store.graphData, nodes: updatedNodes },
+              });
+            }, (i * duration) / steps);
+          }
+
+          setExpandSuccess(`${count} papers added`);
+        } else {
+          setExpandSuccess('No new papers found');
+        }
         setTimeout(() => setExpandSuccess(null), 3000);
       } catch (err) {
         setExpandError(err instanceof Error ? err.message : 'Failed to expand');
@@ -232,10 +288,13 @@ function SeedExploreContent() {
             <div className="absolute bottom-4 left-4 glass rounded-lg px-3 py-2 text-xs text-text-secondary space-y-0.5">
               <div className="flex items-center gap-2">
                 <Network className="w-3.5 h-3.5 text-purple-400" />
-                <span>{seedMeta.total} papers</span>
+                <span>{graphData.nodes.length} papers</span>
                 <span className="text-text-secondary/30">|</span>
                 <GitBranch className="w-3.5 h-3.5" />
-                <span>{seedMeta.citation_edges} citations</span>
+                <span>{graphData.edges.filter(e => e.type === 'citation').length} citations</span>
+                <span className="text-text-secondary/30">|</span>
+                <Share2 className="w-3.5 h-3.5 text-blue-400" />
+                <span>{graphData.edges.filter(e => e.type === 'similarity').length} similar</span>
                 <span className="text-text-secondary/30">|</span>
                 <Layers className="w-3.5 h-3.5" />
                 <span>{graphData.clusters.length} clusters</span>

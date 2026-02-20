@@ -122,7 +122,7 @@ class SemanticScholarClient:
         api_key: Optional[str] = None,
         timeout: float = 30.0,
         max_retries: int = 3,
-        requests_per_second: float = 1.0,
+        requests_per_second: float = 0.8,
     ):
         self.api_key = api_key
         self.timeout = timeout
@@ -463,7 +463,7 @@ class SemanticScholarClient:
 s2_client = SemanticScholarClient()
 
 
-async def init_s2_client(api_key: Optional[str] = None, requests_per_second: float = 1.0) -> None:
+async def init_s2_client(api_key: Optional[str] = None, requests_per_second: float = 0.8) -> None:
     """Initialize the global S2 client (call on startup)."""
     global s2_client
     s2_client = SemanticScholarClient(

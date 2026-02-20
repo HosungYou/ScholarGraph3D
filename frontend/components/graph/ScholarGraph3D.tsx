@@ -304,7 +304,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         source: edge.source,
         target: edge.target,
         color: intentColor || (isSimilarity ? '#4A90D9' : '#8890a5'),
-        width: isSimilarity ? 0.5 : isInfluential ? 2 + edge.weight * 2 : 1 + edge.weight * 2,
+        width: isSimilarity ? 1.0 : isInfluential ? 2 + edge.weight * 2 : 1 + edge.weight * 2,
         edgeType: edge.type,
         dashed: isSimilarity,
         intentLabel,
