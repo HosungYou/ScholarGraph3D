@@ -206,3 +206,5 @@ Patterns: CachedLLMProvider (decorator, in-memory TTL), CircuitBreaker (5 failur
 - Phase 4 (Relationships): v0.4.0 ✅ — critical node-click bug fix, panel resize, conceptual edges SSE, 3-mode home page, timeline view
 - Phase 5 (Personalization): v0.5.0 ✅ — OAuth callback fix, user profiles, interaction logging, pgvector recommendations, dashboard recommendations section, home page "Continue Exploring"
 - Phase 6 (Viz + Exploration): v0.6.0 ✅ — field color fix, LOD/opacity fix, panel highlight, seed paper mode, citation enrichment, 2D timeline, intent toggle, research settings
+- v0.7.0 ✅ — search system redesign (SPECTER2 ANN, RRF scoring, temporal Z-axis, HDBSCAN 50-dim fix, UI declutter)
+- v0.7.1 ✅ — hotfix: DOI lookup 404 (FastAPI route shadowing + missing S2 method)
