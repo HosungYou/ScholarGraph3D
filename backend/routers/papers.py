@@ -114,6 +114,52 @@ def _create_s2_client() -> SemanticScholarClient:
 
 # ==================== Endpoints ====================
 
+@router.get("/api/papers/by-doi")
+async def get_paper_by_doi(
+    doi: str = Query(..., description="DOI or URL of the paper"),
+):
+    """
+    Fetch a paper by DOI and return its Semantic Scholar paper_id for seed explore mode.
+
+    v0.7.0: Returns paper_id directly so frontend routes to /explore/seed
+    instead of doing a keyword search redirect (which bypasses seed paper topology).
+
+    IMPORTANT: This route MUST be defined before the {paper_id:path} catch-all,
+    otherwise FastAPI will match "by-doi" as a paper_id.
+    """
+    import re
+
+    # Clean up DOI (handle full URLs like https://doi.org/10.xxxx)
+    doi_clean = doi.strip()
+    doi_match = re.search(r'10\.\d{4,}/\S+', doi_clean)
+    if doi_match:
+        doi_clean = doi_match.group(0)
+
+    s2_client = _create_s2_client()
+
+    try:
+        # Look up by DOI using S2's DOI: prefix format
+        paper = await s2_client.get_paper(f"DOI:{doi_clean}")
+
+        if not paper:
+            raise HTTPException(status_code=404, detail=f"Paper not found for DOI: {doi_clean}")
+
+        if not paper.paper_id:
+            raise HTTPException(status_code=404, detail=f"No Semantic Scholar ID for DOI: {doi_clean}")
+
+        return {
+            "paper_id": paper.paper_id,
+            "title": paper.title or "",
+            "doi": doi_clean,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Could not fetch paper: {str(e)}")
+    finally:
+        await s2_client.close()
+
+
 @router.get("/api/papers/{paper_id:path}", response_model=PaperDetail)
 async def get_paper(paper_id: str, db: Database = Depends(get_db)):
     """Get paper detail by internal ID or S2 paper ID."""
@@ -420,48 +466,3 @@ async def get_citation_intents(
         await s2_client.close()
 
 
-@router.get("/api/papers/by-doi")
-async def get_paper_by_doi(
-    doi: str = Query(..., description="DOI or URL of the paper"),
-):
-    """
-    Fetch a paper by DOI and return its Semantic Scholar paper_id for seed explore mode.
-
-    v0.7.0: Returns paper_id directly so frontend routes to /explore/seed
-    instead of doing a keyword search redirect (which bypasses seed paper topology).
-    """
-    import re
-
-    # Clean up DOI (handle full URLs like https://doi.org/10.xxxx)
-    doi_clean = doi.strip()
-    doi_match = re.search(r'10\.\d{4,}/\S+', doi_clean)
-    if doi_match:
-        doi_clean = doi_match.group(0)
-
-    s2_client = _create_s2_client()
-
-    try:
-        # Search by DOI on S2
-        paper_data = await s2_client.get_paper_by_doi(doi_clean)
-
-        if not paper_data:
-            raise HTTPException(status_code=404, detail=f"Paper not found for DOI: {doi_clean}")
-
-        paper_id = paper_data.get("paperId")
-        title = paper_data.get("title", "")
-
-        if not paper_id:
-            raise HTTPException(status_code=404, detail=f"No Semantic Scholar ID for DOI: {doi_clean}")
-
-        # Return paper_id for seed explore routing (not redirect_query keyword search)
-        return {
-            "paper_id": paper_id,
-            "title": title,
-            "doi": doi_clean,
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=404, detail=f"Could not fetch paper: {str(e)}")
-    finally:
-        await s2_client.close()
