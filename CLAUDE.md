@@ -214,3 +214,4 @@ Patterns: CachedLLMProvider (decorator, in-memory TTL), CircuitBreaker (5 failur
 - Phase 7 (Stability + Philosophy): v0.7.x ✅ — HDBSCAN 768-dim fix, temporal Z-axis, RRF hybrid search, SPECTER2 adhoc_query ANN, PHILOSOPHY.md, TECH_PROOF.md, expand null-safety, landing page seed-paper redesign, DOI auto-detection
 - v0.8.0 (Viz & Interaction): ✅ — expand animation fix (fx/fy/fz + rAF), intent legend, responsive seed panels (localStorage), cluster panel redesign (paper list + stats + highlight), real S2 citation intents in seed mode
 - v0.8.1 ✅ — hotfix: seed-explore S2 rate limit → 429 (was uncaught 500 + CORS), citation edge diagnostic logging
+- v0.9.0 ✅ — node ID fix (S2 paper IDs, not integers), right panel visibility (AnimatePresence mode="wait"), zoomToFit after data load, Three.js rgba warning fix
