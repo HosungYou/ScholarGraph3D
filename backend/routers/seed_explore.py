@@ -20,7 +20,7 @@ from graph.clusterer import PaperClusterer
 from graph.embedding_reducer import EmbeddingReducer
 from graph.similarity import SimilarityComputer
 from graph.bridge_detector import detect_bridge_nodes
-from integrations.semantic_scholar import get_s2_client
+from integrations.semantic_scholar import get_s2_client, SemanticScholarRateLimitError
 from services.citation_intent import CitationIntentService
 
 logger = logging.getLogger(__name__)
@@ -125,7 +125,13 @@ async def seed_explore(request: SeedExploreRequest):
     s2_client = get_s2_client()
 
     # 1. Fetch seed paper
-    seed_paper = await s2_client.get_paper(request.paper_id, include_embedding=True)
+    try:
+        seed_paper = await s2_client.get_paper(request.paper_id, include_embedding=True)
+    except SemanticScholarRateLimitError as e:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Semantic Scholar rate limit exceeded. Please retry after {e.retry_after}s.",
+        )
     if not seed_paper:
         raise HTTPException(status_code=404, detail="Seed paper not found in Semantic Scholar")
 
@@ -274,9 +280,14 @@ async def seed_explore(request: SeedExploreRequest):
         # Citation edges (from tracked pairs) with real S2 intents
         # First, build citation edges with default intent
         citation_edge_map: Dict[tuple, SeedGraphEdge] = {}
+        matched = 0
+        unmatched = 0
         for citing_id, cited_id in citation_pairs:
             src = s2_to_node.get(citing_id)
             tgt = s2_to_node.get(cited_id)
+            if not src or not tgt:
+                unmatched += 1
+                continue
             if src and tgt:
                 edge = SeedGraphEdge(
                     source=src,
@@ -285,8 +296,11 @@ async def seed_explore(request: SeedExploreRequest):
                     weight=0.8,
                     intent="background",
                 )
+                matched += 1
                 citation_edge_map[(citing_id, cited_id)] = edge
                 edges.append(edge)
+
+        logger.info(f"Citation edges: {matched} matched, {unmatched} unmatched (pairs={len(citation_pairs)}, s2_to_node={len(s2_to_node)})")
 
         # Fetch real citation intents from S2 (best-effort, non-blocking)
         try:
