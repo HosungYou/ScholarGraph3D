@@ -171,9 +171,9 @@ function SeedExploreContent() {
         if (count > 0) {
           // Get parent node position for expand animation
           const parentNode = graphData?.nodes.find(
-            n => n.s2_paper_id === expandId ||
-                 (n.doi && `DOI:${n.doi}` === expandId) ||
-                 n.id === paper.id
+            n => n.id === expandId ||
+                 n.s2_paper_id === expandId ||
+                 (n.doi && `DOI:${n.doi}` === expandId)
           );
           const ox = parentNode?.x ?? 0;
           const oy = parentNode?.y ?? 0;
@@ -349,16 +349,16 @@ function SeedExploreContent() {
         </div>
 
         {/* Right panel: paper detail */}
-        <AnimatePresence mode="popLayout">
+        <AnimatePresence mode="wait">
           {showPaperDetail && (
             <motion.div
               key="paper-detail"
-              initial={{ x: 380, opacity: 0 }}
+              initial={{ x: 100, opacity: 0 }}
               animate={{ x: 0, opacity: 1 }}
-              exit={{ x: 380, opacity: 0 }}
+              exit={{ x: 100, opacity: 0 }}
               transition={{ type: 'spring', damping: 25, stiffness: 250 }}
               style={{ width: rightPanelWidth }}
-              className="flex-shrink-0 border-l border-border/30 glass overflow-y-auto relative"
+              className="flex-shrink-0 border-l border-border/30 glass overflow-y-auto relative z-10"
             >
               <div
                 className="absolute left-0 top-0 h-full w-1 cursor-col-resize hover:bg-blue-500/40 active:bg-blue-500/60 transition-colors z-10"

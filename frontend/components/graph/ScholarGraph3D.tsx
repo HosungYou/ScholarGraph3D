@@ -586,16 +586,16 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       const isVeryFar = camDist > 3000;
 
       if (isFar && link.edgeType === 'similarity') {
-        return 'rgba(0,0,0,0)'; // invisible
+        return '#000000'; // invisible on dark background
       }
       if (isVeryFar && link.width < 1.5) {
-        return 'rgba(0,0,0,0)'; // hide weak edges at far distances
+        return '#000000'; // hide weak edges at far distances
       }
 
       if (!selectedPaper) {
         return link.dashed
-          ? 'rgba(74, 144, 217, 0.35)'
-          : `rgba(136, 144, 165, ${0.2 + link.width * 0.1})`;
+          ? '#4a90d9'
+          : '#8890a5';
       }
 
       const sourceId =
@@ -610,7 +610,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       if (highlightSet.has(sourceId) && highlightSet.has(targetId)) {
         return link.color + 'CC';
       }
-      return 'rgba(255, 255, 255, 0.03)';
+      return '#0a0e1a'; // near-invisible on dark background (was rgba(255,255,255,0.03))
     },
     [selectedPaper, highlightSet, fgRef]
   );
@@ -1274,14 +1274,14 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     },
   }));
 
-  // Initial camera
+  // Zoom to fit when graph data changes
   useEffect(() => {
-    if (fgRef.current) {
+    if (fgRef.current && graphData?.nodes?.length) {
       setTimeout(() => {
-        fgRef.current?.cameraPosition({ x: 0, y: 0, z: 500 });
-      }, 500);
+        fgRef.current?.zoomToFit(400, 80);
+      }, 800);
     }
-  }, []);
+  }, [graphData?.nodes?.length]);
 
   // Cleanup
   useEffect(() => {

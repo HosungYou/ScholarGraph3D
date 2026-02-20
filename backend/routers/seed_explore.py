@@ -218,8 +218,8 @@ async def seed_explore(request: SeedExploreRequest):
 
     if len(papers_with_emb) >= 2:
         embeddings = np.array([p.embedding for p in papers_with_emb])
-        paper_ids = [str(i) for i in range(len(papers_with_emb))]
-        s2_to_node = {p.paper_id: str(i) for i, p in enumerate(papers_with_emb)}
+        paper_ids = [p.paper_id for p in papers_with_emb]
+        s2_to_node = {p.paper_id: p.paper_id for p in papers_with_emb}
 
         # 5. UMAP 3D with temporal Z-axis (Z = publication year)
         reducer = EmbeddingReducer()
@@ -345,7 +345,7 @@ async def seed_explore(request: SeedExploreRequest):
         offset = len(papers_with_emb)
         for i, paper in enumerate(papers_without_emb):
             is_seed = paper.paper_id == seed_paper.paper_id
-            node = _s2_paper_to_node(paper, str(offset + i), is_seed=is_seed)
+            node = _s2_paper_to_node(paper, paper.paper_id, is_seed=is_seed)
             node.x = float(offset + i) * 0.5
             node.y = 10.0
             node.z = 0.0
@@ -360,13 +360,13 @@ async def seed_explore(request: SeedExploreRequest):
             angle = i * 0.5
             radius = 5.0 + i * 0.3
             is_seed = paper.paper_id == seed_paper.paper_id
-            node = _s2_paper_to_node(paper, str(i), is_seed=is_seed)
+            node = _s2_paper_to_node(paper, paper.paper_id, is_seed=is_seed)
             node.x = radius * math.cos(angle)
             node.y = float(i) * 0.2
             node.z = radius * math.sin(angle)
             node.cluster_id = 0
             nodes.append(node)
-            s2_to_node[paper.paper_id] = str(i)
+            s2_to_node[paper.paper_id] = paper.paper_id
 
         # Citation edges
         for citing_id, cited_id in citation_pairs:
