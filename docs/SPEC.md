@@ -1,6 +1,6 @@
 # ScholarGraph3D — Technical Specification
 
-> **Version:** 1.1 | **Last Updated:** 2026-02-19
+> **Version:** 1.2 | **Last Updated:** 2026-02-20
 > **Related:** [PRD.md](./PRD.md) | [ARCHITECTURE.md](./ARCHITECTURE.md) | [SDD/TDD Plan](./SDD_TDD_PLAN.md)
 
 ---
@@ -146,7 +146,46 @@ User Query
 
 **Rate Limiting:** The `SemanticScholarClient` enforces per-second rate limiting with an async lock. Retries on 429 responses with exponential backoff (up to 3 attempts). After exhausting retries, raises `SemanticScholarRateLimitError`.
 
-### 3.3 SPECTER2 Embeddings
+### 3.3 Crossref (DOI Fallback — v0.8.0)
+
+| Property | Details |
+|----------|---------|
+| **License** | CC BY 4.0 (metadata), CC0 (facts) |
+| **Coverage** | 150M+ DOI registrations (all publishers) |
+| **API Base URL** | `https://api.crossref.org/works` |
+| **Rate Limits** | Polite pool: ~50 req/sec with `mailto` User-Agent header |
+| **Authentication** | None required — `User-Agent: ScholarGraph3D/0.8.0 (mailto:contact@scholargraph3d.com)` |
+| **Key Data** | Title, year, authors, publisher, journal, funder info |
+| **Use Case** | Fallback when S2 `get_paper("DOI:...")` returns 404 — economics, law, humanities journals |
+
+**DOI Fallback Chain (`GET /api/papers/by-doi`):**
+```
+1. S2 get_paper("ARXIV:{id}") or get_paper("DOI:{doi}")  → paper_id (fast path)
+2. [S2 404] → CrossrefClient.get_metadata(doi)           → title
+3. [Crossref OK] → S2 search_papers(title, limit=5)       → Jaccard title match ≥ 0.3
+4. [match found] → return {paper_id, source:"crossref_fallback"}
+5. [all fail]    → 404
+```
+
+> **File:** `backend/integrations/crossref.py`
+
+### 3.4 OpenCitations COCI (Citation Graph — v0.8.0)
+
+| Property | Details |
+|----------|---------|
+| **License** | CC0 (fully open) |
+| **Coverage** | 1.8B+ DOI-to-DOI citation pairs |
+| **API Base URL** | `https://opencitations.net/index/coci/api/v1` |
+| **Rate Limits** | 180 req/min; bulk data dump available (~50-100 GB CSV) |
+| **Authentication** | None required |
+| **Key Data** | `citing_doi`, `cited_doi`, `creation` (publication date), `timespan` |
+| **Use Case** | DOI-based citation lookup — does NOT require S2 `paper_id`; enables Co-citation and Bibliographic Coupling edges (v0.9.0) |
+
+**PostgreSQL cache:** `oc_citation_cache(citing_doi, cited_doi, fetched_at)` — PRIMARY KEY (citing_doi, cited_doi), TTL 30 days.
+
+> **File:** `backend/integrations/opencitations.py`, `backend/database/003_opencitations_cache.sql`
+
+### 3.5 SPECTER2 Embeddings
 
 | Property | Details |
 |----------|---------|
@@ -155,8 +194,9 @@ User Query
 | **Source** | Retrieved via S2 batch API (`embedding` field) |
 | **Similarity Metric** | Cosine similarity |
 | **Fallback** | If S2 batch fails, papers without embeddings are placed at graph periphery (y=10.0, cluster_id=-1) |
+| **Redis Cache** | `emb:{s2_paper_id}` TTL 30 days — skips S2 API on repeat requests |
 
-### 3.4 Data Fusion Strategy
+### 3.6 Data Fusion Strategy
 
 The `DataFusionService` implements OA-first search with S2 enrichment:
 
@@ -533,8 +573,31 @@ SSE endpoint for streaming conceptual relationship edges.
 **Returns:** `{ "angles": [{ "label", "query", "type" }] }` — 5 exploration angles
 
 #### GET /api/papers/by-doi
-**Query:** `doi` — DOI string or URL containing DOI
-**Returns:** `{ paper_id, title, doi, redirect_query }`
+
+**Query:** `doi` — DOI string or full URL (e.g. `https://doi.org/10.xxx`)
+
+**Fallback Chain (v0.8.0):**
+
+| Step | Action | Source |
+|------|--------|--------|
+| 1a | `get_paper("ARXIV:{id}")` if arXiv pattern detected | S2 API |
+| 1b | `get_paper("DOI:{doi}")` | S2 API |
+| 2 | `CrossrefClient.get_metadata(doi)` → extract title | Crossref API |
+| 3 | `search_papers(title, limit=5)` + Jaccard title match ≥ 0.3 | S2 API |
+| 4 | 404 | — |
+
+**Response 200:**
+```json
+{
+  "paper_id": "204e3073870fae3d05bcbc2f6a8e263d9b72e776",
+  "title": "Attention Is All You Need",
+  "doi": "10.48550/arxiv.1706.03762",
+  "source": "s2_direct"
+}
+```
+`source` field values: `"s2_direct"` | `"s2_arxiv"` | `"crossref_fallback"`
+
+**Response 404:** `{"detail": "Paper not found for DOI: ..."}`
 
 ---
 
@@ -1040,20 +1103,45 @@ When OA credit usage reaches 95%, the system enters cache-first mode:
 3. If stale entry exists: return stale data with `meta.cache_stale: true`
 4. If no entry at all: make API call but with reduced `per_page` to conserve credits
 
-### 8.3 Redis Cache (Future — Upstash)
+### 8.3 Redis Cache (Active — Upstash, v0.8.0)
 
-Planned for Phase 2 to handle:
-- Hot query caching (most popular searches in-memory)
-- Rate limit counters per user
-- Session tokens for real-time WebSocket connections
-- GraphRAG context caching (LLM conversation history)
+Upstash Redis is now live in production (`REDIS_URL` env var set on Render). The `backend/cache.py` module provides lazy-init helpers with full graceful degradation — Redis failure never breaks the API.
+
+**Cache Key Registry:**
+
+| Key Pattern | Content | TTL | Helper |
+|-------------|---------|-----|--------|
+| `emb:{s2_paper_id}` | SPECTER2 768-dim embedding (JSON list) | 30 days | `get/cache_embedding()` |
+| `refs:{paper_id}:{limit}` | `get_references()` result (serialized) | 7 days | `get/cache_refs()` |
+| `cites:{paper_id}:{limit}` | `get_citations()` result (serialized) | 7 days | `get/cache_refs()` |
+| `search:{sha256}` | Full `GraphResponse` JSON | 24 hours | `get/cache_search()` |
+
+**Architecture:**
+
+```python
+# cache.py — lazy singleton pattern
+async def _get_redis() -> Optional[redis.Redis]:
+    # Returns None if REDIS_URL unset or connection fails
+    # All cache operations wrapped in try/except → no crashes
+
+async def get_cached_refs(cache_key: str) -> Optional[List[dict]]:
+    r = await _get_redis()
+    if r:
+        data = await r.get(cache_key)
+        return json.loads(data) if data else None
+    return None
+```
+
+**Integration points:**
+- `semantic_scholar.py` `get_references()` / `get_citations()`: Redis lookup before S2 API call; store after
+- Embedding cache: queried before S2 batch API in search pipeline (v0.9.0)
 
 | Parameter | Value |
 |-----------|-------|
-| **Provider** | Upstash (serverless Redis) |
-| **Hot query TTL** | 1 hour |
-| **Rate limit window** | 60 seconds |
+| **Provider** | Upstash (serverless Redis, TLS) |
+| **Connection** | `rediss://` (TLS required by Upstash) |
 | **Max memory** | 256MB (Upstash free tier) |
+| **Eviction policy** | allkeys-lru |
 
 ### 8.4 Browser Cache
 

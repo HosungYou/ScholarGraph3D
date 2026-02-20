@@ -1,6 +1,6 @@
 # ScholarGraph3D — System Architecture
 
-> **Version:** 1.2 | **Last Updated:** 2026-02-19
+> **Version:** 1.3 | **Last Updated:** 2026-02-20
 > **Related:** [PRD.md](./PRD.md) | [SPEC.md](./SPEC.md) | [SDD/TDD Plan](./SDD_TDD_PLAN.md)
 
 ---
@@ -385,7 +385,8 @@ SearchRequest {query, limit, year_start, year_end,
     GraphEdge    = {source, target, type="similarity", weight=similarity}
     ClusterInfo  = {id, label, topics, paper_count, color, hull_points}
     meta         = {query, total, with_embeddings, clusters,
-                    similarity_edges, elapsed_seconds}
+                    similarity_edges, elapsed_seconds,
+                    citation_edges: 0, citation_enriched: False}
     |
     v
 [Step 7] Cache Write
@@ -393,7 +394,18 @@ SearchRequest {query, limit, year_start, year_end,
     ON CONFLICT (cache_key) DO UPDATE ... SET created_at = NOW()
     |
     v
-[Step 8] Return GraphResponse JSON
+[Step 8] Return GraphResponse JSON  ← client receives response here (~45-70s)
+    |
+    v (background — does NOT block response)
+[Step 9] _enrich_citations_background()  asyncio.create_task() (v0.8.0)
+    Selects top-20 papers by citation_count
+    For each: SemanticScholarClient.get_references() + get_citations()
+              → Redis cache hit: skip S2 API
+              → Redis cache miss: S2 API → store in Redis (TTL 7d)
+    Inserts citation edges into search_cache
+    Updates meta.citation_edges + meta.citation_enriched = True
+    Total time: ~20s (cached: ~2s)
+    Effect on user: next search result load shows citation edges
 ```
 
 ### 4.2 UnifiedPaper Data Model
@@ -736,8 +748,44 @@ Cache-first (≥ 95%) → Serve stale cache if available;
 | Retry logic | 3 attempts with exponential backoff on HTTP 429; raises `SemanticScholarRateLimitError` after exhausting |
 | Batch endpoint | `POST /paper/batch` — up to 500 paper IDs per request, `fields=embedding,tldr` |
 | SPECTER2 field | `embedding.specter_v2` in response — 768-element float list |
+| **Redis cache (v0.8.0)** | `get_references()` / `get_citations()` check Redis (`refs:{id}:{limit}`, `cites:{id}:{limit}`) before hitting S2 API; store on miss |
+| Null safety | `(data.get("data") or [])` — S2 returns `{"data": null}` for unindexed papers; `.get(key, [])` only uses default when key is absent, not when value is null |
+| Error isolation | HTTP 400/404 from S2 → returns `[]` (non-fatal); references and citations fetched independently so partial failures don't block each other |
 
-### 7.3 DataFusionService
+### 7.3 CrossrefClient (v0.8.0)
+
+**File:** `backend/integrations/crossref.py`
+
+| Aspect | Detail |
+|--------|--------|
+| Base URL | `https://api.crossref.org/works` |
+| Authentication | None — polite pool via `User-Agent: ScholarGraph3D/0.8.0 (mailto:...)` |
+| Rate limit | ~50 req/sec (polite pool, unmetered) |
+| Timeout | 15s per request |
+| Key method | `get_metadata(doi)` → `{title, year, authors, doi}` or `None` |
+| Use case | DOI fallback when S2 returns 404 — covers economics, law, humanities journals not indexed by S2 |
+
+**Fallback integration in `papers.py`:**
+```
+S2 direct → [404] → Crossref metadata → S2 title search → Jaccard ≥ 0.3 → paper_id
+```
+
+### 7.4 OpenCitationsClient (v0.8.0)
+
+**File:** `backend/integrations/opencitations.py`
+
+| Aspect | Detail |
+|--------|--------|
+| Base URL | `https://opencitations.net/index/coci/api/v1` |
+| Authentication | None |
+| Rate limit | 180 req/min |
+| Endpoints | `GET /citations/{doi}` (papers citing this DOI), `GET /references/{doi}` (papers cited by this DOI) |
+| Response format | `[{"citing": doi, "cited": doi, "creation": date, "timespan": duration, ...}]` |
+| PostgreSQL cache | `oc_citation_cache(citing_doi, cited_doi, fetched_at)` — migration `003_opencitations_cache.sql` |
+| Helper methods | `extract_cited_dois(results)`, `extract_citing_dois(results)` |
+| Purpose | DOI-based citation pairs — enables Co-citation + Bibliographic Coupling edges (v0.9.0) independent of S2 paper_id |
+
+### 7.6 DataFusionService
 
 **File:** `backend/integrations/data_fusion.py`
 
@@ -821,19 +869,25 @@ Authorization is enforced at two independent layers:
 Incoming Search Request
     |
     v
-[L1] PostgreSQL search_cache  (Phase 1 — live)
+[L1] PostgreSQL search_cache  (live — Phase 1)
     cache_key = SHA-256(normalized {query, limit, year_range, fields})
     TTL: 24 hours (enforced at SELECT time)
     HIT  (~50-100ms): return cached GraphResponse
-    MISS (~3-5s):     run full pipeline, then upsert cache
+    MISS (~45-70s):   run full pipeline, then upsert cache
     |
     v (on miss)
 OA + S2 + UMAP + HDBSCAN + Similarity pipeline
-
-[L2] Upstash Redis  (Phase 2 — planned)
-    Hot query in-memory:       TTL = 1 hour
-    Per-user rate counters:    TTL = 60 seconds
-    GraphRAG chat context:     TTL = session lifetime
+    |
+    v
+[L2] Upstash Redis  (live — v0.8.0, REDIS_URL set on Render)
+    emb:{s2_paper_id}          TTL = 30 days  ← SPECTER2 768-dim embedding
+    refs:{paper_id}:{limit}    TTL = 7 days   ← get_references() result
+    cites:{paper_id}:{limit}   TTL = 7 days   ← get_citations() result
+    search:{sha256}            TTL = 24 hours ← full GraphResponse
+    |
+    → Cache MISS: S2 API call → store result → return
+    → Cache HIT:  return immediately (skip S2 API)
+    → Redis DOWN: graceful degradation — pass-through to S2 (no crash)
 
 [L3] Browser
     Zustand store:             in-memory for current session
@@ -844,23 +898,32 @@ OA + S2 + UMAP + HDBSCAN + Similarity pipeline
 ### 9.2 Cache Key Design
 
 ```python
+# PostgreSQL L1 cache
 cache_key = SHA-256(JSON({
     "query":      query.lower().strip(),
     "limit":      limit,
     "year_range": (year_start, year_end),   # null if unset
     "fields":     sorted(fields) or null,   # sorted for order-independence
 }))
+
+# Redis L2 cache keys (backend/cache.py)
+f"emb:{s2_paper_id}"           # SPECTER2 embedding
+f"refs:{paper_id}:{limit}"     # S2 references list
+f"cites:{paper_id}:{limit}"    # S2 citations list
+f"search:{sha256_key}"         # Full search response
 ```
 
-`"Transformers"` and `"transformers"` produce the same key. `["CS", "Physics"]` and `["Physics", "CS"]` produce the same key.
+`"Transformers"` and `"transformers"` produce the same L1 key. `["CS", "Physics"]` and `["Physics", "CS"]` produce the same key.
 
 ### 9.3 TTL and Cleanup
 
 | Cache | TTL | Cleanup |
 |-------|-----|---------|
 | `search_cache` (PostgreSQL) | 24h | `WHERE created_at > NOW() - INTERVAL '24 hours'` at read; periodic `DELETE` of entries > 48h old |
-| Redis hot queries | 1h | Redis TTL automatic |
-| Redis rate counters | 60s | Redis TTL automatic |
+| `oc_citation_cache` (PostgreSQL) | 30 days | `oc_stale_cache` view; manual cleanup via `DELETE WHERE fetched_at < NOW() - INTERVAL '30 days'` |
+| Redis `emb:*` | 30 days | Redis TTL automatic |
+| Redis `refs:*` / `cites:*` | 7 days | Redis TTL automatic |
+| Redis `search:*` | 24h | Redis TTL automatic |
 
 ### 9.4 Cache-First Mode (OA Credit Protection)
 
