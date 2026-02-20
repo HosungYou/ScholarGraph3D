@@ -1804,4 +1804,77 @@ Overlay objects are added to `gapOverlayRef` and cleaned up on toggle/unmount.
 
 ---
 
+## 18. Phase 6 — Visualization & Exploration (v0.6.0)
+
+Added in 2026-02-20. Includes field color fix, LOD/opacity improvements, panel highlight on selection, seed paper exploration mode, citation enrichment step, 2D timeline view, citation intent toggle, and research settings panel.
+
+### 18.1 Seed Paper Exploration Pipeline (`POST /api/seed-explore`)
+
+A new router `backend/routers/seed_explore.py` exposes a graph-building pipeline seeded from a single known paper rather than a keyword query. The pipeline:
+
+```
+POST /api/seed-explore
+Body: { paper_id, depth, max_papers, include_references, include_citations }
+    |
+    v
+[Step 1] Fetch seed paper by s2_paper_id or doi (DB or S2 API fallback)
+    |
+    v
+[Step 2] BFS expansion — up to `depth` hops via S2 citations + references
+    |-- Each hop: fetch citing/referenced paper IDs (respecting include_* flags)
+    |-- Deduplicate by s2_paper_id across all hops
+    |-- Stop when max_papers reached
+    |
+    v
+[Step 3] Citation enrichment — POST /paper/batch to fetch SPECTER2 embeddings
+    |   for all expanded papers (same enrichment step as main search pipeline)
+    |
+    v
+[Step 4] Standard pipeline: UMAP 3D reduction → HDBSCAN clustering → similarity edges
+    |
+    v
+[Step 5] Build GraphResponse — seed paper node flagged with is_seed: true
+    |
+    v
+Return GraphResponse JSON
+```
+
+The frontend `app/explore/seed/page.tsx` provides a dedicated entry point: user pastes a DOI or S2 paper ID, the page calls `/api/seed-explore`, and renders the resulting graph in the standard 3-panel `explore` layout.
+
+### 18.2 Citation Enrichment Step
+
+Citation enrichment is now a discrete step in both the main search pipeline and the seed explore pipeline. After DOI dedup, any paper with a known `s2_paper_id` but a missing SPECTER2 embedding is submitted to `POST /paper/batch` in chunks of 500. This increases the fraction of papers with embeddings (and thus placement in UMAP space) compared to the prior approach of using inline embeddings from the search endpoint alone.
+
+The updated data flow for the search pipeline Step 2 is:
+
+```
+[Step 2] DataFusionService.search()
+    |-- 2a OA keyword search
+    |-- 2b S2 keyword search (include_embedding=True)
+    |-- 2c DOI dedup + merge
+    |-- 2d Citation enrichment: batch-fetch missing SPECTER2 embeddings  ← new
+```
+
+`meta.with_embeddings` in GraphResponse now reflects the post-enrichment count.
+
+### 18.3 2D Timeline View (`TimelineView.tsx`)
+
+`components/analysis/TimelineView.tsx` renders a D3-based 2D scatter plot of papers positioned by publication year (x-axis) and citation count (y-axis). Activated when `show2DTimeline` is `true` in `useGraphStore`.
+
+Key implementation details:
+
+- Rendered in an SVG canvas via `d3-scale` (linear x/log y) and `d3-axis`
+- Each paper is a circle sized by citation count, colored by the same `FIELD_COLOR_MAP` used in the 3D graph
+- Clicking a circle calls `selectPaper()` in the Zustand store, syncing selection with the 3D view
+- The view updates reactively when `graphData` or `selectedPaper` changes
+- Brushing (drag to select a year range) sets `yearRange` in the store, filtering both the 2D and 3D views simultaneously
+
+`show2DTimeline` is a new boolean field in `useGraphStore` (default `false`). Toggled by a button in `GraphControls.tsx`. When `true`, `TimelineView` overlays the bottom portion of the explore page canvas area.
+
+### 18.4 Updated Data Flow Diagram Note
+
+The high-level diagram in SS1.1 remains accurate. The citation enrichment step (18.2) is internal to the Service Layer box. The seed explore pipeline uses the same Service Layer components (EmbeddingReducer, PaperClusterer, SimilarityComputer) via `seed_explore.py` router, adding a new arrow from `/api/seed-explore` into the Service Layer.
+
+---
+
 *This document is the authoritative source for system structure and design decisions. For product requirements, see [PRD.md](./PRD.md). For API contracts and database schema, see [SPEC.md](./SPEC.md). For test strategy, see [SDD/TDD Plan](./SDD_TDD_PLAN.md).*

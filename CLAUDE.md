@@ -94,7 +94,8 @@ backend/
 │   ├── chat.py          # Phase 2: POST /api/chat + /api/chat/stream (SSE)
 │   ├── watch.py         # Phase 3: /api/watch CRUD + /api/watch/cron
 │   ├── lit_review.py    # Phase 3: /api/lit-review/generate + export-pdf
-│   └── personalization.py   # Phase 5: /api/user profile, events, search-history, recommendations
+│   ├── personalization.py   # Phase 5: /api/user profile, events, search-history, recommendations
+│   └── seed_explore.py  # Phase 6: POST /api/seed-explore (seed paper graph expansion)
 └── database/
     ├── 001_initial_schema.sql  # papers, citations, user_graphs, search_cache, chat_*, watch_queries
     └── 002_personalization.sql  # Phase 5: user_profiles, search_history, interactions, recommendations
@@ -106,6 +107,7 @@ frontend/
 ├── app/
 │   ├── page.tsx          # Landing page with search
 │   ├── explore/page.tsx  # Main 3-panel exploration (tabbed sidebar + chat)
+│   ├── explore/seed/page.tsx  # Phase 6: Seed paper exploration mode
 │   ├── auth/             # Login/signup
 │   └── dashboard/        # Saved graphs
 ├── components/
@@ -117,7 +119,8 @@ frontend/
 │   │   └── GraphControls.tsx     # Floating toggles: citation/similarity/hulls/labels/bloom/ghost/gap
 │   ├── analysis/                 # Phase 2
 │   │   ├── TrendPanel.tsx        # Emerging/stable/declining with sparklines
-│   │   └── GapPanel.tsx          # Gap strength, bridge papers, hypotheses
+│   │   ├── GapPanel.tsx          # Gap strength, bridge papers, hypotheses
+│   │   └── TimelineView.tsx      # Phase 6: D3-based 2D timeline of papers by year
 │   ├── chat/                     # Phase 2
 │   │   └── ChatPanel.tsx         # GraphRAG streaming chat with [N] citations
 │   ├── settings/                 # Phase 2
@@ -130,7 +133,7 @@ frontend/
 │   │   └── ScaffoldingModal.tsx    # Multi-select research angle exploration modal
 │   └── dashboard/
 │       └── RecommendationCard.tsx   # Phase 5: recommendation card with dismiss + explore
-├── hooks/useGraphStore.ts    # Zustand state (Phase 1–4: bloom/ghostEdges/gapOverlay/hiddenClusters/bridgeNodes/conceptualEdges/timeline)
+├── hooks/useGraphStore.ts    # Zustand state (Phase 1–6: bloom/ghostEdges/gapOverlay/hiddenClusters/bridgeNodes/conceptualEdges/timeline/show2DTimeline)
 ├── lib/
 │   ├── api.ts               # Backend API client (search + analysis + chat)
 │   ├── auth-context.tsx      # Supabase auth context
@@ -198,3 +201,4 @@ Patterns: CachedLLMProvider (decorator, in-memory TTL), CircuitBreaker (5 failur
 - Phase 3 (Real-time): v0.3.0 ✅ — natural language search (Groq), SSE progress stream, citation context modal, rate limiting, analytics, SEO
 - Phase 4 (Relationships): v0.4.0 ✅ — critical node-click bug fix, panel resize, conceptual edges SSE, 3-mode home page, timeline view
 - Phase 5 (Personalization): v0.5.0 ✅ — OAuth callback fix, user profiles, interaction logging, pgvector recommendations, dashboard recommendations section, home page "Continue Exploring"
+- Phase 6 (Viz + Exploration): v0.6.0 ✅ — field color fix, LOD/opacity fix, panel highlight, seed paper mode, citation enrichment, 2D timeline, intent toggle, research settings

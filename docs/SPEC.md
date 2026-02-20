@@ -301,6 +301,7 @@ Detailed health check with subsystem status.
     "with_embeddings": 165,
     "clusters": 6,
     "similarity_edges": 234,
+    "citation_edges": 78,
     "elapsed_seconds": 3.42
   }
 }
@@ -443,7 +444,69 @@ for await (const { event, data } of searchStream('transformers')) {
 }
 ```
 
-### 4.3 Phase 4: Conceptual Relationships
+### 4.3 Phase 6: Seed Paper Exploration
+
+#### `POST /api/seed-explore` (v0.6.0)
+
+**Auth:** None required (public)
+
+Build a citation-graph seeded from a single known paper. Expands outward via BFS through S2 citations and references, then runs the standard UMAP + HDBSCAN + similarity pipeline on the collected papers.
+
+**Request Body:**
+```json
+{
+  "paper_id": "204e3073870fae3d05bcbc2f6a8e263d9b72e776",
+  "depth": 2,
+  "max_papers": 150,
+  "include_references": true,
+  "include_citations": true
+}
+```
+
+| Field | Type | Default | Constraints | Description |
+|-------|------|---------|-------------|-------------|
+| `paper_id` | string | required | | S2 paper ID or DOI of seed paper |
+| `depth` | int | 2 | 1-3 | BFS hop depth from seed paper |
+| `max_papers` | int | 150 | 10-500 | Maximum papers to include |
+| `include_references` | bool | true | | Traverse reference edges |
+| `include_citations` | bool | true | | Traverse citation edges |
+
+**Response 200 (GraphResponse):**
+
+Same structure as `POST /api/search`. The seed paper node has an additional field:
+
+```json
+{
+  "nodes": [
+    {
+      "id": "0",
+      "title": "Attention Is All You Need",
+      "is_seed": true,
+      ...
+    }
+  ],
+  "edges": [...],
+  "clusters": [...],
+  "meta": {
+    "seed_paper_id": "204e3073870fae3d05bcbc2f6a8e263d9b72e776",
+    "depth": 2,
+    "total": 143,
+    "with_embeddings": 138,
+    "citation_edges": 89,
+    "clusters": 5,
+    "similarity_edges": 201,
+    "elapsed_seconds": 4.1
+  }
+}
+```
+
+**Response 404:** `{"detail": "Seed paper not found"}`
+
+**Implementation:** `backend/routers/seed_explore.py`
+
+---
+
+### 4.4 Phase 4: Conceptual Relationships
 
 #### GET /api/analysis/conceptual-edges/stream
 SSE endpoint for streaming conceptual relationship edges.
@@ -1140,6 +1203,57 @@ PostgreSQL RLS policies on `user_graphs` table ensure users can only access thei
 - `showConceptualEdges: boolean` — toggle in GraphControls
 - `showTimeline: boolean` — fixes node Y-axis by publication year
 - `isAnalyzingRelations: boolean` — SSE stream in progress
+
+---
+
+### Phase 6: TimelineView Component Spec
+
+**File:** `frontend/components/analysis/TimelineView.tsx`
+
+**Purpose:** D3-based 2D scatter plot rendering papers by publication year and citation count, synchronized with the 3D graph selection state.
+
+**Props:**
+```typescript
+interface TimelineViewProps {
+  // No external props — reads entirely from useGraphStore
+}
+```
+
+**Store dependencies:**
+
+| Field | Usage |
+|-------|-------|
+| `graphData` | Source of paper nodes to render |
+| `selectedPaper` | Highlights matching circle; synced bidirectionally |
+| `yearRange` | Controlled by brush selection; filters 3D graph |
+| `show2DTimeline` | Mount/unmount gate |
+
+**Layout:**
+
+| Axis | Data | Scale |
+|------|------|-------|
+| X | `paper.year` | `d3.scaleLinear` — min/max year of current graph |
+| Y | `paper.citation_count` | `d3.scaleLog` (base 10, min clamp 1) |
+
+**Visual mapping:**
+
+| Property | Value |
+|----------|-------|
+| Circle radius | `max(3, log(citation_count + 1) * 2)` |
+| Fill color | `FIELD_COLOR_MAP[primaryField]` (same palette as 3D graph) |
+| Selected outline | Gold `#FFD700`, stroke-width 2 |
+| Unselected opacity | 0.7 |
+| Dimmed (non-selected when selection active) | 0.2 |
+
+**Interactions:**
+
+| Interaction | Behavior |
+|-------------|----------|
+| Click circle | `selectPaper(paper)` in Zustand store |
+| D3 brush drag | Sets `yearRange` in store; filters both 2D and 3D views |
+| Hover | Tooltip: title, year, citation count |
+
+**Activation:** `show2DTimeline` boolean in `useGraphStore` (default `false`). Toggled via button in `GraphControls.tsx`. When active, renders as an overlay panel below the 3D canvas in `app/explore/page.tsx`.
 
 ---
 
