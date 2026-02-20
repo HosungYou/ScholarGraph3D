@@ -32,6 +32,13 @@ export default function LandingPage() {
   const { user } = useAuth();
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
 
+  // Safety net: if OAuth hash fragment lands on root, redirect authenticated users
+  useEffect(() => {
+    if (user && window.location.hash.includes('access_token')) {
+      router.push('/dashboard');
+    }
+  }, [user, router]);
+
   // Load recent searches from localStorage
   useEffect(() => {
     try {
