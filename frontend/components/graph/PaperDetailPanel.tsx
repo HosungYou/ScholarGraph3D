@@ -11,6 +11,7 @@ import {
   Calendar,
   Hash,
   Network,
+  Cpu,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import type { Paper } from '@/types';
@@ -29,7 +30,7 @@ export default function PaperDetailPanel({
   onExpand,
 }: PaperDetailPanelProps) {
   const [showFullAbstract, setShowFullAbstract] = useState(false);
-  const { graphData } = useGraphStore();
+  const { graphData, conceptualEdges } = useGraphStore();
 
   // Compute relationship summary
   const relationshipSummary = React.useMemo(() => {
@@ -44,8 +45,11 @@ export default function PaperDetailPanel({
       (e) => e.type === 'similarity' && (e.source === paper.id || e.target === paper.id)
     ).length;
     const isBridge = paper.is_bridge;
-    return { incomingCitations, outgoingCitations, similarEdges, isBridge };
-  }, [graphData, paper]);
+    const conceptualCount = conceptualEdges.filter(
+      (e) => e.source === paper.id || e.target === paper.id
+    ).length;
+    return { incomingCitations, outgoingCitations, similarEdges, isBridge, conceptualCount };
+  }, [graphData, paper, conceptualEdges]);
 
   const abstractText = paper.abstract || paper.tldr || 'No abstract available.';
   const isLongAbstract = abstractText.length > 300;
@@ -226,6 +230,15 @@ export default function PaperDetailPanel({
               <div className="text-text-secondary/60">Similar papers</div>
               <div className="font-semibold text-text-primary">
                 {relationshipSummary.similarEdges} connected
+              </div>
+            </div>
+            <div className="bg-surface/50 rounded-lg p-2">
+              <div className="flex items-center gap-1 text-text-secondary/60">
+                <Cpu className="w-3 h-3" />
+                <span>AI relationships</span>
+              </div>
+              <div className="font-semibold text-text-primary">
+                {relationshipSummary.conceptualCount} analyzed
               </div>
             </div>
             {relationshipSummary.isBridge && (

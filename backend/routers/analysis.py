@@ -469,22 +469,23 @@ async def stream_conceptual_edges(
             papers_data = {}
             async with db.pool.acquire() as conn:
                 rows = await conn.fetch(
-                    """SELECT id, title, abstract, embedding
-                       FROM papers WHERE id = ANY($1)""",
+                    """SELECT id, s2_paper_id, title, abstract, embedding
+                       FROM papers WHERE s2_paper_id = ANY($1) AND s2_paper_id IS NOT NULL""",
                     ids
                 )
                 for row in rows:
-                    papers_data[row['id']] = {
-                        'id': row['id'],
-                        'title': row['title'] or '',
-                        'abstract': row['abstract'] or '',
-                        'embedding': row['embedding'],
-                    }
+                    if row['s2_paper_id']:
+                        papers_data[row['s2_paper_id']] = {
+                            'id': row['s2_paper_id'],
+                            'title': row['title'] or '',
+                            'abstract': row['abstract'] or '',
+                            'embedding': row['embedding'],
+                        }
 
             valid_ids = [pid for pid in ids if pid in papers_data]
 
             if len(valid_ids) < 2:
-                yield f"data: {json.dumps({'type': 'error', 'message': 'Not enough papers with embeddings found'})}\n\n"
+                yield f"data: {json.dumps({'type': 'error', 'message': 'Not enough papers found in database. Papers may not be stored yet.'})}\n\n"
                 return
 
             yield f"data: {json.dumps({'type': 'progress', 'stage': 'filtering', 'message': f'Filtering {len(valid_ids)} papers by semantic similarity...'})}\n\n"

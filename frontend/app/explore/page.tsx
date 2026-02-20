@@ -167,7 +167,9 @@ function ExploreContent() {
     const handle = async (e: Event) => {
       const { paper } = (e as CustomEvent<{ paper: Paper }>).detail;
       try {
-        const result = await api.expandPaperStable(paper.id, graphData?.nodes || [], graphData?.edges || []);
+        const expandId = paper.s2_paper_id || '';
+        if (!expandId) return;
+        const result = await api.expandPaperStable(expandId, graphData?.nodes || [], graphData?.edges || []);
         useGraphStore.getState().addNodesStable(result.nodes, result.edges);
       } catch (err) {
         console.error('Failed to expand paper:', err);
@@ -228,7 +230,14 @@ function ExploreContent() {
   useEffect(() => {
     if (!graphData || !graphData.nodes || graphData.nodes.length < 2) return;
 
-    const paperIds = graphData.nodes.map((n) => n.id);
+    // Build s2_paper_id → graph node ID mapping
+    const s2ToGraphId = new Map<string, string>();
+    graphData.nodes.forEach((n) => {
+      if (n.s2_paper_id) s2ToGraphId.set(n.s2_paper_id, n.id);
+    });
+
+    const s2PaperIds = Array.from(s2ToGraphId.keys());
+    if (s2PaperIds.length < 2) return;
 
     // Clear previous conceptual edges
     useGraphStore.getState().clearConceptualEdges();
@@ -236,9 +245,12 @@ function ExploreContent() {
     setRelationAnalysisProgress({ done: 0, total: 0 });
 
     const cleanup = api.streamConceptualEdges(
-      paperIds,
+      s2PaperIds,
       (edge) => {
-        useGraphStore.getState().addConceptualEdges([edge]);
+        // Translate s2_paper_id back to graph node ID
+        const graphSrc = s2ToGraphId.get(edge.source) ?? edge.source;
+        const graphTgt = s2ToGraphId.get(edge.target) ?? edge.target;
+        useGraphStore.getState().addConceptualEdges([{ ...edge, source: graphSrc, target: graphTgt }]);
       },
       (_msg) => {
         // progress message — could update a local state here
@@ -317,9 +329,15 @@ function ExploreContent() {
 
   const handleExpandPaper = useCallback(
     async (paper: Paper) => {
+      const expandId = paper.s2_paper_id || '';
+      if (!expandId) {
+        setExpandError('Cannot expand: this paper has no Semantic Scholar ID');
+        setTimeout(() => setExpandError(null), 4000);
+        return;
+      }
       try {
-        const result = await api.expandPaper(paper.id);
-        useGraphStore.getState().addNodes(result.nodes, result.edges);
+        const result = await api.expandPaperStable(expandId, graphData?.nodes || [], graphData?.edges || []);
+        useGraphStore.getState().addNodesStable(result.nodes, result.edges);
         api.logInteraction({ paper_id: paper.id, action: 'expand_citations' });
       } catch (err) {
         console.error('Failed to expand paper:', err);
@@ -327,7 +345,7 @@ function ExploreContent() {
         setTimeout(() => setExpandError(null), 4000);
       }
     },
-    [setExpandError]
+    [setExpandError, graphData]
   );
 
   const handlePaperSelect = useCallback((paper: Paper | null) => {
