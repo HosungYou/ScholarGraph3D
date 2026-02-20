@@ -14,7 +14,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional
-from urllib.parse import quote_plus
+from urllib.parse import quote
 
 import httpx
 
@@ -241,7 +241,7 @@ class SemanticScholarClient:
     ) -> Optional[SemanticScholarPaper]:
         """Get detailed information about a paper."""
         fields = self.PAPER_FIELDS_WITH_EMBEDDING if include_embedding else self.PAPER_FIELDS
-        encoded_id = quote_plus(paper_id)
+        encoded_id = quote(paper_id, safe=':/')
         url = f"{self.BASE_URL}/paper/{encoded_id}"
 
         try:
@@ -315,7 +315,7 @@ class SemanticScholarClient:
     ) -> List[SemanticScholarPaper]:
         """Get papers that this paper references."""
         fields = self.PAPER_FIELDS_WITH_EMBEDDING if include_embedding else self.PAPER_FIELDS
-        encoded_id = quote_plus(paper_id)
+        encoded_id = quote(paper_id, safe=':/')
         url = f"{self.BASE_URL}/paper/{encoded_id}/references"
 
         try:
@@ -355,7 +355,7 @@ class SemanticScholarClient:
     ) -> List[SemanticScholarPaper]:
         """Get papers that cite this paper."""
         fields = self.PAPER_FIELDS_WITH_EMBEDDING if include_embedding else self.PAPER_FIELDS
-        encoded_id = quote_plus(paper_id)
+        encoded_id = quote(paper_id, safe=':/')
         url = f"{self.BASE_URL}/paper/{encoded_id}/citations"
 
         try:
