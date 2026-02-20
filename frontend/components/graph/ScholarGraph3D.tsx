@@ -31,12 +31,36 @@ const ForceGraph3D = dynamic(() => import('react-force-graph-3d'), {
 
 // Field color mapping
 const FIELD_COLOR_MAP: Record<string, string> = {
-  'Physical Sciences': '#4A90D9',
-  'Life Sciences': '#2ECC71',
-  'Social Sciences': '#E67E22',
-  'Health Sciences': '#E74C3C',
-  Engineering: '#9B59B6',
-  'Arts & Humanities': '#F39C12',
+  // Computer & Engineering
+  'Computer Science': '#4A90D9',
+  'Engineering': '#5B9BD5',
+  'Mathematics': '#6CA6E0',
+  // Life & Medical Sciences
+  'Medicine': '#E74C3C',
+  'Biology': '#2ECC71',
+  'Biochemistry': '#27AE60',
+  'Neuroscience': '#1ABC9C',
+  'Psychology': '#16A085',
+  'Agricultural and Food Sciences': '#A3D977',
+  'Environmental Science': '#82C341',
+  // Physical Sciences
+  'Physics': '#9B59B6',
+  'Chemistry': '#8E44AD',
+  'Materials Science': '#7D3C98',
+  'Geology': '#6C3483',
+  // Social Sciences & Humanities
+  'Economics': '#E67E22',
+  'Sociology': '#D35400',
+  'Political Science': '#CA6F1E',
+  'Philosophy': '#BA4A00',
+  'History': '#A04000',
+  'Geography': '#C0392B',
+  'Linguistics': '#F39C12',
+  'Art': '#F1C40F',
+  'Education': '#E59866',
+  // Business & Law
+  'Business': '#5DADE2',
+  'Law': '#48C9B0',
   Other: '#95A5A6',
 };
 
@@ -142,6 +166,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     selectPaper,
     setHoveredPaper,
     toggleMultiSelect,
+    highlightedPaperIds,
   } = useGraphStore();
 
   const lastClickRef = useRef<{ nodeId: string; timestamp: number } | null>(
@@ -355,13 +380,16 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       const isHighlighted = highlightSet.has(node.id);
       const isSelected = selectedPaperIdRef.current === node.id;
       const hasSelection = selectedPaperIdRef.current !== null;
+      const isHighlightedByPanel = highlightedPaperIds.has(node.id);
 
       let displayColor = node.color;
       if (isSelected) displayColor = '#FFD700';
+      else if (isHighlightedByPanel) displayColor = '#FF6B6B';
       else if (isHighlighted) displayColor = '#4ECDC4';
 
       let displayOpacity = node.opacity;
       if (isSelected) displayOpacity = 1;
+      else if (isHighlightedByPanel) displayOpacity = 1;
       else if (isHighlighted) displayOpacity = 1;
       else if (hasSelection) displayOpacity = 0.15;
 
@@ -537,7 +565,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
 
       return group;
     },
-    [highlightSet, showLabels, showBloom, bridgeNodeIds, showOARings, showCitationAura]
+    [highlightSet, showLabels, showBloom, bridgeNodeIds, showOARings, showCitationAura, highlightedPaperIds]
   );
 
   // Link width
@@ -553,8 +581,8 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
 
       // Check camera distance for LOD
       const camDist = fgRef.current?.camera()?.position?.length() ?? 0;
-      const isFar = camDist > 800;
-      const isVeryFar = camDist > 1200;
+      const isFar = camDist > 2000;
+      const isVeryFar = camDist > 3000;
 
       if (isFar && link.edgeType === 'similarity') {
         return 'rgba(0,0,0,0)'; // invisible
@@ -565,7 +593,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
 
       if (!selectedPaper) {
         return link.dashed
-          ? 'rgba(74, 144, 217, 0.15)'
+          ? 'rgba(74, 144, 217, 0.35)'
           : `rgba(136, 144, 165, ${0.2 + link.width * 0.1})`;
       }
 
@@ -596,7 +624,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       color: 0x4a90d9,
       dashSize: 2,
       gapSize: 1.5,
-      opacity: 0.3,
+      opacity: 0.6,
       transparent: true,
     });
     return new THREE.Line(geometry, material);
@@ -728,6 +756,9 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
 
   // Gap overlay ref
   const gapOverlayRef = useRef<THREE.Group | null>(null);
+
+  // Timeline labels ref
+  const timelineOverlayRef = useRef<THREE.Group | null>(null);
 
   useEffect(() => {
     if (!fgRef.current || !showClusterHulls || !graphData?.clusters.length) {
@@ -995,6 +1026,119 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
 
     // Reheat simulation slightly to settle into new positions
     fgRef.current.d3ReheatSimulation?.();
+  }, [showTimeline, graphData]);
+
+  // Timeline mode: year labels and grid lines
+  useEffect(() => {
+    if (!fgRef.current || !graphData) {
+      if (timelineOverlayRef.current && fgRef.current) {
+        try { fgRef.current.scene().remove(timelineOverlayRef.current); } catch {}
+        timelineOverlayRef.current = null;
+      }
+      return;
+    }
+
+    const scene = fgRef.current.scene();
+    if (!scene) return;
+
+    // Clean up previous overlay
+    if (timelineOverlayRef.current) {
+      scene.remove(timelineOverlayRef.current);
+      timelineOverlayRef.current = null;
+    }
+
+    if (!showTimeline) return;
+
+    const years = graphData.nodes.map((p) => p.year).filter((y) => y != null && !isNaN(y));
+    if (years.length === 0) return;
+    const minY = Math.min(...years);
+    const maxY = Math.max(...years);
+    const span = maxY - minY || 1;
+
+    const overlayGroup = new THREE.Group();
+    overlayGroup.name = 'timeline-labels';
+    timelineOverlayRef.current = overlayGroup;
+    scene.add(overlayGroup);
+
+    // Determine year step (5-year intervals, or 2 if range is small)
+    const yearStep = span <= 10 ? 2 : 5;
+    const startYear = Math.ceil(minY / yearStep) * yearStep;
+
+    for (let year = startYear; year <= maxY; year += yearStep) {
+      const yPos = ((year - minY) / span) * 300 - 150;
+
+      // Year label sprite
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        canvas.width = 128;
+        canvas.height = 48;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+        ctx.font = 'bold 24px Arial, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(year), 64, 24);
+
+        const texture = new THREE.CanvasTexture(canvas);
+        const spriteMaterial = new THREE.SpriteMaterial({
+          map: texture,
+          transparent: true,
+          depthTest: false,
+        });
+        const sprite = new THREE.Sprite(spriteMaterial);
+        sprite.scale.set(30, 12, 1);
+        sprite.position.set(-250, yPos, 0);
+        overlayGroup.add(sprite);
+      }
+
+      // Horizontal grid line
+      const lineGeo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(-220, yPos, 0),
+        new THREE.Vector3(220, yPos, 0),
+      ]);
+      const lineMat = new THREE.LineBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.08,
+      });
+      const line = new THREE.Line(lineGeo, lineMat);
+      overlayGroup.add(line);
+    }
+
+    // "Earlier" / "Later" direction labels
+    const createDirectionLabel = (text: string, yPos: number) => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        canvas.width = 192;
+        canvas.height = 32;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.font = '14px Arial, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, 96, 16);
+
+        const texture = new THREE.CanvasTexture(canvas);
+        const spriteMaterial = new THREE.SpriteMaterial({
+          map: texture,
+          transparent: true,
+          depthTest: false,
+        });
+        const sprite = new THREE.Sprite(spriteMaterial);
+        sprite.scale.set(40, 8, 1);
+        sprite.position.set(-250, yPos, 0);
+        overlayGroup.add(sprite);
+      }
+    };
+    createDirectionLabel('\u2190 Earlier', -170);
+    createDirectionLabel('Later \u2192', 170);
+
+    return () => {
+      if (timelineOverlayRef.current && fgRef.current?.scene()) {
+        try { fgRef.current.scene().remove(timelineOverlayRef.current); } catch {}
+        timelineOverlayRef.current = null;
+      }
+    };
   }, [showTimeline, graphData]);
 
   // Double-click visual feedback: pulse new nodes for 1.5s after expand

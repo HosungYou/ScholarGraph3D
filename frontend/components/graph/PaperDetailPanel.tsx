@@ -12,6 +12,7 @@ import {
   Hash,
   Network,
   Cpu,
+  Loader2,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import type { Paper } from '@/types';
@@ -22,12 +23,14 @@ interface PaperDetailPanelProps {
   paper: Paper;
   onClose: () => void;
   onExpand: () => void;
+  isExpanding?: boolean;
 }
 
 export default function PaperDetailPanel({
   paper,
   onClose,
   onExpand,
+  isExpanding = false,
 }: PaperDetailPanelProps) {
   const [showFullAbstract, setShowFullAbstract] = useState(false);
   const { graphData, conceptualEdges } = useGraphStore();
@@ -255,10 +258,20 @@ export default function PaperDetailPanel({
       <div className="flex flex-col gap-2 mt-6">
         <button
           onClick={onExpand}
-          className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-accent/10 hover:bg-accent/20 text-accent rounded-lg text-sm font-medium transition-colors border border-accent/20"
+          disabled={isExpanding}
+          className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-accent/10 hover:bg-accent/20 text-accent rounded-lg text-sm font-medium transition-colors border border-accent/20 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <Network className="w-4 h-4" />
-          Expand Citations
+          {isExpanding ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Expanding...
+            </>
+          ) : (
+            <>
+              <Network className="w-4 h-4" />
+              Expand Citations
+            </>
+          )}
         </button>
         {paper.oa_url && (
           <a

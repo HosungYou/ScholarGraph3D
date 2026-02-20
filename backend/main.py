@@ -20,6 +20,7 @@ from routers import search, papers, graphs, analysis, chat, watch, lit_review
 from routers.natural_search import router as natural_search_router
 from routers.search_stream import router as search_stream_router
 from routers.personalization import router as personalization_router
+from routers.seed_explore import router as seed_explore_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -122,6 +123,7 @@ app.include_router(lit_review.router, tags=["Literature Review"])
 app.include_router(natural_search_router, tags=["Natural Language Search"])
 app.include_router(search_stream_router)
 app.include_router(personalization_router, tags=["Personalization"])
+app.include_router(seed_explore_router, tags=["Seed Explore"])
 
 
 # ==================== Health Endpoints ====================

@@ -16,13 +16,14 @@ import GapPanel from '@/components/analysis/GapPanel';
 import ChatPanel from '@/components/chat/ChatPanel';
 import WatchQueryPanel from '@/components/watch/WatchQueryPanel';
 import LitReviewPanel from '@/components/litreview/LitReviewPanel';
+import TimelineView from '@/components/analysis/TimelineView';
 import LLMSettingsModal, {
   loadLLMSettings,
 } from '@/components/settings/LLMSettingsModal';
 import CitationContextModal from '@/components/graph/CitationContextModal';
 import type { Paper } from '@/types';
 
-type LeftTab = 'clusters' | 'trends' | 'gaps' | 'watch';
+type LeftTab = 'clusters' | 'trends' | 'gaps' | 'watch' | 'timeline';
 
 function ExploreContent() {
   const searchParams = useSearchParams();
@@ -60,6 +61,7 @@ function ExploreContent() {
   // Local UI state
   const [leftTab, setLeftTab] = useState<LeftTab>('clusters');
   const [showChat, setShowChat] = useState(false);
+  const [show2DTimeline, setShow2DTimeline] = useState(false);
   const [showLLMModal, setShowLLMModal] = useState(false);
   const [showLitReview, setShowLitReview] = useState(false);
   const [citationModalData, setCitationModalData] = useState<{
@@ -75,15 +77,17 @@ function ExploreContent() {
     message: string;
   } | null>(null);
   const [expandError, setExpandError] = useState<string | null>(null);
+  const [isExpanding, setIsExpanding] = useState(false);
+  const [expandSuccess, setExpandSuccess] = useState<string | null>(null);
 
   // Panel resize state
   const [leftPanelWidth, setLeftPanelWidth] = useState(() => {
-    if (typeof window === 'undefined') return 288;
-    return parseInt(localStorage.getItem('sg3d-left-panel-width') || '288');
+    if (typeof window === 'undefined') return 320;
+    return parseInt(localStorage.getItem('sg3d-left-panel-width') || '320');
   });
   const [rightPanelWidth, setRightPanelWidth] = useState(() => {
-    if (typeof window === 'undefined') return 384;
-    return parseInt(localStorage.getItem('sg3d-right-panel-width') || '384');
+    if (typeof window === 'undefined') return 440;
+    return parseInt(localStorage.getItem('sg3d-right-panel-width') || '440');
   });
   const leftResizeRef = useRef<boolean>(false);
   const rightResizeRef = useRef<boolean>(false);
@@ -97,7 +101,7 @@ function ExploreContent() {
 
     const onMouseMove = (ev: MouseEvent) => {
       if (!leftResizeRef.current) return;
-      const newWidth = Math.min(520, Math.max(180, startWidth + ev.clientX - startX));
+      const newWidth = Math.min(640, Math.max(180, startWidth + ev.clientX - startX));
       setLeftPanelWidth(newWidth);
     };
     const onMouseUp = () => {
@@ -122,7 +126,7 @@ function ExploreContent() {
 
     const onMouseMove = (ev: MouseEvent) => {
       if (!rightResizeRef.current) return;
-      const newWidth = Math.min(600, Math.max(280, startWidth - (ev.clientX - startX)));
+      const newWidth = Math.min(700, Math.max(280, startWidth - (ev.clientX - startX)));
       setRightPanelWidth(newWidth);
     };
     const onMouseUp = () => {
@@ -342,14 +346,34 @@ function ExploreContent() {
         setTimeout(() => setExpandError(null), 4000);
         return;
       }
+      setIsExpanding(true);
+      setExpandError(null);
+      setExpandSuccess(null);
       try {
         const result = await api.expandPaperStable(expandId, graphData?.nodes || [], graphData?.edges || []);
         useGraphStore.getState().addNodesStable(result.nodes, result.edges);
         api.logInteraction({ paper_id: paper.id, action: 'expand_citations' });
+        const addedCount = result.nodes.length;
+        if (addedCount > 0) {
+          setExpandSuccess(`${addedCount} papers added`);
+          setTimeout(() => setExpandSuccess(null), 3000);
+        } else {
+          setExpandSuccess('No new papers found');
+          setTimeout(() => setExpandSuccess(null), 3000);
+        }
       } catch (err) {
         console.error('Failed to expand paper:', err);
-        setExpandError(err instanceof Error ? err.message : 'Failed to expand paper citations');
-        setTimeout(() => setExpandError(null), 4000);
+        const msg = err instanceof Error ? err.message : 'Failed to expand paper citations';
+        if (msg.includes('No Semantic Scholar')) {
+          setExpandError('Cannot expand: paper not found in Semantic Scholar');
+        } else if (msg.includes('fetch') || msg.includes('network') || msg.includes('Network')) {
+          setExpandError('Network error: please check your connection and try again');
+        } else {
+          setExpandError(msg);
+        }
+        setTimeout(() => setExpandError(null), 5000);
+      } finally {
+        setIsExpanding(false);
       }
     },
     [setExpandError, graphData]
@@ -359,8 +383,20 @@ function ExploreContent() {
     selectPaper(paper);
     if (paper) {
       api.logInteraction({ paper_id: paper.id, action: 'view' });
+      // Auto-load citation intents for selected paper
+      if (paper.s2_paper_id) {
+        const enhanced = showEnhancedIntents;
+        const llm = useGraphStore.getState().llmSettings;
+        api.getCitationIntents(paper.s2_paper_id, enhanced, llm || undefined)
+          .then((intents) => {
+            useGraphStore.getState().setCitationIntents(intents);
+          })
+          .catch((err) => {
+            console.warn('Failed to load citation intents:', err);
+          });
+      }
     }
-  }, [selectPaper]);
+  }, [selectPaper, showEnhancedIntents]);
 
   // Right panel: both can show simultaneously as independent columns
   const showPaperDetail = !!selectedPaper;
@@ -441,6 +477,7 @@ function ExploreContent() {
                 { key: 'trends', label: 'Trends' },
                 { key: 'gaps', label: 'Gaps' },
                 { key: 'watch', label: 'Watch' },
+                { key: 'timeline', label: 'Timeline' },
               ] as const
             ).map((tab) => (
               <button
@@ -470,6 +507,23 @@ function ExploreContent() {
             {leftTab === 'trends' && <TrendPanel />}
             {leftTab === 'gaps' && <GapPanel />}
             {leftTab === 'watch' && <WatchQueryPanel />}
+            {leftTab === 'timeline' && (
+              <div className="p-3">
+                <button
+                  onClick={() => setShow2DTimeline(!show2DTimeline)}
+                  className={`w-full px-3 py-2 rounded-lg text-xs font-medium transition-all border ${
+                    show2DTimeline
+                      ? 'bg-blue-900/20 text-blue-400 border-blue-800/40'
+                      : 'bg-gray-800 text-gray-400 border-gray-700 hover:bg-gray-700'
+                  }`}
+                >
+                  {show2DTimeline ? 'Hide 2D Timeline' : 'Show 2D Timeline'}
+                </button>
+                <p className="text-[10px] text-text-secondary/50 mt-2 px-1">
+                  View papers on a 2D timeline organized by year and cluster. Click nodes to highlight in 3D.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Left panel drag handle */}
@@ -479,8 +533,9 @@ function ExploreContent() {
           />
         </div>
 
-        {/* Center: 3D Graph */}
-        <div className="flex-1 relative">
+        {/* Center: 3D Graph + optional Timeline */}
+        <div className="flex-1 flex flex-col relative">
+          <div className={`relative ${show2DTimeline ? 'flex-1 min-h-0' : 'flex-1'}`} style={show2DTimeline ? { height: '60%' } : undefined}>
           {isLoading && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/80">
               <div className="text-center max-w-sm w-full px-8">
@@ -570,6 +625,13 @@ function ExploreContent() {
               <span>Analyzing conceptual relations...</span>
             </div>
           )}
+          </div>
+          {/* 2D Timeline Panel */}
+          {show2DTimeline && graphData && (
+            <div style={{ height: '40%' }} className="flex-shrink-0">
+              <TimelineView onClose={() => setShow2DTimeline(false)} />
+            </div>
+          )}
         </div>
 
         {/* Right panel: paper detail and chat as independent columns */}
@@ -593,6 +655,7 @@ function ExploreContent() {
                 paper={selectedPaper}
                 onClose={() => handlePaperSelect(null)}
                 onExpand={() => handleExpandPaper(selectedPaper)}
+                isExpanding={isExpanding}
               />
             </motion.div>
           )}
@@ -655,6 +718,13 @@ function ExploreContent() {
       {expandError && (
         <div className="fixed bottom-4 right-4 z-50 bg-red-900/90 border border-red-700/50 text-red-200 px-4 py-3 rounded-lg text-sm max-w-sm shadow-xl">
           ⚠️ {expandError}
+        </div>
+      )}
+
+      {/* Expand success toast */}
+      {expandSuccess && (
+        <div className="fixed bottom-4 right-4 z-50 bg-green-900/90 border border-green-700/50 text-green-200 px-4 py-3 rounded-lg text-sm max-w-sm shadow-xl">
+          {expandSuccess}
         </div>
       )}
     </div>

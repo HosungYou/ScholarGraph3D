@@ -192,7 +192,7 @@ async def search_papers(request: SearchRequest, db: Database = Depends(get_db)):
         )
     finally:
         await oa_client.close()
-        await s2_client.close()
+        # NOTE: s2_client kept open for citation enrichment
 
     if not papers:
         return GraphResponse(nodes=[], edges=[], clusters=[], meta={"query": request.query, "total": 0})
@@ -211,6 +211,7 @@ async def search_papers(request: SearchRequest, db: Database = Depends(get_db)):
     edges: List[GraphEdge] = []
     clusters_info: List[ClusterInfo] = []
     bridge_ids: Set[str] = set()
+    citation_edges_added = 0
 
     if len(papers_with_embeddings) >= 2:
         embeddings = np.array([p.embedding for p in papers_with_embeddings])
@@ -289,6 +290,52 @@ async def search_papers(request: SearchRequest, db: Database = Depends(get_db)):
                 intent=heuristic_intent,
             ))
 
+        # 6. Citation enrichment: find actual citations between result papers
+        # Build s2_paper_id → node_id mapping
+        s2_to_node_id = {}
+        for node in nodes:
+            if node.s2_paper_id:
+                s2_to_node_id[node.s2_paper_id] = node.id
+
+        s2_paper_ids = list(s2_to_node_id.keys())
+
+        if len(s2_paper_ids) >= 2:
+            try:
+                existing_edge_keys = {(e.source, e.target) for e in edges}
+                s2_id_set = set(s2_paper_ids)
+
+                # Limit to first 50 papers to avoid excessive API calls
+                batch_s2_ids = s2_paper_ids[:50]
+
+                for s2_id in batch_s2_ids:
+                    try:
+                        refs = await s2_client.get_references(s2_id, limit=200, include_embedding=False)
+                        source_node_id = s2_to_node_id[s2_id]
+
+                        for ref_paper in refs:
+                            if ref_paper.paper_id in s2_id_set:
+                                target_node_id = s2_to_node_id[ref_paper.paper_id]
+                                edge_key = (source_node_id, target_node_id)
+                                reverse_key = (target_node_id, source_node_id)
+
+                                if edge_key not in existing_edge_keys and reverse_key not in existing_edge_keys:
+                                    edges.append(GraphEdge(
+                                        source=source_node_id,
+                                        target=target_node_id,
+                                        type="citation",
+                                        weight=0.8,
+                                        intent="background",
+                                    ))
+                                    existing_edge_keys.add(edge_key)
+                                    citation_edges_added += 1
+                    except Exception as e:
+                        logger.debug(f"Citation enrichment failed for {s2_id}: {e}")
+                        continue
+
+                logger.info(f"Citation enrichment: added {citation_edges_added} citation edges")
+            except Exception as e:
+                logger.warning(f"Citation enrichment step failed: {e}")
+
         # Build cluster info
         for cid, info in cluster_meta.items():
             hull_verts = hulls.get(cid, [])
@@ -355,6 +402,9 @@ async def search_papers(request: SearchRequest, db: Database = Depends(get_db)):
                 cluster_label="",
             ))
 
+    # Close s2_client after citation enrichment
+    await s2_client.close()
+
     elapsed = time.time() - start_time
     meta = {
         "query": request.query,
@@ -362,6 +412,7 @@ async def search_papers(request: SearchRequest, db: Database = Depends(get_db)):
         "with_embeddings": len(papers_with_embeddings),
         "clusters": len([c for c in clusters_info if c.id != -1]),
         "similarity_edges": len([e for e in edges if e.type == "similarity"]),
+        "citation_edges": citation_edges_added,
         "bridge_nodes": len(bridge_ids),
         "elapsed_seconds": round(elapsed, 2),
     }

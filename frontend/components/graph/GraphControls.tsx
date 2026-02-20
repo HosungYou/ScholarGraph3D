@@ -15,6 +15,7 @@ import {
   Sparkles,
   Clock,
   Network,
+  Palette,
 } from 'lucide-react';
 import { useGraphStore } from '@/hooks/useGraphStore';
 import { cn } from '@/lib/utils';
@@ -45,6 +46,8 @@ export default function GraphControls() {
     toggleTimeline,
     isAnalyzingRelations,
     conceptualEdges,
+    showEnhancedIntents,
+    setShowEnhancedIntents,
   } = useGraphStore();
 
   const controls = [
@@ -107,6 +110,12 @@ export default function GraphControls() {
       label: `Conceptual Relations${conceptualEdges.length > 0 ? ` (${conceptualEdges.length})` : ''}${isAnalyzingRelations ? ' ◌' : ''}`,
       active: showConceptualEdges,
       toggle: toggleConceptualEdges,
+    },
+    {
+      icon: Palette,
+      label: 'Intent Colors',
+      active: showEnhancedIntents,
+      toggle: () => setShowEnhancedIntents(!showEnhancedIntents),
     },
     {
       icon: Clock,

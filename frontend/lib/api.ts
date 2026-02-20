@@ -575,6 +575,22 @@ export const api = {
       throw new Error(`Failed to dismiss recommendation: ${response.status}`);
     }
   },
+
+  // ─── Seed Paper Exploration ──────────────────────────────────────
+  seedExplore: (
+    paperId: string,
+    options?: { depth?: number; max_papers?: number; include_references?: boolean; include_citations?: boolean }
+  ): Promise<GraphData> =>
+    request<GraphData>(`${API_BASE}/api/seed-explore`, {
+      method: 'POST',
+      body: JSON.stringify({
+        paper_id: paperId,
+        depth: options?.depth ?? 1,
+        max_papers: options?.max_papers ?? 50,
+        include_references: options?.include_references ?? true,
+        include_citations: options?.include_citations ?? true,
+      }),
+    }),
 };
 
 export default api;

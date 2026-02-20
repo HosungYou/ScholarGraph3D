@@ -23,6 +23,11 @@ import {
   Loader2,
   ExternalLink,
   Sparkles,
+  Settings,
+  Save,
+  Tag,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -39,6 +44,16 @@ export default function DashboardPage() {
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [recsLoading, setRecsLoading] = useState(false);
   const [dismissingId, setDismissingId] = useState<string | null>(null);
+
+  // Profile settings state
+  const [showSettings, setShowSettings] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [researchInterests, setResearchInterests] = useState<string[]>([]);
+  const [newInterest, setNewInterest] = useState('');
+  const [defaultYearMin, setDefaultYearMin] = useState<number>(2015);
+  const [defaultYearMax, setDefaultYearMax] = useState<number>(2026);
+  const [defaultMinCitations, setDefaultMinCitations] = useState<number>(0);
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -76,6 +91,50 @@ export default function DashboardPage() {
       loadRecommendations();
     }
   }, [user, loadWatchQueries, loadRecommendations]);
+
+  // Load user profile
+  useEffect(() => {
+    if (user) {
+      setProfileLoading(true);
+      api.getUserProfile()
+        .then((profile) => {
+          setResearchInterests(profile.research_interests || []);
+          setDefaultYearMin(profile.default_year_min || 2015);
+          setDefaultYearMax(profile.default_year_max || 2026);
+          setDefaultMinCitations(profile.default_min_citations || 0);
+        })
+        .catch(() => { /* Profile might not exist yet */ })
+        .finally(() => setProfileLoading(false));
+    }
+  }, [user]);
+
+  const handleSaveProfile = async () => {
+    setProfileSaving(true);
+    try {
+      await api.updateUserProfile({
+        research_interests: researchInterests,
+        default_year_min: defaultYearMin,
+        default_year_max: defaultYearMax,
+        default_min_citations: defaultMinCitations,
+      });
+    } catch {
+      // ignore
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
+  const handleAddInterest = () => {
+    const trimmed = newInterest.trim();
+    if (trimmed && !researchInterests.includes(trimmed)) {
+      setResearchInterests([...researchInterests, trimmed]);
+      setNewInterest('');
+    }
+  };
+
+  const handleRemoveInterest = (interest: string) => {
+    setResearchInterests(researchInterests.filter((i) => i !== interest));
+  };
 
   const handleCheckNow = async () => {
     setIsChecking(true);
@@ -180,6 +239,142 @@ export default function DashboardPage() {
 
       {/* Content */}
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-10">
+        {/* Research Settings Section */}
+        <section>
+          <button
+            onClick={() => setShowSettings(!showSettings)}
+            className="flex items-center justify-between w-full mb-4"
+          >
+            <div>
+              <h2 className="text-xl font-bold text-text-primary flex items-center gap-2 mb-1">
+                <Settings className="w-5 h-5 text-gray-400" />
+                Research Settings
+              </h2>
+              <p className="text-sm text-text-secondary text-left">
+                Customize your search defaults and interests
+              </p>
+            </div>
+            {showSettings ? (
+              <ChevronUp className="w-5 h-5 text-gray-400" />
+            ) : (
+              <ChevronDown className="w-5 h-5 text-gray-400" />
+            )}
+          </button>
+
+          {showSettings && (
+            <div className="bg-gray-800/50 rounded-lg border border-gray-700/50 p-6 space-y-6">
+              {profileLoading ? (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+                </div>
+              ) : (
+                <>
+                  {/* Research Interests */}
+                  <div>
+                    <label className="text-sm font-medium text-gray-300 mb-2 block">
+                      Research Interests
+                    </label>
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {researchInterests.map((interest) => (
+                        <span
+                          key={interest}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-900/30 border border-blue-700/40 text-blue-300 rounded-full text-xs"
+                        >
+                          <Tag className="w-3 h-3" />
+                          {interest}
+                          <button
+                            onClick={() => handleRemoveInterest(interest)}
+                            className="ml-0.5 hover:text-red-400 transition-colors"
+                          >
+                            &times;
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newInterest}
+                        onChange={(e) => setNewInterest(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddInterest();
+                          }
+                        }}
+                        placeholder="e.g., machine learning, climate change..."
+                        className="flex-1 px-3 py-1.5 bg-gray-900 border border-gray-700 rounded-lg text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                      />
+                      <button
+                        onClick={handleAddInterest}
+                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition-colors"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Year Range */}
+                  <div>
+                    <label className="text-sm font-medium text-gray-300 mb-2 block">
+                      Default Year Range
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="number"
+                        value={defaultYearMin}
+                        onChange={(e) => setDefaultYearMin(Number(e.target.value))}
+                        min={1950}
+                        max={2026}
+                        className="w-24 px-3 py-1.5 bg-gray-900 border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+                      />
+                      <span className="text-gray-500">to</span>
+                      <input
+                        type="number"
+                        value={defaultYearMax}
+                        onChange={(e) => setDefaultYearMax(Number(e.target.value))}
+                        min={1950}
+                        max={2026}
+                        className="w-24 px-3 py-1.5 bg-gray-900 border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Min Citations */}
+                  <div>
+                    <label className="text-sm font-medium text-gray-300 mb-2 block">
+                      Default Minimum Citations
+                    </label>
+                    <input
+                      type="number"
+                      value={defaultMinCitations}
+                      onChange={(e) => setDefaultMinCitations(Number(e.target.value))}
+                      min={0}
+                      className="w-32 px-3 py-1.5 bg-gray-900 border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  {/* Save Button */}
+                  <div className="flex justify-end">
+                    <button
+                      onClick={handleSaveProfile}
+                      disabled={profileSaving}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      {profileSaving ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Save className="w-4 h-4" />
+                      )}
+                      Save Settings
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </section>
+
         {/* Recommendations Section */}
         {(recsLoading || recommendations.length > 0) && (
           <section>
