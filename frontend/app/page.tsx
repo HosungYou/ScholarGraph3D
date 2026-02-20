@@ -422,8 +422,8 @@ export default function LandingPage() {
           transition={{ duration: 0.6, delay: 0.8 }}
           className="text-center text-sm text-text-secondary/60"
         >
-          <a href="/auth" className="hover:text-accent transition-colors">
-            Sign In
+          <a href={user ? "/dashboard" : "/auth"} className="hover:text-accent transition-colors">
+            {user ? 'My Account' : 'Sign In'}
           </a>
           <span className="mx-3">|</span>
           <a href="/dashboard" className="hover:text-accent transition-colors">

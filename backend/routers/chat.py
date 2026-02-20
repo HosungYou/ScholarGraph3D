@@ -90,7 +90,7 @@ async def chat(request: ChatRequest, db: Database = Depends(get_db)):
     """
     # 1. Build RAG context
     context_builder = GraphRAGContextBuilder(db)
-    rag_context = await context_builder.build_context(
+    rag_context = await context_builder.build_context_with_db_search(
         query=request.query,
         graph_data=request.graph_data.model_dump(),
     )
@@ -142,7 +142,7 @@ async def chat_stream(request: ChatRequest, db: Database = Depends(get_db)):
     """
     # Build RAG context
     context_builder = GraphRAGContextBuilder(db)
-    rag_context = await context_builder.build_context(
+    rag_context = await context_builder.build_context_with_db_search(
         query=request.query,
         graph_data=request.graph_data.model_dump(),
     )

@@ -226,6 +226,9 @@ class DataFusionService:
         papers_with_emb = sum(1 for p in merged if p.embedding is not None)
         logger.info(f"{papers_with_emb}/{len(merged)} papers have embeddings after merge")
 
+        # Prioritize papers with embeddings to avoid losing them during truncation
+        merged.sort(key=lambda p: (p.embedding is None,))
+
         # 6. Return unified paper list (up to limit)
         return merged[:limit]
 

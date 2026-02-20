@@ -167,12 +167,19 @@ function ExploreContent() {
     const handle = async (e: Event) => {
       const { paper } = (e as CustomEvent<{ paper: Paper }>).detail;
       try {
-        const expandId = paper.s2_paper_id || '';
-        if (!expandId) return;
+        // Try s2_paper_id first, then DOI, then title-based lookup
+        const expandId = paper.s2_paper_id || (paper.doi ? `DOI:${paper.doi}` : '');
+        if (!expandId) {
+          setExpandError('Cannot expand: no Semantic Scholar ID or DOI available');
+          setTimeout(() => setExpandError(null), 4000);
+          return;
+        }
         const result = await api.expandPaperStable(expandId, graphData?.nodes || [], graphData?.edges || []);
         useGraphStore.getState().addNodesStable(result.nodes, result.edges);
       } catch (err) {
         console.error('Failed to expand paper:', err);
+        setExpandError(err instanceof Error ? err.message : 'Failed to expand paper');
+        setTimeout(() => setExpandError(null), 4000);
       }
     };
     window.addEventListener('expandPaper', handle);
@@ -329,9 +336,9 @@ function ExploreContent() {
 
   const handleExpandPaper = useCallback(
     async (paper: Paper) => {
-      const expandId = paper.s2_paper_id || '';
+      const expandId = paper.s2_paper_id || (paper.doi ? `DOI:${paper.doi}` : '');
       if (!expandId) {
-        setExpandError('Cannot expand: this paper has no Semantic Scholar ID');
+        setExpandError('Cannot expand: no Semantic Scholar ID or DOI available');
         setTimeout(() => setExpandError(null), 4000);
         return;
       }

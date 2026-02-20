@@ -240,12 +240,13 @@ async def expand_paper_stable(
     Computes initial 3D positions for new papers using nearest-neighbor
     interpolation from existing nodes, so the graph doesn't jump around.
     """
-    from graph.incremental_layout import compute_cluster_centroids
+    from graph.incremental_layout import place_new_paper, assign_cluster, compute_cluster_centroids
+    import numpy as np
 
     client = _create_s2_client()
     try:
-        refs = await client.get_references(paper_id, limit=request.limit // 2)
-        cites = await client.get_citations(paper_id, limit=request.limit // 2)
+        refs = await client.get_references(paper_id, limit=request.limit // 2, include_embedding=True)
+        cites = await client.get_citations(paper_id, limit=request.limit // 2, include_embedding=True)
         all_papers = list(refs) + list(cites)
     finally:
         await client.close()
@@ -255,13 +256,26 @@ async def expand_paper_stable(
 
     # Compute cluster centroids from existing nodes (if they have embeddings)
     existing_nodes_dicts = [n.model_dump() for n in request.existing_nodes]
-    compute_cluster_centroids(existing_nodes_dicts)
+    cluster_centroids = compute_cluster_centroids(existing_nodes_dicts)
 
     stable_nodes = []
     for paper in all_papers:
-        ix = random.gauss(0, 10)
-        iy = random.gauss(0, 10)
-        iz = random.gauss(0, 10)
+        embedding = getattr(paper, 'embedding', None)
+        if embedding and existing_nodes_dicts:
+            try:
+                emb_array = np.array(embedding)
+                ix, iy, iz = place_new_paper(emb_array, existing_nodes_dicts)
+                cluster_id = assign_cluster(emb_array, cluster_centroids)
+            except Exception:
+                ix = random.gauss(0, 10)
+                iy = random.gauss(0, 10)
+                iz = random.gauss(0, 10)
+                cluster_id = -1
+        else:
+            ix = random.gauss(0, 10)
+            iy = random.gauss(0, 10)
+            iz = random.gauss(0, 10)
+            cluster_id = -1
 
         stable_nodes.append(StableExpandNode(
             paper_id=paper.paper_id,
@@ -274,12 +288,35 @@ async def expand_paper_stable(
             initial_x=ix,
             initial_y=iy,
             initial_z=iz,
-            cluster_id=-1,
+            cluster_id=cluster_id,
         ))
+
+    # Build edges connecting the expanded paper to its references/citations
+    ref_ids = {p.paper_id for p in refs}
+    cite_ids = {p.paper_id for p in cites}
+
+    edges = []
+    for node in stable_nodes:
+        if node.paper_id in ref_ids:
+            # This paper is referenced BY the expanded paper → citation edge
+            edges.append({
+                "source": paper_id,
+                "target": node.paper_id,
+                "weight": 0.5,
+                "type": "citation",
+            })
+        if node.paper_id in cite_ids:
+            # This paper CITES the expanded paper → citation edge
+            edges.append({
+                "source": node.paper_id,
+                "target": paper_id,
+                "weight": 0.5,
+                "type": "citation",
+            })
 
     return StableExpandResponse(
         nodes=stable_nodes,
-        edges=[],
+        edges=edges,
         total=len(stable_nodes),
     )
 
