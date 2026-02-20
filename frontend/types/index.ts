@@ -238,3 +238,40 @@ export interface GapOverlayLine {
   clusterALabel: string;
   clusterBLabel: string;
 }
+
+// ─── Phase 4: Conceptual Edges ──────────────────────────────────────
+
+export type ConceptualEdgeType =
+  | 'methodology_shared'
+  | 'theory_shared'
+  | 'claim_supports'
+  | 'claim_contradicts'
+  | 'context_shared'
+  | 'similarity_shared';
+
+export interface ConceptualEdge {
+  source: string;
+  target: string;
+  relation_type: ConceptualEdgeType;
+  weight: number;
+  explanation: string;
+  color: string;
+}
+
+export const CONCEPTUAL_EDGE_COLORS: Record<ConceptualEdgeType, string> = {
+  methodology_shared: '#9B59B6',
+  theory_shared: '#4A90D9',
+  claim_supports: '#2ECC71',
+  claim_contradicts: '#E74C3C',
+  context_shared: '#F39C12',
+  similarity_shared: '#95A5A6',
+};
+
+export const CONCEPTUAL_EDGE_LABELS: Record<ConceptualEdgeType, string> = {
+  methodology_shared: 'Shared Methodology',
+  theory_shared: 'Shared Theory',
+  claim_supports: 'Supporting Claims',
+  claim_contradicts: 'Contradicting Claims',
+  context_shared: 'Shared Context',
+  similarity_shared: 'Semantic Similarity',
+};

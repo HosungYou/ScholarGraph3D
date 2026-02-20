@@ -453,6 +453,69 @@ export const api = {
       }
     }
   },
+
+  // ─── Phase 4: Conceptual Edges ──────────────────────────────────────
+
+  streamConceptualEdges: (
+    paperIds: string[],
+    onEdge: (edge: import('@/types').ConceptualEdge) => void,
+    onProgress: (msg: string) => void,
+    onComplete: (total: number) => void,
+    onError: (msg: string) => void
+  ): (() => void) => {
+    const params = new URLSearchParams({ paper_ids: paperIds.join(',') });
+    const es = new EventSource(`${API_BASE}/api/analysis/conceptual-edges/stream?${params}`);
+
+    es.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'edge') {
+          onEdge({
+            source: data.source,
+            target: data.target,
+            relation_type: data.relation_type,
+            weight: data.weight,
+            explanation: data.explanation,
+            color: data.color,
+          });
+        } else if (data.type === 'progress') {
+          onProgress(data.message || '');
+        } else if (data.type === 'complete') {
+          onComplete(data.total_edges || 0);
+          es.close();
+        } else if (data.type === 'error') {
+          onError(data.message || 'Unknown error');
+          es.close();
+        }
+      } catch {
+        // ignore parse errors
+      }
+    };
+
+    es.onerror = () => {
+      onError('Connection error');
+      es.close();
+    };
+
+    // Return cleanup function
+    return () => es.close();
+  },
+
+  generateScaffoldAngles: (question: string): Promise<{
+    angles: { label: string; query: string; type: string }[];
+  }> =>
+    request(`${API_BASE}/api/analysis/scaffold-angles`, {
+      method: 'POST',
+      body: JSON.stringify({ question }),
+    }),
+
+  getPaperByDOI: (doi: string): Promise<{
+    paper_id: string;
+    title: string;
+    doi: string;
+    redirect_query: string;
+  }> =>
+    request(`${API_BASE}/api/papers/by-doi?doi=${encodeURIComponent(doi)}`),
 };
 
 export default api;

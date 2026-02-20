@@ -361,3 +361,45 @@ async def get_citation_intents(
 
     finally:
         await s2_client.close()
+
+
+@router.get("/api/papers/by-doi")
+async def get_paper_by_doi(
+    doi: str = Query(..., description="DOI or URL of the paper"),
+):
+    """
+    Fetch a paper by DOI and build a citation network graph around it.
+    Returns GraphData compatible with the frontend.
+    """
+    import re
+
+    # Clean up DOI (handle full URLs like https://doi.org/10.xxxx)
+    doi_clean = doi.strip()
+    doi_match = re.search(r'10\.\d{4,}/\S+', doi_clean)
+    if doi_match:
+        doi_clean = doi_match.group(0)
+
+    # Look up in DB first
+    # Then try Semantic Scholar API
+    s2_client = _create_s2_client()
+
+    try:
+        # Search by DOI on S2
+        paper_data = await s2_client.get_paper_by_doi(doi_clean)
+
+        if not paper_data:
+            raise HTTPException(status_code=404, detail=f"Paper not found for DOI: {doi_clean}")
+
+        # Return a minimal response pointing to explore page
+        return {
+            "paper_id": paper_data.get("paperId"),
+            "title": paper_data.get("title", ""),
+            "doi": doi_clean,
+            "redirect_query": f"{paper_data.get('title', doi_clean)[:80]}",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Could not fetch paper: {str(e)}")
+    finally:
+        await s2_client.close()

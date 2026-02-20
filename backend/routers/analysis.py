@@ -5,11 +5,16 @@ Provides trend analysis, gap detection, and LLM-powered hypothesis
 generation endpoints for Phase 2 AI features.
 """
 
+import asyncio
+import json
 import logging
 from dataclasses import asdict
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
+import numpy as np
+from fastapi import APIRouter, HTTPException, Request
+from fastapi import Query as QueryParam
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from graph.gap_detector import GapDetector
@@ -430,3 +435,308 @@ async def _call_groq(api_key: str, model: str, prompt: str) -> List[str]:
         data = response.json()
         text = data["choices"][0]["message"]["content"]
         return _parse_hypotheses(text)
+
+
+@router.get("/conceptual-edges/stream")
+async def stream_conceptual_edges(
+    paper_ids: str = QueryParam(..., description="Comma-separated paper IDs"),
+    request: Request = None,
+):
+    """
+    SSE stream that analyzes conceptual relationships between papers.
+    Uses SPECTER2 embeddings for pre-filtering, then Groq LLM for classification.
+
+    Events emitted:
+    - progress: {stage, count, total}
+    - edge: {source, target, type, weight, explanation}
+    - complete: {total_edges}
+    - error: {message}
+    """
+    ids = [pid.strip() for pid in paper_ids.split(",") if pid.strip()]
+
+    if len(ids) < 2:
+        async def error_stream():
+            yield f"data: {json.dumps({'type': 'error', 'message': 'Need at least 2 paper IDs'})}\n\n"
+        return StreamingResponse(error_stream(), media_type="text/event-stream")
+
+    async def generate():
+        try:
+            # Load papers with embeddings from DB
+            from database import db
+
+            yield f"data: {json.dumps({'type': 'progress', 'stage': 'loading', 'message': 'Loading paper data...'})}\n\n"
+
+            papers_data = {}
+            async with db.pool.acquire() as conn:
+                rows = await conn.fetch(
+                    """SELECT id, title, abstract, embedding
+                       FROM papers WHERE id = ANY($1)""",
+                    ids
+                )
+                for row in rows:
+                    papers_data[row['id']] = {
+                        'id': row['id'],
+                        'title': row['title'] or '',
+                        'abstract': row['abstract'] or '',
+                        'embedding': row['embedding'],
+                    }
+
+            valid_ids = [pid for pid in ids if pid in papers_data]
+
+            if len(valid_ids) < 2:
+                yield f"data: {json.dumps({'type': 'error', 'message': 'Not enough papers with embeddings found'})}\n\n"
+                return
+
+            yield f"data: {json.dumps({'type': 'progress', 'stage': 'filtering', 'message': f'Filtering {len(valid_ids)} papers by semantic similarity...'})}\n\n"
+
+            # SPECTER2 cosine similarity pre-filter
+            high_similarity_pairs = []
+            embeddings = {}
+            for pid in valid_ids:
+                emb = papers_data[pid].get('embedding')
+                if emb is not None:
+                    try:
+                        embeddings[pid] = np.array(emb, dtype=np.float32)
+                    except Exception:
+                        pass
+
+            emb_ids = list(embeddings.keys())
+            if len(emb_ids) >= 2:
+                emb_matrix = np.stack([embeddings[pid] for pid in emb_ids])
+                # Normalize
+                norms = np.linalg.norm(emb_matrix, axis=1, keepdims=True)
+                norms = np.where(norms == 0, 1, norms)
+                emb_matrix = emb_matrix / norms
+                # Cosine similarity matrix
+                sim_matrix = emb_matrix @ emb_matrix.T
+
+                for i in range(len(emb_ids)):
+                    for j in range(i + 1, len(emb_ids)):
+                        sim = float(sim_matrix[i, j])
+                        if sim > 0.45:  # Pre-filter threshold
+                            high_similarity_pairs.append((emb_ids[i], emb_ids[j], sim))
+            else:
+                # No embeddings: use all pairs (up to 50)
+                for i in range(min(len(valid_ids), 10)):
+                    for j in range(i + 1, min(len(valid_ids), 10)):
+                        high_similarity_pairs.append((valid_ids[i], valid_ids[j], 0.5))
+
+            if not high_similarity_pairs:
+                yield f"data: {json.dumps({'type': 'complete', 'total_edges': 0, 'message': 'No semantically similar paper pairs found'})}\n\n"
+                return
+
+            yield f"data: {json.dumps({'type': 'progress', 'stage': 'analyzing', 'message': f'Analyzing {len(high_similarity_pairs)} candidate pairs with AI...'})}\n\n"
+
+            # Batch LLM extraction
+            from config import settings
+
+            groq_key = getattr(settings, 'groq_api_key', None)
+            if not groq_key:
+                # Fallback: generate similarity-based edges without LLM
+                edges_found = 0
+                for src, tgt, sim in high_similarity_pairs[:30]:
+                    if sim > 0.6:
+                        edge_data = {
+                            'type': 'edge',
+                            'source': src,
+                            'target': tgt,
+                            'relation_type': 'similarity_shared',
+                            'weight': round(sim, 3),
+                            'explanation': f'High semantic similarity (cosine: {sim:.2f})',
+                            'color': '#95A5A6',
+                        }
+                        yield f"data: {json.dumps(edge_data)}\n\n"
+                        edges_found += 1
+
+                yield f"data: {json.dumps({'type': 'complete', 'total_edges': edges_found})}\n\n"
+                return
+
+            # Batch extract paper fingerprints (method/theory/claims) using Groq
+            BATCH_SIZE = 10
+            paper_fingerprints = {}
+
+            pair_paper_ids = set()
+            for src, tgt, _ in high_similarity_pairs:
+                pair_paper_ids.add(src)
+                pair_paper_ids.add(tgt)
+
+            pair_papers = [papers_data[pid] for pid in pair_paper_ids if pid in papers_data]
+
+            try:
+                from groq import AsyncGroq
+                groq_client = AsyncGroq(api_key=groq_key)
+
+                for batch_start in range(0, len(pair_papers), BATCH_SIZE):
+                    batch = pair_papers[batch_start:batch_start + BATCH_SIZE]
+                    batch_text = "\n\n".join([
+                        f"Paper {i+1} (ID: {p['id']}):\nTitle: {p['title']}\nAbstract: {(p['abstract'] or '')[:400]}"
+                        for i, p in enumerate(batch)
+                    ])
+
+                    prompt = f"""Analyze these {len(batch)} academic papers and extract their research fingerprints.
+
+{batch_text}
+
+For each paper, extract in JSON format:
+{{
+  "paper_id": "...",
+  "methods": ["list of research methods used, e.g., RCT, survey, meta-analysis, simulation"],
+  "theories": ["theoretical frameworks cited, e.g., TAM, UTAUT, social cognitive theory"],
+  "claims": ["2-3 main claims/findings in 5-10 words each"]
+}}
+
+Return a JSON array with one object per paper. Be specific and concise."""
+
+                    try:
+                        response = await groq_client.chat.completions.create(
+                            model="llama-3.3-70b-versatile",
+                            messages=[{"role": "user", "content": prompt}],
+                            temperature=0.1,
+                            max_tokens=800,
+                            response_format={"type": "json_object"},
+                        )
+                        content = response.choices[0].message.content
+                        parsed = json.loads(content)
+
+                        # Handle both {"papers": [...]} and direct array
+                        if isinstance(parsed, list):
+                            items = parsed
+                        elif isinstance(parsed, dict):
+                            items = parsed.get("papers", parsed.get("results", [parsed]))
+                        else:
+                            items = []
+
+                        for item in items:
+                            if isinstance(item, dict) and 'paper_id' in item:
+                                paper_fingerprints[item['paper_id']] = item
+                    except Exception:
+                        # Silently continue on LLM error for this batch
+                        pass
+
+                    await asyncio.sleep(0.1)  # Small delay between batches
+
+            except ImportError:
+                pass  # groq not installed, will use heuristic below
+
+            # Now classify relationships for high-similarity pairs
+            edges_found = 0
+
+            RELATION_COLORS = {
+                'methodology_shared': '#9B59B6',
+                'theory_shared': '#4A90D9',
+                'claim_supports': '#2ECC71',
+                'claim_contradicts': '#E74C3C',
+                'context_shared': '#F39C12',
+                'similarity_shared': '#95A5A6',
+            }
+
+            for src, tgt, sim in high_similarity_pairs:
+                fp_src = paper_fingerprints.get(src, {})
+                fp_tgt = paper_fingerprints.get(tgt, {})
+
+                relation_type = 'similarity_shared'
+                explanation = f'Semantic similarity: {sim:.2f}'
+
+                if fp_src and fp_tgt:
+                    methods_src = set(m.lower() for m in fp_src.get('methods', []))
+                    methods_tgt = set(m.lower() for m in fp_tgt.get('methods', []))
+                    theories_src = set(t.lower() for t in fp_src.get('theories', []))
+                    theories_tgt = set(t.lower() for t in fp_tgt.get('theories', []))
+
+                    shared_methods = methods_src & methods_tgt
+                    shared_theories = theories_src & theories_tgt
+
+                    if shared_theories:
+                        relation_type = 'theory_shared'
+                        explanation = f'Both use: {", ".join(list(shared_theories)[:2])}'
+                    elif shared_methods:
+                        relation_type = 'methodology_shared'
+                        explanation = f'Shared methodology: {", ".join(list(shared_methods)[:2])}'
+
+                edge_data = {
+                    'type': 'edge',
+                    'source': src,
+                    'target': tgt,
+                    'relation_type': relation_type,
+                    'weight': round(min(sim + 0.1, 1.0), 3),
+                    'explanation': explanation,
+                    'color': RELATION_COLORS.get(relation_type, '#95A5A6'),
+                }
+                yield f"data: {json.dumps(edge_data)}\n\n"
+                edges_found += 1
+
+                # Small delay to let frontend process
+                if edges_found % 5 == 0:
+                    await asyncio.sleep(0.05)
+
+            yield f"data: {json.dumps({'type': 'complete', 'total_edges': edges_found})}\n\n"
+
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.post("/scaffold-angles")
+async def generate_scaffold_angles(
+    body: dict,
+):
+    """Generate 5 exploration angles for a research question using LLM."""
+    question = body.get("question", "").strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="Question is required")
+
+    default_angles = [
+        {"label": "🔭 Broad Survey", "query": f"{question} survey review systematic", "type": "broad"},
+        {"label": "🎯 Focused Study", "query": f"{question} empirical study", "type": "narrow"},
+        {"label": "🔬 Methodology", "query": f"{question} methodology", "type": "method"},
+        {"label": "📐 Theory", "query": f"{question} theoretical framework", "type": "theory"},
+        {"label": "👥 Population/Context", "query": f"{question} context population", "type": "population"},
+    ]
+
+    try:
+        from config import settings
+        groq_key = getattr(settings, 'groq_api_key', None)
+
+        if groq_key:
+            from groq import AsyncGroq
+            groq_client = AsyncGroq(api_key=groq_key)
+
+            prompt = f"""You are a research methodology expert. A researcher asks: "{question}"
+
+Generate exactly 5 search query angles to explore this question in academic literature.
+Return JSON with this exact structure:
+{{
+  "angles": [
+    {{"label": "🔭 Broad Survey", "query": "keywords for broad literature survey", "type": "broad"}},
+    {{"label": "🎯 Focused Study", "query": "keywords for specific empirical studies", "type": "narrow"}},
+    {{"label": "🔬 Methodology", "query": "keywords focusing on research methods", "type": "method"}},
+    {{"label": "📐 Theory", "query": "keywords for theoretical frameworks", "type": "theory"}},
+    {{"label": "👥 Context", "query": "keywords for specific population or context", "type": "population"}}
+  ]
+}}
+
+Make the queries specific, 3-6 words, academic English. No explanation."""
+
+            response = await groq_client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+                max_tokens=400,
+                response_format={"type": "json_object"},
+            )
+            content = response.choices[0].message.content
+            parsed = json.loads(content)
+            angles = parsed.get("angles", default_angles)
+            return {"angles": angles}
+    except Exception:
+        pass
+
+    return {"angles": default_angles}

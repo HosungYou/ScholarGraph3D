@@ -47,6 +47,11 @@ function ExploreContent() {
     setError,
     setLLMSettings,
     setShowEnhancedIntents,
+    addConceptualEdges,
+    setIsAnalyzingRelations,
+    setRelationAnalysisProgress,
+    isAnalyzingRelations,
+    relationAnalysisProgress,
   } = useGraphStore();
 
   // Graph ref for camera control
@@ -69,6 +74,69 @@ function ExploreContent() {
     progress: number;
     message: string;
   } | null>(null);
+  const [expandError, setExpandError] = useState<string | null>(null);
+
+  // Panel resize state
+  const [leftPanelWidth, setLeftPanelWidth] = useState(() => {
+    if (typeof window === 'undefined') return 288;
+    return parseInt(localStorage.getItem('sg3d-left-panel-width') || '288');
+  });
+  const [rightPanelWidth, setRightPanelWidth] = useState(() => {
+    if (typeof window === 'undefined') return 384;
+    return parseInt(localStorage.getItem('sg3d-right-panel-width') || '384');
+  });
+  const leftResizeRef = useRef<boolean>(false);
+  const rightResizeRef = useRef<boolean>(false);
+
+  // Left panel resize
+  const handleLeftPanelResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    leftResizeRef.current = true;
+    const startX = e.clientX;
+    const startWidth = leftPanelWidth;
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!leftResizeRef.current) return;
+      const newWidth = Math.min(520, Math.max(180, startWidth + ev.clientX - startX));
+      setLeftPanelWidth(newWidth);
+    };
+    const onMouseUp = () => {
+      leftResizeRef.current = false;
+      setLeftPanelWidth((w) => {
+        localStorage.setItem('sg3d-left-panel-width', String(w));
+        return w;
+      });
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }, [leftPanelWidth]);
+
+  // Right panel resize
+  const handleRightPanelResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    rightResizeRef.current = true;
+    const startX = e.clientX;
+    const startWidth = rightPanelWidth;
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!rightResizeRef.current) return;
+      const newWidth = Math.min(600, Math.max(280, startWidth - (ev.clientX - startX)));
+      setRightPanelWidth(newWidth);
+    };
+    const onMouseUp = () => {
+      rightResizeRef.current = false;
+      setRightPanelWidth((w) => {
+        localStorage.setItem('sg3d-right-panel-width', String(w));
+        return w;
+      });
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }, [rightPanelWidth]);
 
   // Load LLM settings from localStorage on mount
   useEffect(() => {
@@ -148,6 +216,43 @@ function ExploreContent() {
     }
   }, [queryError, setError]);
 
+  // Conceptual edges analysis — starts after graph data loads
+  useEffect(() => {
+    if (!graphData || !graphData.nodes || graphData.nodes.length < 2) return;
+
+    const paperIds = graphData.nodes.map((n) => n.id);
+
+    // Clear previous conceptual edges
+    useGraphStore.getState().clearConceptualEdges();
+    setIsAnalyzingRelations(true);
+    setRelationAnalysisProgress({ done: 0, total: 0 });
+
+    const cleanup = api.streamConceptualEdges(
+      paperIds,
+      (edge) => {
+        useGraphStore.getState().addConceptualEdges([edge]);
+      },
+      (_msg) => {
+        // progress message — could update a local state here
+      },
+      (_totalEdges) => {
+        setIsAnalyzingRelations(false);
+        setRelationAnalysisProgress(null);
+      },
+      (errMsg) => {
+        console.warn('Conceptual edges error:', errMsg);
+        setIsAnalyzingRelations(false);
+        setRelationAnalysisProgress(null);
+      }
+    );
+
+    return () => {
+      cleanup();
+      setIsAnalyzingRelations(false);
+      setRelationAnalysisProgress(null);
+    };
+  }, [graphData]); // Re-run when graph data changes (new search)
+
   // SSE search progress stream
   useEffect(() => {
     if (!query || !queryLoading) {
@@ -185,6 +290,23 @@ function ExploreContent() {
     };
   }, [query, queryLoading, yearMin, yearMax]);
 
+  // Handle DOI-based navigation from landing page
+  const doi = searchParams.get('doi');
+  useEffect(() => {
+    if (!doi) return;
+    api.getPaperByDOI(doi).then((result) => {
+      if (result.redirect_query) {
+        const params = new URLSearchParams();
+        params.set('q', result.redirect_query);
+        window.location.replace(`/explore?${params.toString()}`);
+      }
+    }).catch((err) => {
+      console.error('DOI lookup failed:', err);
+      setError('Could not find paper for this DOI');
+      setTimeout(() => setError(null), 4000);
+    });
+  }, [doi]);
+
   const handleExpandPaper = useCallback(
     async (paper: Paper) => {
       try {
@@ -192,9 +314,11 @@ function ExploreContent() {
         useGraphStore.getState().addNodes(result.nodes, result.edges);
       } catch (err) {
         console.error('Failed to expand paper:', err);
+        setExpandError(err instanceof Error ? err.message : 'Failed to expand paper citations');
+        setTimeout(() => setExpandError(null), 4000);
       }
     },
-    []
+    [setExpandError]
   );
 
   // Right panel: both can show simultaneously as independent columns
@@ -267,7 +391,7 @@ function ExploreContent() {
       {/* Main content area */}
       <div className="flex-1 flex overflow-hidden relative">
         {/* Left panel: tabbed sidebar */}
-        <div className="w-72 flex-shrink-0 border-r border-border/30 glass flex flex-col">
+        <div style={{ width: leftPanelWidth }} className="flex-shrink-0 border-r border-border/30 glass flex flex-col relative">
           {/* Tab buttons */}
           <div className="flex border-b border-border/30 flex-shrink-0">
             {(
@@ -306,6 +430,12 @@ function ExploreContent() {
             {leftTab === 'gaps' && <GapPanel />}
             {leftTab === 'watch' && <WatchQueryPanel />}
           </div>
+
+          {/* Left panel drag handle */}
+          <div
+            className="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-blue-500/40 active:bg-blue-500/60 transition-colors z-10"
+            onMouseDown={handleLeftPanelResizeStart}
+          />
         </div>
 
         {/* Center: 3D Graph */}
@@ -391,6 +521,14 @@ function ExploreContent() {
               {graphData.clusters.length} clusters
             </div>
           )}
+
+          {/* Relation analysis progress */}
+          {isAnalyzingRelations && (
+            <div className="absolute bottom-12 left-4 glass rounded-lg px-3 py-2 text-xs text-text-secondary flex items-center gap-2">
+              <div className="w-3 h-3 border border-purple-400/60 border-t-transparent rounded-full animate-spin" />
+              <span>Analyzing conceptual relations...</span>
+            </div>
+          )}
         </div>
 
         {/* Right panel: paper detail and chat as independent columns */}
@@ -402,8 +540,14 @@ function ExploreContent() {
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: 380, opacity: 0 }}
               transition={{ type: 'spring', damping: 25, stiffness: 250 }}
-              className="w-96 flex-shrink-0 border-l border-border/30 glass overflow-y-auto"
+              style={{ width: rightPanelWidth }}
+              className="flex-shrink-0 border-l border-border/30 glass overflow-y-auto relative"
             >
+              {/* Right panel drag handle */}
+              <div
+                className="absolute left-0 top-0 h-full w-1 cursor-col-resize hover:bg-blue-500/40 active:bg-blue-500/60 transition-colors z-10"
+                onMouseDown={handleRightPanelResizeStart}
+              />
               <PaperDetailPanel
                 paper={selectedPaper}
                 onClose={() => selectPaper(null)}
@@ -419,8 +563,14 @@ function ExploreContent() {
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: 380, opacity: 0 }}
               transition={{ type: 'spring', damping: 25, stiffness: 250 }}
-              className="w-96 flex-shrink-0 border-l border-border/30 glass flex flex-col"
+              style={{ width: rightPanelWidth }}
+              className="flex-shrink-0 border-l border-border/30 glass flex flex-col relative"
             >
+              {/* Right panel drag handle */}
+              <div
+                className="absolute left-0 top-0 h-full w-1 cursor-col-resize hover:bg-blue-500/40 active:bg-blue-500/60 transition-colors z-10"
+                onMouseDown={handleRightPanelResizeStart}
+              />
               <ChatPanel />
             </motion.div>
           )}
@@ -459,6 +609,13 @@ function ExploreContent() {
         isOpen={showLLMModal}
         onClose={() => setShowLLMModal(false)}
       />
+
+      {/* Expand error toast */}
+      {expandError && (
+        <div className="fixed bottom-4 right-4 z-50 bg-red-900/90 border border-red-700/50 text-red-200 px-4 py-3 rounded-lg text-sm max-w-sm shadow-xl">
+          ⚠️ {expandError}
+        </div>
+      )}
     </div>
   );
 }

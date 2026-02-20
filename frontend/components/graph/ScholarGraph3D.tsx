@@ -117,6 +117,8 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const hoveredNodeRef = useRef<string | null>(null);
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const selectedPaperIdRef = useRef<string | null>(null);
+  const justClickedNodeRef = useRef(false);
 
   const {
     graphData,
@@ -134,6 +136,9 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     showGapOverlay,
     hiddenClusterIds,
     bridgeNodeIds,
+    conceptualEdges,
+    showConceptualEdges,
+    showTimeline,
     selectPaper,
     setHoveredPaper,
     toggleMultiSelect,
@@ -142,6 +147,8 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
   const lastClickRef = useRef<{ nodeId: string; timestamp: number } | null>(
     null
   );
+  const newNodeIdsRef = useRef<Set<string>>(new Set());
+  const newNodeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Compute year range for opacity
   const yearRange = useMemo(() => {
@@ -174,6 +181,19 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     });
     return set;
   }, [selectedPaper, graphData]);
+
+  // Sync selectedPaper to ref + trigger visual refresh without recreating nodeThreeObject
+  useEffect(() => {
+    selectedPaperIdRef.current = selectedPaper?.id ?? null;
+    // Refresh Three.js objects to reflect new selection state (no function re-creation)
+    if (fgRef.current) {
+      try {
+        fgRef.current.refresh();
+      } catch {
+        // Ignore if not yet mounted
+      }
+    }
+  }, [selectedPaper]);
 
   // Convert graph data to force graph format
   const forceGraphData = useMemo(() => {
@@ -296,8 +316,34 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         });
     }
 
+    // Conceptual relationship edges (Phase 4)
+    if (showConceptualEdges && conceptualEdges.length > 0) {
+      const existingPairs = new Set(
+        links.map((l) => {
+          const s = typeof l.source === 'string' ? l.source : (l.source as ForceGraphNode).id;
+          const t = typeof l.target === 'string' ? l.target : (l.target as ForceGraphNode).id;
+          return `${s}-${t}`;
+        })
+      );
+
+      conceptualEdges.forEach((ce) => {
+        if (!existingPairs.has(`${ce.source}-${ce.target}`)) {
+          links.push({
+            source: ce.source,
+            target: ce.target,
+            color: ce.color,
+            width: Math.max(0.5, ce.weight * 1.5),
+            edgeType: 'similarity' as const,
+            dashed: false,
+            intentLabel: ce.relation_type.replace(/_/g, ' '),
+            intentContext: ce.explanation,
+          });
+        }
+      });
+    }
+
     return { nodes, links };
-  }, [graphData, yearRange, showCitationEdges, showSimilarityEdges, citationIntents, showEnhancedIntents, hiddenClusterIds, showGhostEdges]);
+  }, [graphData, yearRange, showCitationEdges, showSimilarityEdges, citationIntents, showEnhancedIntents, hiddenClusterIds, showGhostEdges, conceptualEdges, showConceptualEdges]);
 
   // Node rendering
   const nodeThreeObject = useCallback(
@@ -307,8 +353,8 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       group.userData.nodeId = node.id;
 
       const isHighlighted = highlightSet.has(node.id);
-      const isSelected = selectedPaper?.id === node.id;
-      const hasSelection = selectedPaper !== null;
+      const isSelected = selectedPaperIdRef.current === node.id;
+      const hasSelection = selectedPaperIdRef.current !== null;
 
       let displayColor = node.color;
       if (isSelected) displayColor = '#FFD700';
@@ -456,9 +502,42 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         }
       }
 
+      // Role badge: Review paper (R) or Methodology (M)
+      const abstract = (node.paper?.abstract || node.paper?.tldr || '').toLowerCase();
+      const isReviewPaper = /systematic review|meta-analysis|scoping review|literature review/.test(abstract);
+      const isMethodPaper = /randomized controlled trial|rct\b|survey methodology|mixed method/.test(abstract);
+
+      if ((isReviewPaper || isMethodPaper) && node.val >= 3) {
+        const badgeCanvas = document.createElement('canvas');
+        const bCtx = badgeCanvas.getContext('2d');
+        if (bCtx) {
+          badgeCanvas.width = 32;
+          badgeCanvas.height = 32;
+          bCtx.fillStyle = isReviewPaper ? '#4A90D9' : '#9B59B6';
+          bCtx.globalAlpha = 0.85;
+          bCtx.beginPath();
+          bCtx.arc(16, 16, 14, 0, Math.PI * 2);
+          bCtx.fill();
+          bCtx.globalAlpha = 1;
+          bCtx.fillStyle = '#FFFFFF';
+          bCtx.font = 'bold 16px Arial';
+          bCtx.textAlign = 'center';
+          bCtx.textBaseline = 'middle';
+          bCtx.fillText(isReviewPaper ? 'R' : 'M', 16, 16);
+
+          const badgeTexture = new THREE.CanvasTexture(badgeCanvas);
+          const badgeSprite = new THREE.Sprite(
+            new THREE.SpriteMaterial({ map: badgeTexture, transparent: true, depthTest: false })
+          );
+          badgeSprite.scale.set(node.val * 1.5, node.val * 1.5, 1);
+          badgeSprite.position.set(node.val * 0.8, node.val * 0.8, 0);
+          group.add(badgeSprite);
+        }
+      }
+
       return group;
     },
-    [highlightSet, selectedPaper, showLabels, showBloom, bridgeNodeIds, showOARings, showCitationAura]
+    [highlightSet, showLabels, showBloom, bridgeNodeIds, showOARings, showCitationAura]
   );
 
   // Link width
@@ -580,6 +659,9 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       const node = nodeData as ForceGraphNode;
       const now = Date.now();
 
+      justClickedNodeRef.current = true;
+      setTimeout(() => { justClickedNodeRef.current = false; }, 150);
+
       if (event.shiftKey) {
         toggleMultiSelect(node.paper);
         return;
@@ -637,6 +719,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
 
   // Background click
   const handleBackgroundClick = useCallback(() => {
+    if (justClickedNodeRef.current) return; // Guard: ignore background click fired during node click
     selectPaper(null);
   }, [selectPaper]);
 
@@ -882,6 +965,51 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       }
     };
   }, [showGapOverlay, graphData]);
+
+  // Timeline mode: fix node Y positions by publication year
+  useEffect(() => {
+    if (!fgRef.current || !graphData) return;
+
+    const currentData = fgRef.current.graphData();
+    if (!currentData?.nodes) return;
+
+    if (showTimeline) {
+      const years = graphData.nodes.map((p) => p.year).filter((y) => y != null && !isNaN(y));
+      if (years.length === 0) return;
+      const minY = Math.min(...years);
+      const maxY = Math.max(...years);
+      const span = maxY - minY || 1;
+
+      (currentData.nodes as ForceGraphNode[]).forEach((node) => {
+        const paper = node.paper;
+        if (paper?.year) {
+          node.fy = ((paper.year - minY) / span) * 300 - 150;
+        }
+      });
+    } else {
+      // Release Y-axis fixation
+      (currentData.nodes as ForceGraphNode[]).forEach((node) => {
+        node.fy = undefined;
+      });
+    }
+
+    // Reheat simulation slightly to settle into new positions
+    fgRef.current.d3ReheatSimulation?.();
+  }, [showTimeline, graphData]);
+
+  // Double-click visual feedback: pulse new nodes for 1.5s after expand
+  useEffect(() => {
+    if (!graphData) return;
+    // When node count increases (expand happened), mark new nodes temporarily
+    // New nodes will pulse for 1.5s
+    if (newNodeTimerRef.current) clearTimeout(newNodeTimerRef.current);
+    newNodeTimerRef.current = setTimeout(() => {
+      newNodeIdsRef.current = new Set();
+      if (fgRef.current) {
+        try { fgRef.current.refresh(); } catch {}
+      }
+    }, 1500);
+  }, [graphData?.nodes.length]);
 
   // Expose ref methods
   useImperativeHandle(ref, () => ({

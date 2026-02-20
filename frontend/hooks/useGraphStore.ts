@@ -11,6 +11,7 @@ import type {
   WatchQuery,
   CitationIntent,
   LitReview,
+  ConceptualEdge,
 } from '@/types';
 
 interface GraphStore {
@@ -35,6 +36,13 @@ interface GraphStore {
   citationIntents: CitationIntent[];
   litReview: LitReview | null;
   showEnhancedIntents: boolean;
+
+  // Phase 4: Conceptual edges + Timeline
+  conceptualEdges: ConceptualEdge[];
+  showConceptualEdges: boolean;
+  showTimeline: boolean;
+  isAnalyzingRelations: boolean;
+  relationAnalysisProgress: { done: number; total: number } | null;
 
   // Phase 1.5: Visual enhancement state
   showBloom: boolean;
@@ -93,6 +101,14 @@ interface GraphStore {
   toggleClusterVisibility: (clusterId: number) => void;
   setBridgeNodeIds: (ids: Set<string>) => void;
   addNodesStable: (nodes: Paper[], edges: GraphEdge[]) => void;
+
+  // Phase 4 actions
+  addConceptualEdges: (edges: ConceptualEdge[]) => void;
+  clearConceptualEdges: () => void;
+  toggleConceptualEdges: () => void;
+  toggleTimeline: () => void;
+  setIsAnalyzingRelations: (v: boolean) => void;
+  setRelationAnalysisProgress: (v: { done: number; total: number } | null) => void;
 }
 
 export const useGraphStore = create<GraphStore>((set, get) => ({
@@ -125,12 +141,19 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
   hiddenClusterIds: new Set<number>(),
   bridgeNodeIds: new Set<string>(),
 
+  // Phase 4
+  conceptualEdges: [],
+  showConceptualEdges: true,
+  showTimeline: false,
+  isAnalyzingRelations: false,
+  relationAnalysisProgress: null,
+
   showCitationEdges: true,
   showSimilarityEdges: true,
   showClusterHulls: true,
   showLabels: true,
 
-  setGraphData: (data) => set({ graphData: data, error: null }),
+  setGraphData: (data) => set({ graphData: data, error: null, conceptualEdges: [] }),
 
   selectPaper: (paper) => set({ selectedPaper: paper }),
 
@@ -230,6 +253,29 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
     });
   },
   setBridgeNodeIds: (ids: Set<string>) => set({ bridgeNodeIds: ids }),
+
+  // Phase 4 actions
+  addConceptualEdges: (edges) =>
+    set((s) => ({
+      conceptualEdges: [
+        ...s.conceptualEdges,
+        ...edges.filter(
+          (e) => !s.conceptualEdges.some((c) => c.source === e.source && c.target === e.target)
+        ),
+      ],
+    })),
+
+  clearConceptualEdges: () => set({ conceptualEdges: [] }),
+
+  toggleConceptualEdges: () =>
+    set((s) => ({ showConceptualEdges: !s.showConceptualEdges })),
+
+  toggleTimeline: () =>
+    set((s) => ({ showTimeline: !s.showTimeline })),
+
+  setIsAnalyzingRelations: (v) => set({ isAnalyzingRelations: v }),
+
+  setRelationAnalysisProgress: (v) => set({ relationAnalysisProgress: v }),
 
   addNodesStable: (newNodes: Paper[], newEdges: GraphEdge[]) => {
     const { graphData } = get();

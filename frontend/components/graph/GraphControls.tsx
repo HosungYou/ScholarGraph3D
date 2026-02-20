@@ -13,6 +13,8 @@ import {
   Target,
   Circle,
   Sparkles,
+  Clock,
+  Network,
 } from 'lucide-react';
 import { useGraphStore } from '@/hooks/useGraphStore';
 import { cn } from '@/lib/utils';
@@ -37,6 +39,12 @@ export default function GraphControls() {
     toggleCitationAura,
     toggleGhostEdges,
     toggleGapOverlay,
+    showConceptualEdges,
+    showTimeline,
+    toggleConceptualEdges,
+    toggleTimeline,
+    isAnalyzingRelations,
+    conceptualEdges,
   } = useGraphStore();
 
   const controls = [
@@ -93,6 +101,18 @@ export default function GraphControls() {
       label: 'Citation Aura',
       active: showCitationAura,
       toggle: toggleCitationAura,
+    },
+    {
+      icon: Network,
+      label: `Conceptual Relations${conceptualEdges.length > 0 ? ` (${conceptualEdges.length})` : ''}${isAnalyzingRelations ? ' ◌' : ''}`,
+      active: showConceptualEdges,
+      toggle: toggleConceptualEdges,
+    },
+    {
+      icon: Clock,
+      label: 'Timeline View',
+      active: showTimeline,
+      toggle: toggleTimeline,
     },
   ];
 
