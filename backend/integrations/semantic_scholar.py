@@ -318,16 +318,26 @@ class SemanticScholarClient:
         encoded_id = quote_plus(paper_id)
         url = f"{self.BASE_URL}/paper/{encoded_id}/references"
 
-        data = await self._request(
-            "GET", url,
-            params={
-                "fields": ",".join([f"citedPaper.{f}" for f in fields]),
-                "limit": min(limit, 1000),
-            }
-        )
+        try:
+            data = await self._request(
+                "GET", url,
+                params={
+                    "fields": ",".join([f"citedPaper.{f}" for f in fields]),
+                    "limit": min(limit, 1000),
+                }
+            )
+        except httpx.HTTPStatusError as e:
+            # 400 = paper not in S2 references index; 404 = paper not found — both are non-fatal
+            if e.response.status_code in (400, 404):
+                logger.debug(f"S2 references not available for {paper_id} (HTTP {e.response.status_code})")
+                return []
+            raise
 
         papers = []
-        for item in data.get("data", []):
+        # Note: data.get("data") or [] — NOT data.get("data", [])
+        # .get(key, default) only uses default when key is ABSENT, not when value is null.
+        # S2 sometimes returns {"data": null} which would cause "NoneType not iterable".
+        for item in (data.get("data") or []):
             cited_paper = item.get("citedPaper")
             if cited_paper and cited_paper.get("paperId"):
                 try:
@@ -348,16 +358,22 @@ class SemanticScholarClient:
         encoded_id = quote_plus(paper_id)
         url = f"{self.BASE_URL}/paper/{encoded_id}/citations"
 
-        data = await self._request(
-            "GET", url,
-            params={
-                "fields": ",".join([f"citingPaper.{f}" for f in fields]),
-                "limit": min(limit, 1000),
-            }
-        )
+        try:
+            data = await self._request(
+                "GET", url,
+                params={
+                    "fields": ",".join([f"citingPaper.{f}" for f in fields]),
+                    "limit": min(limit, 1000),
+                }
+            )
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code in (400, 404):
+                logger.debug(f"S2 citations not available for {paper_id} (HTTP {e.response.status_code})")
+                return []
+            raise
 
         papers = []
-        for item in data.get("data", []):
+        for item in (data.get("data") or []):
             citing_paper = item.get("citingPaper")
             if citing_paper and citing_paper.get("paperId"):
                 try:

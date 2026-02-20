@@ -213,14 +213,22 @@ async def expand_paper(
     Expand graph around a paper by loading its citations and references.
 
     Returns both citing and referenced papers for graph expansion.
+    Gracefully handles partial S2 failures — if one direction (refs or cites)
+    fails, the other is still returned rather than 404-ing the whole request.
     """
     client = _create_s2_client()
+    refs: list = []
+    cites: list = []
     try:
-        refs = await client.get_references(paper_id, limit=limit)
-        cites = await client.get_citations(paper_id, limit=limit)
-    except Exception as e:
-        logger.warning(f"Expand failed for {paper_id}: {e}")
-        raise HTTPException(status_code=404, detail=f"Paper not found in Semantic Scholar: {paper_id}")
+        try:
+            refs = await client.get_references(paper_id, limit=limit)
+        except Exception as e:
+            logger.warning(f"get_references failed for {paper_id}: {e}")
+
+        try:
+            cites = await client.get_citations(paper_id, limit=limit)
+        except Exception as e:
+            logger.warning(f"get_citations failed for {paper_id}: {e}")
     finally:
         await client.close()
 
@@ -247,16 +255,22 @@ async def expand_paper_stable(
     import numpy as np
 
     client = _create_s2_client()
+    refs: list = []
+    cites: list = []
     try:
-        refs = await client.get_references(paper_id, limit=request.limit // 2, include_embedding=True)
-        cites = await client.get_citations(paper_id, limit=request.limit // 2, include_embedding=True)
-        all_papers = list(refs) + list(cites)
-    except Exception as e:
-        logger.warning(f"Expand failed for {paper_id}: {e}")
-        raise HTTPException(status_code=404, detail=f"Paper not found in Semantic Scholar: {paper_id}")
+        try:
+            refs = await client.get_references(paper_id, limit=request.limit // 2, include_embedding=True)
+        except Exception as e:
+            logger.warning(f"get_references failed for {paper_id}: {e}")
+
+        try:
+            cites = await client.get_citations(paper_id, limit=request.limit // 2, include_embedding=True)
+        except Exception as e:
+            logger.warning(f"get_citations failed for {paper_id}: {e}")
     finally:
         await client.close()
 
+    all_papers = refs + cites
     if not all_papers:
         return StableExpandResponse()
 
