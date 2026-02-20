@@ -1191,3 +1191,53 @@ PostgreSQL RLS policies on `user_graphs` table ensure users can only access thei
 ---
 
 *This document is the authoritative technical specification. For product requirements, see [PRD.md](./PRD.md). For system architecture, see [ARCHITECTURE.md](./ARCHITECTURE.md). For test strategy, see [SDD/TDD Plan](./SDD_TDD_PLAN.md).*
+
+---
+
+## Phase 5: Personalization API
+
+### New Tables (002_personalization.sql)
+
+| Table | Purpose |
+|-------|---------|
+| `user_profiles` | User prefs + interest_embedding vector(768) + usage counters |
+| `user_search_history` | Search query log (query, mode, result_count, filters_used JSONB) |
+| `user_paper_interactions` | 5 action types: view, save_graph, expand_citations, chat_mention, lit_review |
+| `user_recommendations` | 24h cached pgvector ANN results with Groq explanation + is_dismissed |
+
+### New Endpoints
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/user/profile` | Required | Get/auto-create user profile |
+| PUT | `/api/user/profile` | Required | Partial update preferences |
+| POST | `/api/user/events` | Required | Log paper interaction (fire-and-forget) |
+| POST | `/api/user/search-history` | Required | Log search query |
+| GET | `/api/user/recommendations` | Required | pgvector ANN recommendations + Groq explanations |
+| DELETE | `/api/user/recommendations/{id}/dismiss` | Required | Soft-dismiss recommendation |
+
+### Recommendation Algorithm
+
+```
+1. Check user_recommendations cache (not expired, not dismissed) → return if hit
+2. Fetch user's viewed paper embeddings (up to 50, FROM user_paper_interactions JOIN papers)
+3. Compute numpy mean → interest_vector (768-dim)
+4. pgvector ANN: SELECT ... ORDER BY embedding <=> $interest_vector LIMIT 100
+   (exclude papers already seen or in saved graphs)
+5. Top 10 → Groq LLaMA-3.3-70b → 1-sentence explanation each (parallel asyncio.gather)
+   Fallback: no explanation if GROQ_API_KEY not set
+6. INSERT into user_recommendations (24h expires_at)
+7. Return top 20 with joined paper metadata
+```
+
+### Auth Callback Fix
+
+`/auth/callback` page now uses `supabase.auth.onAuthStateChange` to wait for `SIGNED_IN` event before redirecting to `/dashboard`. 5-second timeout fallback with manual `getSession()` check. Redirects to `/auth?error=oauth_failed` if session not established.
+
+### Frontend New Types
+
+```typescript
+UserProfile    // user_id, research_interests[], preferred_fields[], default_year_min/max, etc.
+Recommendation // id, paper_id, score, explanation, reason_tags[], + joined paper fields
+InteractionEvent // paper_id, action (5 types), session_id?
+```

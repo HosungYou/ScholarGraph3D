@@ -93,9 +93,11 @@ backend/
 │   ├── analysis.py      # Phase 2+4: trends, gaps, hypotheses, conceptual-edges/stream (SSE), scaffold-angles
 │   ├── chat.py          # Phase 2: POST /api/chat + /api/chat/stream (SSE)
 │   ├── watch.py         # Phase 3: /api/watch CRUD + /api/watch/cron
-│   └── lit_review.py    # Phase 3: /api/lit-review/generate + export-pdf
+│   ├── lit_review.py    # Phase 3: /api/lit-review/generate + export-pdf
+│   └── personalization.py   # Phase 5: /api/user profile, events, search-history, recommendations
 └── database/
-    └── 001_initial_schema.sql  # papers, citations, user_graphs, search_cache, chat_*, watch_queries
+    ├── 001_initial_schema.sql  # papers, citations, user_graphs, search_cache, chat_*, watch_queries
+    └── 002_personalization.sql  # Phase 5: user_profiles, search_history, interactions, recommendations
 ```
 
 ### Frontend Directory
@@ -124,8 +126,10 @@ frontend/
 │   │   └── WatchQueryPanel.tsx   # Watch query CRUD, filters, check-now
 │   ├── litreview/                # Phase 3
 │   │   └── LitReviewPanel.tsx    # Full-overlay lit review, TOC, PDF download
-│   └── scaffolding/                # Phase 4
-│       └── ScaffoldingModal.tsx    # Multi-select research angle exploration modal
+│   ├── scaffolding/                # Phase 4
+│   │   └── ScaffoldingModal.tsx    # Multi-select research angle exploration modal
+│   └── dashboard/
+│       └── RecommendationCard.tsx   # Phase 5: recommendation card with dismiss + explore
 ├── hooks/useGraphStore.ts    # Zustand state (Phase 1–4: bloom/ghostEdges/gapOverlay/hiddenClusters/bridgeNodes/conceptualEdges/timeline)
 ├── lib/
 │   ├── api.ts               # Backend API client (search + analysis + chat)
@@ -193,3 +197,4 @@ Patterns: CachedLLMProvider (decorator, in-memory TTL), CircuitBreaker (5 failur
 - Phase 2 (AI Premium): v0.2.0 — LLM providers, GraphRAG chat, trend analysis, gap analysis
 - Phase 3 (Real-time): v0.3.0 ✅ — natural language search (Groq), SSE progress stream, citation context modal, rate limiting, analytics, SEO
 - Phase 4 (Relationships): v0.4.0 ✅ — critical node-click bug fix, panel resize, conceptual edges SSE, 3-mode home page, timeline view
+- Phase 5 (Personalization): v0.5.0 ✅ — OAuth callback fix, user profiles, interaction logging, pgvector recommendations, dashboard recommendations section, home page "Continue Exploring"
