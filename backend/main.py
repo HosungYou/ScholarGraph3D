@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
 from database import db, init_db, close_db
+from integrations.semantic_scholar import init_s2_client, close_s2_client
 from auth.supabase_client import supabase_client
 from auth.middleware import AuthMiddleware
 from routers import search, papers, graphs, analysis, chat, watch, lit_review
@@ -66,6 +67,12 @@ async def lifespan(app: FastAPI):
             ) from e
         logger.warning("  Running in memory-only mode (development only)")
 
+    # Initialize shared S2 client (global rate limiter)
+    await init_s2_client(
+        api_key=settings.s2_api_key or None,
+        requests_per_second=settings.s2_rate_limit,
+    )
+
     # Log API configuration
     logger.info(f"  S2 API Key: {'configured' if settings.s2_api_key else 'not set (unauthenticated)'}")
     logger.info(f"  OA Email: {settings.oa_email or 'not set (no polite pool)'}")
@@ -85,6 +92,7 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("ScholarGraph3D Backend shutting down...")
+    await close_s2_client()
     await close_db()
 
 

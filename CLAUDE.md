@@ -171,6 +171,9 @@ Search endpoint returns: `{ nodes: Paper[], edges: GraphEdge[], clusters: Cluste
 - HDBSCAN runs on 50-dim intermediate UMAP embeddings (NOT 3D coords — double-distortion fix, v0.7.0)
 - Z-axis = publication year (not UMAP dim 3) — semantic topology on X/Y, time depth on Z (v0.7.0)
 - GraphRAG uses SPECTER2 adhoc_query adapter for query encoding + pgvector ANN search (v0.7.0)
+- expand endpoints: refs/cites fetched independently — partial S2 failures return available data (not 404); HTTP 400/404 from S2 → [] (non-fatal)
+- Landing page: Seed Paper (doi) mode is default; DOI pattern auto-detected in any mode → routes to /explore/seed
+- get_references/get_citations: (data.get("data") or []) — S2 may return {"data": null} for unindexed papers
 
 ## Documentation Map
 
@@ -208,3 +211,4 @@ Patterns: CachedLLMProvider (decorator, in-memory TTL), CircuitBreaker (5 failur
 - Phase 6 (Viz + Exploration): v0.6.0 ✅ — field color fix, LOD/opacity fix, panel highlight, seed paper mode, citation enrichment, 2D timeline, intent toggle, research settings
 - v0.7.0 ✅ — search system redesign (SPECTER2 ANN, RRF scoring, temporal Z-axis, HDBSCAN 50-dim fix, UI declutter)
 - v0.7.1 ✅ — hotfix: DOI lookup 404 (FastAPI route shadowing + missing S2 method)
+- Phase 7 (Stability + Philosophy): v0.7.x ✅ — HDBSCAN 768-dim fix, temporal Z-axis, RRF hybrid search, SPECTER2 adhoc_query ANN, PHILOSOPHY.md, TECH_PROOF.md, expand null-safety, landing page seed-paper redesign, DOI auto-detection

@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from config import settings
 from database import Database, get_db
-from integrations.semantic_scholar import SemanticScholarClient, SemanticScholarPaper
+from integrations.semantic_scholar import SemanticScholarClient, SemanticScholarPaper, get_s2_client
 from services.citation_intent import CitationIntentService
 
 logger = logging.getLogger(__name__)
@@ -106,10 +106,8 @@ def _s2_to_citation_paper(paper: SemanticScholarPaper) -> CitationPaper:
 
 
 def _create_s2_client() -> SemanticScholarClient:
-    return SemanticScholarClient(
-        api_key=settings.s2_api_key or None,
-        requests_per_second=settings.s2_rate_limit,
-    )
+    """Get the shared S2 client singleton. Do NOT close — it's shared."""
+    return get_s2_client()
 
 
 # ==================== Endpoints ====================
@@ -123,6 +121,12 @@ async def get_paper_by_doi(
 
     v0.7.0: Returns paper_id directly so frontend routes to /explore/seed
     instead of doing a keyword search redirect (which bypasses seed paper topology).
+
+    v0.8.0: Crossref fallback chain for DOIs not indexed by S2 (economics, law, etc.):
+        1. S2 direct lookup (ARXIV: prefix for arXiv DOIs, then DOI: prefix)
+        2. [S2 fails] → Crossref metadata → extract title
+        3. [Crossref success] → S2 title search → best title-similarity match
+        4. [All fail] → 404
 
     IMPORTANT: This route MUST be defined before the {paper_id:path} catch-all,
     otherwise FastAPI will match "by-doi" as a paper_id.
@@ -144,29 +148,86 @@ async def get_paper_by_doi(
     try:
         paper = None
 
-        # Try ArXiv ID format first for arXiv DOIs
+        # Step 1a: Try ArXiv ID format first for arXiv DOIs
         if arxiv_match:
             arxiv_id = arxiv_match.group(1)
-            paper = await s2_client.get_paper(f"ARXIV:{arxiv_id}")
+            try:
+                paper = await s2_client.get_paper(f"ARXIV:{arxiv_id}")
+            except Exception as e:
+                logger.debug(f"S2 ARXIV lookup failed for {arxiv_id}: {e}")
 
-        # Fall back to DOI: prefix
+        # Step 1b: Fall back to DOI: prefix
         if not paper:
-            paper = await s2_client.get_paper(f"DOI:{doi_clean}")
+            try:
+                paper = await s2_client.get_paper(f"DOI:{doi_clean}")
+            except Exception as e:
+                logger.debug(f"S2 DOI lookup failed for {doi_clean}: {e}")
 
-        if not paper or not paper.paper_id:
-            raise HTTPException(status_code=404, detail=f"Paper not found for DOI: {doi_clean}")
+        if paper and paper.paper_id:
+            return {
+                "paper_id": paper.paper_id,
+                "title": paper.title or "",
+                "doi": doi_clean,
+                "source": "s2",
+            }
+
+        # Step 2: Crossref fallback — get authoritative title for non-S2 journals
+        from integrations.crossref import CrossrefClient
+
+        crossref = CrossrefClient()
+        try:
+            cr_meta = await crossref.get_metadata(doi_clean)
+        finally:
+            await crossref.close()
+
+        if not cr_meta or not cr_meta.get("title"):
+            raise HTTPException(
+                status_code=404,
+                detail=f"Paper not found for DOI: {doi_clean}",
+            )
+
+        cr_title = cr_meta["title"]
+        logger.info(f"Crossref fallback: found title '{cr_title}' for DOI {doi_clean}")
+
+        # Step 3: S2 title search → best title-similarity match
+        try:
+            candidates = await s2_client.search_papers(cr_title, limit=5)
+        except Exception as e:
+            logger.warning(f"S2 title search failed for '{cr_title}': {e}")
+            candidates = []
+
+        if not candidates:
+            raise HTTPException(
+                status_code=404,
+                detail=f"DOI {doi_clean} found in Crossref but not indexed in Semantic Scholar",
+            )
+
+        def _title_score(candidate_title: str, query_title: str) -> float:
+            a_tokens = set(candidate_title.lower().split())
+            b_tokens = set(query_title.lower().split())
+            if not a_tokens or not b_tokens:
+                return 0.0
+            return len(a_tokens & b_tokens) / len(a_tokens | b_tokens)
+
+        best = max(candidates, key=lambda p: _title_score(p.title, cr_title))
+
+        if _title_score(best.title, cr_title) < 0.3:
+            raise HTTPException(
+                status_code=404,
+                detail=f"DOI {doi_clean} found in Crossref but no matching S2 paper (low title similarity)",
+            )
 
         return {
-            "paper_id": paper.paper_id,
-            "title": paper.title or "",
+            "paper_id": best.paper_id,
+            "title": best.title or cr_title,
             "doi": doi_clean,
+            "source": "crossref_fallback",
         }
+
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Could not fetch paper: {str(e)}")
-    finally:
-        await s2_client.close()
 
 
 @router.get("/api/papers/{paper_id:path}", response_model=PaperDetail)
@@ -208,27 +269,24 @@ async def get_paper(paper_id: str, db: Database = Depends(get_db)):
 
     # Fallback to S2 API
     client = _create_s2_client()
-    try:
-        paper = await client.get_paper(paper_id)
-        if not paper:
-            raise HTTPException(status_code=404, detail="Paper not found")
+    paper = await client.get_paper(paper_id)
+    if not paper:
+        raise HTTPException(status_code=404, detail="Paper not found")
 
-        return PaperDetail(
-            s2_paper_id=paper.paper_id,
-            doi=paper.doi,
-            title=paper.title,
-            abstract=paper.abstract,
-            year=paper.year,
-            venue=paper.venue,
-            citation_count=paper.citation_count,
-            fields_of_study=paper.fields_of_study,
-            tldr=paper.tldr,
-            is_open_access=paper.is_open_access,
-            oa_url=paper.open_access_pdf_url,
-            authors=paper.authors,
-        )
-    finally:
-        await client.close()
+    return PaperDetail(
+        s2_paper_id=paper.paper_id,
+        doi=paper.doi,
+        title=paper.title,
+        abstract=paper.abstract,
+        year=paper.year,
+        venue=paper.venue,
+        citation_count=paper.citation_count,
+        fields_of_study=paper.fields_of_study,
+        tldr=paper.tldr,
+        is_open_access=paper.is_open_access,
+        oa_url=paper.open_access_pdf_url,
+        authors=paper.authors,
+    )
 
 
 @router.get("/api/papers/{paper_id:path}/citations", response_model=List[CitationPaper])
@@ -238,11 +296,8 @@ async def get_paper_citations(
 ):
     """Get papers that cite this paper."""
     client = _create_s2_client()
-    try:
-        citations = await client.get_citations(paper_id, limit=limit)
-        return [_s2_to_citation_paper(p) for p in citations]
-    finally:
-        await client.close()
+    citations = await client.get_citations(paper_id, limit=limit)
+    return [_s2_to_citation_paper(p) for p in citations]
 
 
 @router.get("/api/papers/{paper_id:path}/references", response_model=List[CitationPaper])
@@ -252,11 +307,8 @@ async def get_paper_references(
 ):
     """Get papers referenced by this paper."""
     client = _create_s2_client()
-    try:
-        references = await client.get_references(paper_id, limit=limit)
-        return [_s2_to_citation_paper(p) for p in references]
-    finally:
-        await client.close()
+    references = await client.get_references(paper_id, limit=limit)
+    return [_s2_to_citation_paper(p) for p in references]
 
 
 @router.post("/api/papers/{paper_id:path}/expand", response_model=ExpandResponse)
@@ -274,18 +326,16 @@ async def expand_paper(
     client = _create_s2_client()
     refs: list = []
     cites: list = []
-    try:
-        try:
-            refs = await client.get_references(paper_id, limit=limit)
-        except Exception as e:
-            logger.warning(f"get_references failed for {paper_id}: {e}")
 
-        try:
-            cites = await client.get_citations(paper_id, limit=limit)
-        except Exception as e:
-            logger.warning(f"get_citations failed for {paper_id}: {e}")
-    finally:
-        await client.close()
+    try:
+        refs = await client.get_references(paper_id, limit=limit)
+    except Exception as e:
+        logger.warning(f"get_references failed for {paper_id}: {e}")
+
+    try:
+        cites = await client.get_citations(paper_id, limit=limit)
+    except Exception as e:
+        logger.warning(f"get_citations failed for {paper_id}: {e}")
 
     return ExpandResponse(
         references=[_s2_to_citation_paper(p) for p in refs],
@@ -312,18 +362,16 @@ async def expand_paper_stable(
     client = _create_s2_client()
     refs: list = []
     cites: list = []
-    try:
-        try:
-            refs = await client.get_references(paper_id, limit=request.limit // 2, include_embedding=True)
-        except Exception as e:
-            logger.warning(f"get_references failed for {paper_id}: {e}")
 
-        try:
-            cites = await client.get_citations(paper_id, limit=request.limit // 2, include_embedding=True)
-        except Exception as e:
-            logger.warning(f"get_citations failed for {paper_id}: {e}")
-    finally:
-        await client.close()
+    try:
+        refs = await client.get_references(paper_id, limit=request.limit // 2, include_embedding=True)
+    except Exception as e:
+        logger.warning(f"get_references failed for {paper_id}: {e}")
+
+    try:
+        cites = await client.get_citations(paper_id, limit=request.limit // 2, include_embedding=True)
+    except Exception as e:
+        logger.warning(f"get_citations failed for {paper_id}: {e}")
 
     all_papers = refs + cites
     if not all_papers:
@@ -429,49 +477,45 @@ async def get_citation_intents(
     s2_client = _create_s2_client()
     svc = CitationIntentService()
 
-    try:
-        # Get basic S2 intents
-        intents = await svc.get_basic_intents(paper_id, s2_client)
+    # Get basic S2 intents
+    intents = await svc.get_basic_intents(paper_id, s2_client)
 
-        if not intents:
-            return []
+    if not intents:
+        return []
 
-        # Optionally enhance with LLM
-        if enhanced:
-            if not provider or not api_key:
-                raise HTTPException(
-                    status_code=400,
-                    detail="provider and api_key are required when enhanced=true",
-                )
-
-            try:
-                from llm.user_provider import create_provider_from_request
-
-                llm_provider = create_provider_from_request(provider=provider, api_key=api_key)
-                try:
-                    intents = await svc.enhance_intents_with_llm(intents, llm_provider)
-                finally:
-                    await llm_provider.close()
-            except ValueError as e:
-                raise HTTPException(status_code=400, detail=str(e))
-
-        return [
-            CitationIntent(
-                citing_id=i["citing_id"],
-                citing_title=i.get("citing_title", ""),
-                cited_id=i["cited_id"],
-                intent=i["intent"],
-                enhanced_intent=i.get("enhanced_intent"),
-                is_influential=i.get("is_influential", False),
-                confidence=i.get("confidence"),
-                reasoning=i.get("reasoning"),
-                context=i.get("context", ""),
-                source=i.get("source", "s2"),
+    # Optionally enhance with LLM
+    if enhanced:
+        if not provider or not api_key:
+            raise HTTPException(
+                status_code=400,
+                detail="provider and api_key are required when enhanced=true",
             )
-            for i in intents
-        ]
 
-    finally:
-        await s2_client.close()
+        try:
+            from llm.user_provider import create_provider_from_request
+
+            llm_provider = create_provider_from_request(provider=provider, api_key=api_key)
+            try:
+                intents = await svc.enhance_intents_with_llm(intents, llm_provider)
+            finally:
+                await llm_provider.close()
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    return [
+        CitationIntent(
+            citing_id=i["citing_id"],
+            citing_title=i.get("citing_title", ""),
+            cited_id=i["cited_id"],
+            intent=i["intent"],
+            enhanced_intent=i.get("enhanced_intent"),
+            is_influential=i.get("is_influential", False),
+            confidence=i.get("confidence"),
+            reasoning=i.get("reasoning"),
+            context=i.get("context", ""),
+            source=i.get("source", "s2"),
+        )
+        for i in intents
+    ]
 
 

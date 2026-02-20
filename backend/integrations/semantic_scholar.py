@@ -323,6 +323,17 @@ class SemanticScholarClient:
         include_embedding: bool = False,
     ) -> List[SemanticScholarPaper]:
         """Get papers that this paper references."""
+        # Redis cache lookup (skip for embedding requests — embeddings not stored in this cache)
+        if not include_embedding:
+            try:
+                from cache import get_cached_refs, cache_refs as _cache_refs
+                _cache_key = f"refs:{paper_id}:{limit}"
+                cached = await get_cached_refs(_cache_key)
+                if cached is not None:
+                    return [SemanticScholarPaper(**p) for p in cached]
+            except Exception:
+                pass  # cache unavailable — proceed to API
+
         # Nested endpoints don't support tldr/embedding — always use NESTED_PAPER_FIELDS
         fields = self.NESTED_PAPER_FIELDS
         encoded_id = quote(paper_id, safe=':/')
@@ -355,6 +366,15 @@ class SemanticScholarClient:
                 except Exception as e:
                     logger.warning(f"Failed to parse S2 reference: {e}")
 
+        # Store in Redis cache (skip for embedding requests)
+        if not include_embedding and papers:
+            try:
+                from cache import cache_refs as _cache_refs
+                _cache_key = f"refs:{paper_id}:{limit}"
+                await _cache_refs(_cache_key, [vars(p) for p in papers])
+            except Exception:
+                pass
+
         return papers
 
     async def get_citations(
@@ -364,6 +384,17 @@ class SemanticScholarClient:
         include_embedding: bool = False,
     ) -> List[SemanticScholarPaper]:
         """Get papers that cite this paper."""
+        # Redis cache lookup (skip for embedding requests)
+        if not include_embedding:
+            try:
+                from cache import get_cached_refs, cache_refs as _cache_refs
+                _cache_key = f"cites:{paper_id}:{limit}"
+                cached = await get_cached_refs(_cache_key)
+                if cached is not None:
+                    return [SemanticScholarPaper(**p) for p in cached]
+            except Exception:
+                pass  # cache unavailable — proceed to API
+
         # Nested endpoints don't support tldr/embedding — always use NESTED_PAPER_FIELDS
         fields = self.NESTED_PAPER_FIELDS
         encoded_id = quote(paper_id, safe=':/')
@@ -392,6 +423,15 @@ class SemanticScholarClient:
                 except Exception as e:
                     logger.warning(f"Failed to parse S2 citation: {e}")
 
+        # Store in Redis cache (skip for embedding requests)
+        if not include_embedding and papers:
+            try:
+                from cache import cache_refs as _cache_refs
+                _cache_key = f"cites:{paper_id}:{limit}"
+                await _cache_refs(_cache_key, [vars(p) for p in papers])
+            except Exception:
+                pass
+
         return papers
 
     # ==================== Recommendations ====================
@@ -414,3 +454,32 @@ class SemanticScholarClient:
             SemanticScholarPaper.from_api_response(item)
             for item in data.get("recommendedPapers", [])
         ]
+
+
+# ==================== Global Singleton ====================
+# One shared client so ALL requests share the same rate limiter.
+# Pattern mirrors database.py: global instance + init/close in lifespan.
+
+s2_client = SemanticScholarClient()
+
+
+async def init_s2_client(api_key: Optional[str] = None, requests_per_second: float = 1.0) -> None:
+    """Initialize the global S2 client (call on startup)."""
+    global s2_client
+    s2_client = SemanticScholarClient(
+        api_key=api_key,
+        requests_per_second=requests_per_second,
+    )
+    logger.info("Semantic Scholar client initialized (shared rate limiter)")
+
+
+async def close_s2_client() -> None:
+    """Close the global S2 client (call on shutdown)."""
+    global s2_client
+    await s2_client.close()
+    logger.info("Semantic Scholar client closed")
+
+
+def get_s2_client() -> SemanticScholarClient:
+    """FastAPI dependency for S2 client access."""
+    return s2_client

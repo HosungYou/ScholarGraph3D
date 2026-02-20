@@ -29,7 +29,7 @@ from graph.embedding_reducer import EmbeddingReducer
 from graph.similarity import SimilarityComputer
 from integrations.data_fusion import DataFusionService, UnifiedPaper
 from integrations.openalex import OpenAlexClient
-from integrations.semantic_scholar import SemanticScholarClient
+from integrations.semantic_scholar import SemanticScholarClient, get_s2_client
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -114,17 +114,107 @@ def _cache_key(query: str, limit: int, year_range: Optional[Tuple], fields: Opti
 
 
 def _create_clients() -> Tuple[OpenAlexClient, SemanticScholarClient]:
-    """Create API clients with configured credentials."""
+    """Create OA client + get shared S2 singleton. Do NOT close S2 client."""
     oa_client = OpenAlexClient(
         email=settings.oa_email or None,
         api_key=settings.oa_api_key or None,
         daily_credit_limit=settings.oa_daily_credit_limit,
     )
-    s2_client = SemanticScholarClient(
-        api_key=settings.s2_api_key or None,
-        requests_per_second=settings.s2_rate_limit,
-    )
-    return oa_client, s2_client
+    return oa_client, get_s2_client()
+
+
+# ==================== Background Citation Enrichment ====================
+
+async def _enrich_citations_background(
+    s2_client: SemanticScholarClient,
+    s2_paper_ids: List[str],
+    s2_to_node_id: Dict[str, str],
+    nodes: List,
+    edges: List,
+    cache_hash: str,
+    db: Database,
+    clusters_info: List,
+    meta_base: Dict[str, Any],
+) -> None:
+    """
+    Fetch citation edges from S2 as a background task (detached from response).
+
+    Runs after the main search response is already sent. Results are written
+    to the DB cache so that the NEXT identical search returns citation edges
+    from cache (instant) rather than re-fetching.
+
+    v0.8.0: Detached from critical path to reduce search latency ~20s.
+    """
+    citation_edges_added = 0
+    failed_count = 0
+    try:
+        existing_edge_keys = {(e.source, e.target) for e in edges}
+        s2_id_set = set(s2_paper_ids)
+
+        # Limit to top-20 by citation count to cap API calls
+        nodes_with_s2 = [(n, n.citation_count) for n in nodes if n.s2_paper_id]
+        nodes_with_s2.sort(key=lambda x: x[1], reverse=True)
+        batch_s2_ids = [n.s2_paper_id for n, _ in nodes_with_s2[:20]]
+
+        for s2_id in batch_s2_ids:
+            try:
+                refs = await s2_client.get_references(s2_id, limit=200, include_embedding=False)
+                source_node_id = s2_to_node_id[s2_id]
+
+                for ref_paper in refs:
+                    if ref_paper.paper_id in s2_id_set:
+                        target_node_id = s2_to_node_id[ref_paper.paper_id]
+                        edge_key = (source_node_id, target_node_id)
+                        reverse_key = (target_node_id, source_node_id)
+
+                        if edge_key not in existing_edge_keys and reverse_key not in existing_edge_keys:
+                            edges.append(GraphEdge(
+                                source=source_node_id,
+                                target=target_node_id,
+                                type="citation",
+                                weight=0.8,
+                                intent="background",
+                            ))
+                            existing_edge_keys.add(edge_key)
+                            citation_edges_added += 1
+            except Exception:
+                failed_count += 1
+                continue
+
+        logger.info(
+            f"[bg] Citation enrichment for {cache_hash[:8]}: "
+            f"+{citation_edges_added} edges ({failed_count} skipped)"
+        )
+
+        # Update DB cache to include citation edges for next request
+        if db.is_connected and citation_edges_added > 0:
+            meta_updated = {
+                **meta_base,
+                "citation_edges": citation_edges_added,
+                "citation_enriched": True,
+            }
+            try:
+                await db.execute(
+                    """
+                    INSERT INTO search_cache (cache_key, nodes, edges, clusters, meta)
+                    VALUES ($1, $2::jsonb, $3::jsonb, $4::jsonb, $5::jsonb)
+                    ON CONFLICT (cache_key) DO UPDATE
+                    SET edges = EXCLUDED.edges,
+                        meta = EXCLUDED.meta,
+                        created_at = NOW()
+                    """,
+                    cache_hash,
+                    json.dumps([n.model_dump() for n in nodes]),
+                    json.dumps([e.model_dump() for e in edges]),
+                    json.dumps([c.model_dump() for c in clusters_info]),
+                    json.dumps(meta_updated),
+                )
+                logger.info(f"[bg] Cache updated with citation edges for {cache_hash[:8]}")
+            except Exception as e:
+                logger.debug(f"[bg] Cache update skipped: {e}")
+
+    except Exception as e:
+        logger.warning(f"[bg] Citation enrichment failed: {e}")
 
 
 # ==================== Endpoint ====================
@@ -304,44 +394,32 @@ async def search_papers(request: SearchRequest, db: Database = Depends(get_db)):
         s2_paper_ids = list(s2_to_node_id.keys())
 
         if len(s2_paper_ids) >= 2:
-            try:
-                existing_edge_keys = {(e.source, e.target) for e in edges}
-                s2_id_set = set(s2_paper_ids)
-
-                # Limit to first 20 papers (highest citation count) to avoid excessive API calls
-                nodes_with_s2 = [(n, n.citation_count) for n in nodes if n.s2_paper_id]
-                nodes_with_s2.sort(key=lambda x: x[1], reverse=True)
-                batch_s2_ids = [n.s2_paper_id for n, _ in nodes_with_s2[:20]]
-                failed_count = 0
-
-                for s2_id in batch_s2_ids:
-                    try:
-                        refs = await s2_client.get_references(s2_id, limit=200, include_embedding=False)
-                        source_node_id = s2_to_node_id[s2_id]
-
-                        for ref_paper in refs:
-                            if ref_paper.paper_id in s2_id_set:
-                                target_node_id = s2_to_node_id[ref_paper.paper_id]
-                                edge_key = (source_node_id, target_node_id)
-                                reverse_key = (target_node_id, source_node_id)
-
-                                if edge_key not in existing_edge_keys and reverse_key not in existing_edge_keys:
-                                    edges.append(GraphEdge(
-                                        source=source_node_id,
-                                        target=target_node_id,
-                                        type="citation",
-                                        weight=0.8,
-                                        intent="background",
-                                    ))
-                                    existing_edge_keys.add(edge_key)
-                                    citation_edges_added += 1
-                    except Exception:
-                        failed_count += 1
-                        continue
-
-                logger.info(f"Citation enrichment: added {citation_edges_added} edges ({failed_count} papers skipped)")
-            except Exception as e:
-                logger.warning(f"Citation enrichment step failed: {e}")
+            # 6. Citation enrichment: detached from response critical path (v0.8.0).
+            # The background task fetches citation edges and updates the DB cache.
+            # The NEXT identical search will return citation edges from cache (instant).
+            asyncio.create_task(
+                _enrich_citations_background(
+                    s2_client=s2_client,
+                    s2_paper_ids=s2_paper_ids,
+                    s2_to_node_id=s2_to_node_id,
+                    nodes=nodes,
+                    edges=edges,
+                    cache_hash=cache_hash,
+                    db=db,
+                    clusters_info=clusters_info,
+                    meta_base={
+                        "query": request.query,
+                        "total": len(nodes),
+                        "with_embeddings": len(papers_with_embeddings),
+                        "clusters": len([c for c in clusters_info if c.id != -1]),
+                        "similarity_edges": len([e for e in edges if e.type == "similarity"]),
+                        "bridge_nodes": len(bridge_ids),
+                    },
+                )
+            )
+            pass  # s2_client is a shared singleton — never close it
+        else:
+            pass  # no citation enrichment needed
 
         # Build cluster info
         for cid, info in cluster_meta.items():
@@ -409,9 +487,6 @@ async def search_papers(request: SearchRequest, db: Database = Depends(get_db)):
                 cluster_label="",
             ))
 
-    # Close s2_client after citation enrichment
-    await s2_client.close()
-
     elapsed = time.time() - start_time
     meta = {
         "query": request.query,
@@ -419,7 +494,8 @@ async def search_papers(request: SearchRequest, db: Database = Depends(get_db)):
         "with_embeddings": len(papers_with_embeddings),
         "clusters": len([c for c in clusters_info if c.id != -1]),
         "similarity_edges": len([e for e in edges if e.type == "similarity"]),
-        "citation_edges": citation_edges_added,
+        "citation_edges": 0,  # enriched asynchronously; non-zero on cache hit
+        "citation_enriched": False,  # set to True by background task on cache update
         "bridge_nodes": len(bridge_ids),
         "elapsed_seconds": round(elapsed, 2),
     }
