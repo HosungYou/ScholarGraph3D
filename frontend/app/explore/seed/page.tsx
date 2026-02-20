@@ -9,7 +9,7 @@ import ScholarGraph3D, { type ScholarGraph3DRef } from '@/components/graph/Schol
 import PaperDetailPanel from '@/components/graph/PaperDetailPanel';
 import ClusterPanel from '@/components/graph/ClusterPanel';
 import GraphControls from '@/components/graph/GraphControls';
-import type { Paper } from '@/types';
+import type { Paper, CitationIntent } from '@/types';
 import { Search, ArrowLeft, Loader2, Network, GitBranch, Layers, Share2 } from 'lucide-react';
 
 function SeedExploreContent() {
@@ -26,6 +26,7 @@ function SeedExploreContent() {
     selectPaper,
     setLoading,
     setError,
+    setCitationIntents,
   } = useGraphStore();
 
   const graphRef = useRef<ScholarGraph3DRef>(null);
@@ -40,8 +41,43 @@ function SeedExploreContent() {
     similarity_edges?: number;
   } | null>(null);
 
-  // Panel resize
-  const [rightPanelWidth, setRightPanelWidth] = useState(440);
+  // Panel resize — left
+  const [leftPanelWidth, setLeftPanelWidth] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('seed-left-panel-width');
+      return saved ? Math.min(500, Math.max(240, Number(saved))) : 360;
+    }
+    return 360;
+  });
+  const leftResizeRef = useRef(false);
+  const handleLeftPanelResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    leftResizeRef.current = true;
+    const startX = e.clientX;
+    const startWidth = leftPanelWidth;
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!leftResizeRef.current) return;
+      const newWidth = Math.min(500, Math.max(240, startWidth + (ev.clientX - startX)));
+      setLeftPanelWidth(newWidth);
+      localStorage.setItem('seed-left-panel-width', String(newWidth));
+    };
+    const onMouseUp = () => {
+      leftResizeRef.current = false;
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }, [leftPanelWidth]);
+
+  // Panel resize — right
+  const [rightPanelWidth, setRightPanelWidth] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('seed-right-panel-width');
+      return saved ? Math.min(700, Math.max(320, Number(saved))) : 520;
+    }
+    return 520;
+  });
   const rightResizeRef = useRef(false);
   const handleRightPanelResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -50,7 +86,9 @@ function SeedExploreContent() {
     const startWidth = rightPanelWidth;
     const onMouseMove = (ev: MouseEvent) => {
       if (!rightResizeRef.current) return;
-      setRightPanelWidth(Math.min(700, Math.max(280, startWidth - (ev.clientX - startX))));
+      const newWidth = Math.min(700, Math.max(320, startWidth - (ev.clientX - startX)));
+      setRightPanelWidth(newWidth);
+      localStorage.setItem('seed-right-panel-width', String(newWidth));
     };
     const onMouseUp = () => {
       rightResizeRef.current = false;
@@ -71,6 +109,19 @@ function SeedExploreContent() {
       .then((data) => {
         setGraphData(data);
         setSeedMeta(data.meta as any);
+
+        // Extract citation intents from edges for ScholarGraph3D coloring
+        const intents: CitationIntent[] = data.edges
+          .filter(e => e.type === 'citation' && e.intent)
+          .map(e => ({
+            citing_id: e.source,
+            cited_id: e.target,
+            basic_intent: e.intent as CitationIntent['basic_intent'],
+            is_influential: false,
+          }));
+        if (intents.length > 0) {
+          setCitationIntents(intents);
+        }
       })
       .catch((err) => {
         console.error('Seed explore failed:', err);
@@ -133,41 +184,24 @@ function SeedExploreContent() {
             result.nodes.map(n => [n.id, { x: n.x, y: n.y, z: n.z }])
           );
 
-          // Add nodes starting at parent position
+          // Add nodes at parent position, then animate via ForceGraph3D internals
           const nodesAtOrigin = result.nodes.map(n => ({
             ...n,
             x: ox,
             y: oy,
             z: oz,
           }));
+          const newNodeIds = result.nodes.map(n => n.id);
           useGraphStore.getState().addNodesStable(nodesAtOrigin, result.edges);
 
-          // Animate to final positions (10 steps over 600ms, ease-out cubic)
-          const steps = 10;
-          const duration = 600;
-          for (let i = 1; i <= steps; i++) {
-            setTimeout(() => {
-              const progress = i / steps;
-              const eased = 1 - Math.pow(1 - progress, 3);
-              const store = useGraphStore.getState();
-              if (!store.graphData) return;
-
-              const updatedNodes = store.graphData.nodes.map(node => {
-                const target = targets.get(node.id);
-                if (!target) return node;
-                return {
-                  ...node,
-                  x: ox + (target.x - ox) * eased,
-                  y: oy + (target.y - oy) * eased,
-                  z: oz + (target.z - oz) * eased,
-                };
-              });
-
-              useGraphStore.setState({
-                graphData: { ...store.graphData, nodes: updatedNodes },
-              });
-            }, (i * duration) / steps);
-          }
+          // Wait one tick for ForceGraph3D to ingest new nodes, then animate
+          setTimeout(() => {
+            graphRef.current?.animateExpandNodes(
+              parentNode?.id || paper.id,
+              newNodeIds,
+              targets
+            );
+          }, 50);
 
           setExpandSuccess(`${count} papers added`);
         } else {
@@ -234,7 +268,10 @@ function SeedExploreContent() {
       {/* Main content */}
       <div className="flex-1 flex overflow-hidden relative">
         {/* Left panel: clusters */}
-        <div className="w-72 flex-shrink-0 border-r border-border/30 glass flex flex-col">
+        <div
+          style={{ width: leftPanelWidth }}
+          className="flex-shrink-0 border-r border-border/30 glass flex flex-col relative"
+        >
           <div className="p-3 border-b border-border/30">
             <h3 className="text-xs font-medium text-text-secondary uppercase tracking-wide">
               Clusters
@@ -243,6 +280,11 @@ function SeedExploreContent() {
           <div className="flex-1 overflow-y-auto">
             <ClusterPanel />
           </div>
+          {/* Resize handle */}
+          <div
+            className="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-blue-500/40 active:bg-blue-500/60 transition-colors z-10"
+            onMouseDown={handleLeftPanelResizeStart}
+          />
         </div>
 
         {/* Center: 3D Graph */}

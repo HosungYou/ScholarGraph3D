@@ -3,9 +3,11 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { FIELD_COLORS } from '@/types';
+import { useGraphStore } from '@/hooks/useGraphStore';
 
 export default function GraphLegend() {
   const [collapsed, setCollapsed] = useState(false);
+  const { showEnhancedIntents } = useGraphStore();
 
   const fieldEntries = Object.entries(FIELD_COLORS).filter(([k]) => k !== 'Other');
 
@@ -72,6 +74,58 @@ export default function GraphLegend() {
         <div className="flex items-center gap-2">
           <div className="w-5 h-0 border-t border-dashed border-emerald-400/60 flex-shrink-0" />
           <span>Similarity</span>
+        </div>
+      </div>
+
+      {/* Citation Intent Colors */}
+      <div className="mb-1.5 pt-1.5 border-t border-border/20">
+        <div className="text-[10px] font-medium text-text-primary/60 uppercase tracking-wide mb-1">
+          Edge Intents
+        </div>
+        <div className="flex flex-col gap-0.5">
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-0 border-t-2 flex-shrink-0" style={{ borderColor: '#95A5A6' }} />
+            <span>Background</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-0 border-t-2 flex-shrink-0" style={{ borderColor: '#9B59B6' }} />
+            <span>Methodology</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-0 border-t-2 flex-shrink-0" style={{ borderColor: '#4A90D9' }} />
+            <span>Result/Comparison</span>
+          </div>
+        </div>
+
+        {showEnhancedIntents && (
+          <div className="mt-1 pt-1 border-t border-border/10">
+            <div className="text-[10px] text-text-secondary/50 mb-0.5">Enhanced</div>
+            <div className="flex flex-col gap-0.5">
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-0 border-t-2 flex-shrink-0" style={{ borderColor: '#2ECC71' }} />
+                <span>Supports</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-0 border-t-2 flex-shrink-0" style={{ borderColor: '#E74C3C' }} />
+                <span>Contradicts</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-0 border-t-2 flex-shrink-0" style={{ borderColor: '#3498DB' }} />
+                <span>Extends</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-0 border-t-2 flex-shrink-0" style={{ borderColor: '#E67E22' }} />
+                <span>Applies</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-0 border-t-2 flex-shrink-0" style={{ borderColor: '#1ABC9C' }} />
+                <span>Compares</span>
+              </div>
+            </div>
+          </div>
+        )}
+        <div className="text-[10px] text-text-secondary/40 mt-1 italic">
+          Hover edges for details
         </div>
       </div>
 

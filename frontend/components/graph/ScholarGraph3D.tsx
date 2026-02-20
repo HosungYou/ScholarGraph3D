@@ -103,6 +103,7 @@ export interface ScholarGraph3DRef {
   focusOnPaper: (paperId: string) => void;
   focusOnCluster: (clusterId: number) => void;
   resetCamera: () => void;
+  animateExpandNodes: (parentNodeId: string, newNodeIds: string[], targets: Map<string, {x: number; y: number; z: number}>) => void;
 }
 
 function computeConvexHull2D(
@@ -1208,6 +1209,68 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
           1000
         );
       }
+    },
+    animateExpandNodes: (parentNodeId: string, newNodeIds: string[], targets: Map<string, {x: number; y: number; z: number}>) => {
+      if (!fgRef.current) return;
+      const graphData = fgRef.current.graphData();
+      if (!graphData?.nodes) return;
+
+      // Find parent node position
+      const parentNode = (graphData.nodes as ForceGraphNode[]).find(n => n.id === parentNodeId);
+      const ox = parentNode?.x ?? 0;
+      const oy = parentNode?.y ?? 0;
+      const oz = parentNode?.z ?? 0;
+
+      // Find new nodes in force graph internal data and set initial fixed positions at parent
+      const newNodeSet = new Set(newNodeIds);
+      const nodesToAnimate: ForceGraphNode[] = [];
+      (graphData.nodes as ForceGraphNode[]).forEach(node => {
+        if (newNodeSet.has(node.id)) {
+          node.fx = ox;
+          node.fy = oy;
+          node.fz = oz;
+          node.x = ox;
+          node.y = oy;
+          node.z = oz;
+          nodesToAnimate.push(node);
+        }
+      });
+
+      if (nodesToAnimate.length === 0) return;
+
+      // Animate with requestAnimationFrame over 600ms (ease-out cubic)
+      const duration = 600;
+      const startTime = performance.now();
+
+      const animate = (now: number) => {
+        const elapsed = now - startTime;
+        const progress = Math.min(1, elapsed / duration);
+        const eased = 1 - Math.pow(1 - progress, 3); // ease-out cubic
+
+        nodesToAnimate.forEach(node => {
+          const target = targets.get(node.id);
+          if (!target) return;
+          node.fx = ox + (target.x - ox) * eased;
+          node.fy = oy + (target.y - oy) * eased;
+          node.fz = oz + (target.z - oz) * eased;
+        });
+
+        fgRef.current?.refresh();
+
+        if (progress < 1) {
+          requestAnimationFrame(animate);
+        } else {
+          // Release fixed positions so force simulation can take over
+          nodesToAnimate.forEach(node => {
+            node.fx = undefined;
+            node.fy = undefined;
+            node.fz = undefined;
+          });
+          fgRef.current?.refresh();
+        }
+      };
+
+      requestAnimationFrame(animate);
     },
   }));
 

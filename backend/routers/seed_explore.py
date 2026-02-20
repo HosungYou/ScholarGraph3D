@@ -21,6 +21,7 @@ from graph.embedding_reducer import EmbeddingReducer
 from graph.similarity import SimilarityComputer
 from graph.bridge_detector import detect_bridge_nodes
 from integrations.semantic_scholar import get_s2_client
+from services.citation_intent import CitationIntentService
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -270,18 +271,49 @@ async def seed_explore(request: SeedExploreRequest):
                 weight=edge["similarity"],
             ))
 
-        # Citation edges (from tracked pairs)
+        # Citation edges (from tracked pairs) with real S2 intents
+        # First, build citation edges with default intent
+        citation_edge_map: Dict[tuple, SeedGraphEdge] = {}
         for citing_id, cited_id in citation_pairs:
             src = s2_to_node.get(citing_id)
             tgt = s2_to_node.get(cited_id)
             if src and tgt:
-                edges.append(SeedGraphEdge(
+                edge = SeedGraphEdge(
                     source=src,
                     target=tgt,
                     type="citation",
                     weight=0.8,
                     intent="background",
-                ))
+                )
+                citation_edge_map[(citing_id, cited_id)] = edge
+                edges.append(edge)
+
+        # Fetch real citation intents from S2 (best-effort, non-blocking)
+        try:
+            intent_service = CitationIntentService()
+            # Get intents for the seed paper (covers most edges)
+            seed_intents = await intent_service.get_basic_intents(
+                seed_paper.paper_id, s2_client
+            )
+            # Build lookup: (citing_s2_id, cited_s2_id) -> intent
+            intent_lookup: Dict[tuple, str] = {}
+            for ci in seed_intents:
+                intent_lookup[(ci["citing_id"], ci["cited_id"])] = ci.get("intent", "background")
+
+            # Apply intents to citation edges
+            updated_count = 0
+            for (citing_id, cited_id), edge in citation_edge_map.items():
+                intent = intent_lookup.get((citing_id, cited_id))
+                if not intent:
+                    # Try reverse lookup (cited paper's citations)
+                    intent = intent_lookup.get((cited_id, citing_id))
+                if intent:
+                    edge.intent = intent
+                    updated_count += 1
+
+            logger.info(f"Updated {updated_count}/{len(citation_edge_map)} citation edges with S2 intents")
+        except Exception as e:
+            logger.warning(f"Citation intent fetch failed (non-fatal): {e}")
 
         # Cluster info
         for cid, info in cluster_meta.items():
