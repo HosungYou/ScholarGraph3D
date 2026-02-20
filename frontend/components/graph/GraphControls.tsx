@@ -7,15 +7,6 @@ import {
   Type,
   RotateCcw,
   Maximize,
-  Sun,
-  SunDim,
-  Zap,
-  Target,
-  Circle,
-  Sparkles,
-  Clock,
-  Network,
-  Palette,
 } from 'lucide-react';
 import { useGraphStore } from '@/hooks/useGraphStore';
 import { cn } from '@/lib/utils';
@@ -30,24 +21,6 @@ export default function GraphControls() {
     toggleSimilarityEdges,
     toggleClusterHulls,
     toggleLabels,
-    showBloom,
-    showOARings,
-    showCitationAura,
-    showGhostEdges,
-    showGapOverlay,
-    toggleBloom,
-    toggleOARings,
-    toggleCitationAura,
-    toggleGhostEdges,
-    toggleGapOverlay,
-    showConceptualEdges,
-    showTimeline,
-    toggleConceptualEdges,
-    toggleTimeline,
-    isAnalyzingRelations,
-    conceptualEdges,
-    showEnhancedIntents,
-    setShowEnhancedIntents,
   } = useGraphStore();
 
   const controls = [
@@ -74,54 +47,6 @@ export default function GraphControls() {
       label: 'Labels',
       active: showLabels,
       toggle: toggleLabels,
-    },
-    {
-      icon: showBloom ? SunDim : Sun,
-      label: 'Bloom Effect',
-      active: showBloom,
-      toggle: toggleBloom,
-    },
-    {
-      icon: Zap,
-      label: 'Ghost Edges',
-      active: showGhostEdges,
-      toggle: toggleGhostEdges,
-    },
-    {
-      icon: Target,
-      label: 'Gap Overlay',
-      active: showGapOverlay,
-      toggle: toggleGapOverlay,
-    },
-    {
-      icon: Circle,
-      label: 'OA Rings',
-      active: showOARings,
-      toggle: toggleOARings,
-    },
-    {
-      icon: Sparkles,
-      label: 'Citation Aura',
-      active: showCitationAura,
-      toggle: toggleCitationAura,
-    },
-    {
-      icon: Network,
-      label: `Conceptual Relations${conceptualEdges.length > 0 ? ` (${conceptualEdges.length})` : ''}${isAnalyzingRelations ? ' ◌' : ''}`,
-      active: showConceptualEdges,
-      toggle: toggleConceptualEdges,
-    },
-    {
-      icon: Palette,
-      label: 'Intent Colors',
-      active: showEnhancedIntents,
-      toggle: () => setShowEnhancedIntents(!showEnhancedIntents),
-    },
-    {
-      icon: Clock,
-      label: 'Timeline View',
-      active: showTimeline,
-      toggle: toggleTimeline,
     },
   ];
 

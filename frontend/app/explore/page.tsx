@@ -11,19 +11,13 @@ import PaperDetailPanel from '@/components/graph/PaperDetailPanel';
 import ClusterPanel from '@/components/graph/ClusterPanel';
 import SearchBar from '@/components/graph/SearchBar';
 import GraphControls from '@/components/graph/GraphControls';
-import TrendPanel from '@/components/analysis/TrendPanel';
-import GapPanel from '@/components/analysis/GapPanel';
+import GraphLegend from '@/components/graph/GraphLegend';
 import ChatPanel from '@/components/chat/ChatPanel';
-import WatchQueryPanel from '@/components/watch/WatchQueryPanel';
-import LitReviewPanel from '@/components/litreview/LitReviewPanel';
-import TimelineView from '@/components/analysis/TimelineView';
 import LLMSettingsModal, {
   loadLLMSettings,
 } from '@/components/settings/LLMSettingsModal';
 import CitationContextModal from '@/components/graph/CitationContextModal';
 import type { Paper } from '@/types';
-
-type LeftTab = 'clusters' | 'trends' | 'gaps' | 'watch' | 'timeline';
 
 function ExploreContent() {
   const searchParams = useSearchParams();
@@ -47,23 +41,14 @@ function ExploreContent() {
     setLoading,
     setError,
     setLLMSettings,
-    setShowEnhancedIntents,
-    addConceptualEdges,
-    setIsAnalyzingRelations,
-    setRelationAnalysisProgress,
-    isAnalyzingRelations,
-    relationAnalysisProgress,
   } = useGraphStore();
 
   // Graph ref for camera control
   const graphRef = useRef<ScholarGraph3DRef>(null);
 
   // Local UI state
-  const [leftTab, setLeftTab] = useState<LeftTab>('clusters');
   const [showChat, setShowChat] = useState(false);
-  const [show2DTimeline, setShow2DTimeline] = useState(false);
   const [showLLMModal, setShowLLMModal] = useState(false);
-  const [showLitReview, setShowLitReview] = useState(false);
   const [citationModalData, setCitationModalData] = useState<{
     sourceId: string;
     targetId: string;
@@ -237,53 +222,6 @@ function ExploreContent() {
     }
   }, [queryError, setError]);
 
-  // Conceptual edges analysis — starts after graph data loads
-  useEffect(() => {
-    if (!graphData || !graphData.nodes || graphData.nodes.length < 2) return;
-
-    // Build s2_paper_id → graph node ID mapping
-    const s2ToGraphId = new Map<string, string>();
-    graphData.nodes.forEach((n) => {
-      if (n.s2_paper_id) s2ToGraphId.set(n.s2_paper_id, n.id);
-    });
-
-    const s2PaperIds = Array.from(s2ToGraphId.keys());
-    if (s2PaperIds.length < 2) return;
-
-    // Clear previous conceptual edges
-    useGraphStore.getState().clearConceptualEdges();
-    setIsAnalyzingRelations(true);
-    setRelationAnalysisProgress({ done: 0, total: 0 });
-
-    const cleanup = api.streamConceptualEdges(
-      s2PaperIds,
-      (edge) => {
-        // Translate s2_paper_id back to graph node ID
-        const graphSrc = s2ToGraphId.get(edge.source) ?? edge.source;
-        const graphTgt = s2ToGraphId.get(edge.target) ?? edge.target;
-        useGraphStore.getState().addConceptualEdges([{ ...edge, source: graphSrc, target: graphTgt }]);
-      },
-      (_msg) => {
-        // progress message — could update a local state here
-      },
-      (_totalEdges) => {
-        setIsAnalyzingRelations(false);
-        setRelationAnalysisProgress(null);
-      },
-      (errMsg) => {
-        console.warn('Conceptual edges error:', errMsg);
-        setIsAnalyzingRelations(false);
-        setRelationAnalysisProgress(null);
-      }
-    );
-
-    return () => {
-      cleanup();
-      setIsAnalyzingRelations(false);
-      setRelationAnalysisProgress(null);
-    };
-  }, [graphData]); // Re-run when graph data changes (new search)
-
   // SSE search progress stream
   useEffect(() => {
     if (!query || !queryLoading) {
@@ -427,28 +365,6 @@ function ExploreContent() {
               &#128172; Chat
             </button>
 
-            {/* Literature Review */}
-            <button
-              onClick={() => setShowLitReview(true)}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all bg-gray-800 text-gray-400 hover:text-gray-200 hover:bg-gray-700 border border-gray-700"
-              title="Generate Literature Review"
-            >
-              &#128214; Lit Review
-            </button>
-
-            {/* Intent Colors toggle */}
-            <button
-              onClick={() => setShowEnhancedIntents(!showEnhancedIntents)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
-                showEnhancedIntents
-                  ? 'bg-purple-900/20 text-purple-400 border-purple-800/40 hover:bg-purple-900/30'
-                  : 'bg-gray-800 text-gray-400 border-gray-700 hover:text-gray-200 hover:bg-gray-700'
-              }`}
-              title="Toggle Enhanced Citation Intent Colors"
-            >
-              &#127912; Intents
-            </button>
-
             {/* LLM Settings */}
             <button
               onClick={() => setShowLLMModal(true)}
@@ -467,63 +383,10 @@ function ExploreContent() {
 
       {/* Main content area */}
       <div className="flex-1 flex overflow-hidden relative">
-        {/* Left panel: tabbed sidebar */}
+        {/* Left panel: clusters */}
         <div style={{ width: leftPanelWidth }} className="flex-shrink-0 border-r border-border/30 glass flex flex-col relative">
-          {/* Tab buttons */}
-          <div className="flex border-b border-border/30 flex-shrink-0">
-            {(
-              [
-                { key: 'clusters', label: 'Clusters' },
-                { key: 'trends', label: 'Trends' },
-                { key: 'gaps', label: 'Gaps' },
-                { key: 'watch', label: 'Watch' },
-                { key: 'timeline', label: 'Timeline' },
-              ] as const
-            ).map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => setLeftTab(tab.key)}
-                className={`flex-1 px-3 py-2.5 text-xs font-medium transition-all relative ${
-                  leftTab === tab.key
-                    ? 'text-gray-100'
-                    : 'text-gray-500 hover:text-gray-300'
-                }`}
-              >
-                {tab.label}
-                {leftTab === tab.key && (
-                  <motion.div
-                    layoutId="leftTabIndicator"
-                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500"
-                    transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                  />
-                )}
-              </button>
-            ))}
-          </div>
-
-          {/* Tab content */}
           <div className="flex-1 overflow-y-auto">
-            {leftTab === 'clusters' && <ClusterPanel />}
-            {leftTab === 'trends' && <TrendPanel />}
-            {leftTab === 'gaps' && <GapPanel />}
-            {leftTab === 'watch' && <WatchQueryPanel />}
-            {leftTab === 'timeline' && (
-              <div className="p-3">
-                <button
-                  onClick={() => setShow2DTimeline(!show2DTimeline)}
-                  className={`w-full px-3 py-2 rounded-lg text-xs font-medium transition-all border ${
-                    show2DTimeline
-                      ? 'bg-blue-900/20 text-blue-400 border-blue-800/40'
-                      : 'bg-gray-800 text-gray-400 border-gray-700 hover:bg-gray-700'
-                  }`}
-                >
-                  {show2DTimeline ? 'Hide 2D Timeline' : 'Show 2D Timeline'}
-                </button>
-                <p className="text-[10px] text-text-secondary/50 mt-2 px-1">
-                  View papers on a 2D timeline organized by year and cluster. Click nodes to highlight in 3D.
-                </p>
-              </div>
-            )}
+            <ClusterPanel />
           </div>
 
           {/* Left panel drag handle */}
@@ -533,9 +396,9 @@ function ExploreContent() {
           />
         </div>
 
-        {/* Center: 3D Graph + optional Timeline */}
+        {/* Center: 3D Graph */}
         <div className="flex-1 flex flex-col relative">
-          <div className={`relative ${show2DTimeline ? 'flex-1 min-h-0' : 'flex-1'}`} style={show2DTimeline ? { height: '60%' } : undefined}>
+          <div className="relative flex-1">
           {isLoading && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/80">
               <div className="text-center max-w-sm w-full px-8">
@@ -613,25 +476,14 @@ function ExploreContent() {
           {/* Meta info */}
           {graphData && (
             <div className="absolute bottom-4 left-4 glass rounded-lg px-3 py-2 text-xs text-text-secondary">
-              {graphData.meta.total} papers | {graphData.edges.length} edges |{' '}
-              {graphData.clusters.length} clusters
+              {graphData.meta.total} papers | {graphData.edges.filter(e => e.type === 'citation').length} citation | {graphData.edges.filter(e => e.type === 'similarity').length} similarity | {graphData.clusters.length} clusters
             </div>
           )}
 
-          {/* Relation analysis progress */}
-          {isAnalyzingRelations && (
-            <div className="absolute bottom-12 left-4 glass rounded-lg px-3 py-2 text-xs text-text-secondary flex items-center gap-2">
-              <div className="w-3 h-3 border border-purple-400/60 border-t-transparent rounded-full animate-spin" />
-              <span>Analyzing conceptual relations...</span>
-            </div>
-          )}
+          {/* Legend */}
+          {graphData && <GraphLegend />}
+
           </div>
-          {/* 2D Timeline Panel */}
-          {show2DTimeline && graphData && (
-            <div style={{ height: '40%' }} className="flex-shrink-0">
-              <TimelineView onClose={() => setShow2DTimeline(false)} />
-            </div>
-          )}
         </div>
 
         {/* Right panel: paper detail and chat as independent columns */}
@@ -680,11 +532,6 @@ function ExploreContent() {
           )}
         </AnimatePresence>
       </div>
-
-      {/* Literature Review Overlay */}
-      {showLitReview && (
-        <LitReviewPanel onClose={() => setShowLitReview(false)} />
-      )}
 
       {/* Citation Context Modal */}
       {citationModalData && (

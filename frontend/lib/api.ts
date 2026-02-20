@@ -67,23 +67,23 @@ export const api = {
 
   // Papers
   getPaper: (id: string) =>
-    request(`${API_BASE}/api/papers/${id}`),
+    request(`${API_BASE}/api/papers/${encodeURIComponent(id)}`),
 
   getCitations: (id: string) =>
-    request(`${API_BASE}/api/papers/${id}/citations`),
+    request(`${API_BASE}/api/papers/${encodeURIComponent(id)}/citations`),
 
   getReferences: (id: string) =>
-    request(`${API_BASE}/api/papers/${id}/references`),
+    request(`${API_BASE}/api/papers/${encodeURIComponent(id)}/references`),
 
   expandPaper: (id: string): Promise<{ nodes: import('@/types').Paper[]; edges: import('@/types').GraphEdge[] }> =>
-    request(`${API_BASE}/api/papers/${id}/expand`, { method: 'POST' }),
+    request(`${API_BASE}/api/papers/${encodeURIComponent(id)}/expand`, { method: 'POST' }),
 
   expandPaperStable: (
     id: string,
     existingNodes: import('@/types').Paper[],
     existingEdges: import('@/types').GraphEdge[]
   ): Promise<{ nodes: import('@/types').Paper[]; edges: import('@/types').GraphEdge[] }> =>
-    request(`${API_BASE}/api/papers/${id}/expand-stable`, {
+    request(`${API_BASE}/api/papers/${encodeURIComponent(id)}/expand-stable`, {
       method: 'POST',
       body: JSON.stringify({
         existing_nodes: existingNodes.map((n) => ({

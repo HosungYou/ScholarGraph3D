@@ -114,7 +114,7 @@ def _create_s2_client() -> SemanticScholarClient:
 
 # ==================== Endpoints ====================
 
-@router.get("/api/papers/{paper_id}", response_model=PaperDetail)
+@router.get("/api/papers/{paper_id:path}", response_model=PaperDetail)
 async def get_paper(paper_id: str, db: Database = Depends(get_db)):
     """Get paper detail by internal ID or S2 paper ID."""
     # Try database first
@@ -176,7 +176,7 @@ async def get_paper(paper_id: str, db: Database = Depends(get_db)):
         await client.close()
 
 
-@router.get("/api/papers/{paper_id}/citations", response_model=List[CitationPaper])
+@router.get("/api/papers/{paper_id:path}/citations", response_model=List[CitationPaper])
 async def get_paper_citations(
     paper_id: str,
     limit: int = Query(default=50, ge=1, le=500),
@@ -190,7 +190,7 @@ async def get_paper_citations(
         await client.close()
 
 
-@router.get("/api/papers/{paper_id}/references", response_model=List[CitationPaper])
+@router.get("/api/papers/{paper_id:path}/references", response_model=List[CitationPaper])
 async def get_paper_references(
     paper_id: str,
     limit: int = Query(default=50, ge=1, le=500),
@@ -204,7 +204,7 @@ async def get_paper_references(
         await client.close()
 
 
-@router.post("/api/papers/{paper_id}/expand", response_model=ExpandResponse)
+@router.post("/api/papers/{paper_id:path}/expand", response_model=ExpandResponse)
 async def expand_paper(
     paper_id: str,
     limit: int = Query(default=20, ge=1, le=100),
@@ -216,20 +216,23 @@ async def expand_paper(
     """
     client = _create_s2_client()
     try:
-        refs, cites = await client.get_references(paper_id, limit=limit), []
+        refs = await client.get_references(paper_id, limit=limit)
         cites = await client.get_citations(paper_id, limit=limit)
-
-        return ExpandResponse(
-            references=[_s2_to_citation_paper(p) for p in refs],
-            citations=[_s2_to_citation_paper(p) for p in cites],
-            total_references=len(refs),
-            total_citations=len(cites),
-        )
+    except Exception as e:
+        logger.warning(f"Expand failed for {paper_id}: {e}")
+        raise HTTPException(status_code=404, detail=f"Paper not found in Semantic Scholar: {paper_id}")
     finally:
         await client.close()
 
+    return ExpandResponse(
+        references=[_s2_to_citation_paper(p) for p in refs],
+        citations=[_s2_to_citation_paper(p) for p in cites],
+        total_references=len(refs),
+        total_citations=len(cites),
+    )
 
-@router.post("/api/papers/{paper_id}/expand-stable", response_model=StableExpandResponse)
+
+@router.post("/api/papers/{paper_id:path}/expand-stable", response_model=StableExpandResponse)
 async def expand_paper_stable(
     paper_id: str,
     request: StableExpandRequest,
@@ -248,6 +251,9 @@ async def expand_paper_stable(
         refs = await client.get_references(paper_id, limit=request.limit // 2, include_embedding=True)
         cites = await client.get_citations(paper_id, limit=request.limit // 2, include_embedding=True)
         all_papers = list(refs) + list(cites)
+    except Exception as e:
+        logger.warning(f"Expand failed for {paper_id}: {e}")
+        raise HTTPException(status_code=404, detail=f"Paper not found in Semantic Scholar: {paper_id}")
     finally:
         await client.close()
 
@@ -337,7 +343,7 @@ class CitationIntent(BaseModel):
     source: str = "s2"
 
 
-@router.get("/api/papers/{paper_id}/intents", response_model=List[CitationIntent])
+@router.get("/api/papers/{paper_id:path}/intents", response_model=List[CitationIntent])
 async def get_citation_intents(
     paper_id: str,
     enhanced: bool = Query(default=False, description="Use LLM for enhanced intent classification"),
