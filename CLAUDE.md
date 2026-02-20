@@ -88,9 +88,9 @@ backend/
 │   └── lit_review.py            # LLM lit review generation + weasyprint PDF
 ├── routers/
 │   ├── search.py        # POST /api/search → full graph pipeline (+ is_bridge flag)
-│   ├── papers.py        # Paper detail, citations, references, expand, expand-stable, intents
+│   ├── papers.py        # Paper detail, citations, references, expand, expand-stable, intents, by-doi
 │   ├── graphs.py        # CRUD saved graphs (auth required)
-│   ├── analysis.py      # Phase 2: POST /api/analysis/trends, gaps, hypotheses
+│   ├── analysis.py      # Phase 2+4: trends, gaps, hypotheses, conceptual-edges/stream (SSE), scaffold-angles
 │   ├── chat.py          # Phase 2: POST /api/chat + /api/chat/stream (SSE)
 │   ├── watch.py         # Phase 3: /api/watch CRUD + /api/watch/cron
 │   └── lit_review.py    # Phase 3: /api/lit-review/generate + export-pdf
@@ -122,9 +122,11 @@ frontend/
 │   │   └── LLMSettingsModal.tsx  # 4-provider API key management (localStorage)
 │   ├── watch/                    # Phase 3
 │   │   └── WatchQueryPanel.tsx   # Watch query CRUD, filters, check-now
-│   └── litreview/                # Phase 3
-│       └── LitReviewPanel.tsx    # Full-overlay lit review, TOC, PDF download
-├── hooks/useGraphStore.ts    # Zustand state (Phase 1 + 1.5 + 2: bloom/ghostEdges/gapOverlay/hiddenClusters/bridgeNodes)
+│   ├── litreview/                # Phase 3
+│   │   └── LitReviewPanel.tsx    # Full-overlay lit review, TOC, PDF download
+│   └── scaffolding/                # Phase 4
+│       └── ScaffoldingModal.tsx    # Multi-select research angle exploration modal
+├── hooks/useGraphStore.ts    # Zustand state (Phase 1–4: bloom/ghostEdges/gapOverlay/hiddenClusters/bridgeNodes/conceptualEdges/timeline)
 ├── lib/
 │   ├── api.ts               # Backend API client (search + analysis + chat)
 │   ├── auth-context.tsx      # Supabase auth context
@@ -190,3 +192,4 @@ Patterns: CachedLLMProvider (decorator, in-memory TTL), CircuitBreaker (5 failur
 - Phase 1.5 (Viz Enhancement): v0.1.5 — 3-tier dimming, centrality labels, bridge/OA/bloom node layers, ghost edges, gap overlay, per-cluster visibility, stable expand (commit 485e099)
 - Phase 2 (AI Premium): v0.2.0 — LLM providers, GraphRAG chat, trend analysis, gap analysis
 - Phase 3 (Real-time): v0.3.0 ✅ — natural language search (Groq), SSE progress stream, citation context modal, rate limiting, analytics, SEO
+- Phase 4 (Relationships): v0.4.0 ✅ — critical node-click bug fix, panel resize, conceptual edges SSE, 3-mode home page, timeline view

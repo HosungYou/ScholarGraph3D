@@ -1,6 +1,6 @@
 # ScholarGraph3D — System Architecture
 
-> **Version:** 1.1 | **Last Updated:** 2026-02-19
+> **Version:** 1.2 | **Last Updated:** 2026-02-19
 > **Related:** [PRD.md](./PRD.md) | [SPEC.md](./SPEC.md) | [SDD/TDD Plan](./SDD_TDD_PLAN.md)
 
 ---
@@ -488,6 +488,11 @@ frontend/
 │   └── supabase.ts                # Supabase client initialization
 └── types/index.ts                 # Paper, GraphEdge, Cluster, GraphData
 ```
+
+Phase 4 additions:
+- `conceptualEdges` layer: SPECTER2 pre-filtered pairs classified via Groq LLM (methodology_shared/theory_shared/similarity_shared)
+- `selectedPaperIdRef` pattern: eliminates prop re-creation race condition on node click
+- Timeline mode: fixes node fy by publication year for chronological layout
 
 ### 5.2 Component Hierarchy
 
@@ -1623,7 +1628,18 @@ ALTER TABLE citations ADD COLUMN is_influential BOOLEAN DEFAULT FALSE;  -- S2 fl
 
 ---
 
-## 16. Phase 1.5 — Visualization Enhancement System (v0.1.5)
+## 16. Phase 4 — Conceptual Relationships (v0.4.0)
+
+Critical node-click bug fix, panel resize, conceptual edges SSE streaming, 3-mode home page, and timeline view.
+
+Phase 4 endpoints:
+- GET /api/analysis/conceptual-edges/stream — SSE stream of conceptual relationships
+- POST /api/analysis/scaffold-angles — LLM-generated research angle suggestions
+- GET /api/papers/by-doi — Seed paper lookup by DOI
+
+---
+
+## 17. Phase 1.5 — Visualization Enhancement System (v0.1.5)
 
 Added in commit `485e099` (2026-02-19). All changes are additive; no existing Phase 1 behaviour was removed.
 

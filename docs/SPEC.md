@@ -1,6 +1,6 @@
 # ScholarGraph3D — Technical Specification
 
-> **Version:** 1.0 | **Last Updated:** 2026-02-19
+> **Version:** 1.1 | **Last Updated:** 2026-02-19
 > **Related:** [PRD.md](./PRD.md) | [ARCHITECTURE.md](./ARCHITECTURE.md) | [SDD/TDD Plan](./SDD_TDD_PLAN.md)
 
 ---
@@ -443,7 +443,39 @@ for await (const { event, data } of searchStream('transformers')) {
 }
 ```
 
-### 4.3 Paper Endpoints
+### 4.3 Phase 4: Conceptual Relationships
+
+#### GET /api/analysis/conceptual-edges/stream
+SSE endpoint for streaming conceptual relationship edges.
+
+**Query params:** `paper_ids` (comma-separated paper IDs)
+
+**SSE Event types:**
+| Type | Payload | Description |
+|------|---------|-------------|
+| `progress` | `{stage, message}` | Processing stage update |
+| `edge` | `{source, target, relation_type, weight, explanation, color}` | Discovered relationship |
+| `complete` | `{total_edges}` | All edges found |
+| `error` | `{message}` | Error occurred |
+
+**Relation types:**
+| Type | Color | Trigger |
+|------|-------|---------|
+| `methodology_shared` | `#9B59B6` | Shared research methods |
+| `theory_shared` | `#4A90D9` | Shared theoretical frameworks |
+| `similarity_shared` | `#95A5A6` | High SPECTER2 cosine similarity |
+
+#### POST /api/analysis/scaffold-angles
+**Body:** `{ "question": "research question string" }`
+**Returns:** `{ "angles": [{ "label", "query", "type" }] }` — 5 exploration angles
+
+#### GET /api/papers/by-doi
+**Query:** `doi` — DOI string or URL containing DOI
+**Returns:** `{ paper_id, title, doi, redirect_query }`
+
+---
+
+### 4.4 Paper Endpoints
 
 > Implements [PRD.md US-04](./PRD.md#phase-1-mvp--v010--v050) (detail), [US-05](./PRD.md#phase-1-mvp--v010--v050) (expansion).
 
@@ -526,7 +558,7 @@ Expand graph around a paper by loading both citations and references.
 }
 ```
 
-### 4.4 Graph Endpoints (Auth Required)
+### 4.5 Graph Endpoints (Auth Required)
 
 > Implements [PRD.md US-06](./PRD.md#phase-1-mvp--v010--v050) (save/load).
 
@@ -1099,6 +1131,15 @@ PostgreSQL RLS policies on `user_graphs` table ensure users can only access thei
 | **Phase 1.5 (Viz)** | v0.1.5 | ✅ Complete | 3-tier dimming, centrality-based labels, bridge/OA/bloom node layers, ghost edges, gap overlay, cluster visibility, stable expand |
 | **Phase 2 (AI)** | v0.2.0 | ✅ Complete | LLM multi-provider (OpenAI/Anthropic/Google/Groq), GraphRAG chat, trend analysis, gap detection |
 | **Phase 3 (Real-time)** | v0.3.0 | ✅ Complete | Natural language search (Groq), SSE progress stream, citation context modal, rate limiting (60/hr search, 20/hr AI, 2× auth), analytics logging, SEO |
+| **Phase 4 (Relationships)** | v0.4.0 | ✅ Complete | Critical node-click bug fix, panel resize, conceptual edges SSE, 3-mode home page, timeline view |
+
+---
+
+### Phase 4: UI State (useGraphStore additions)
+- `conceptualEdges: ConceptualEdge[]` — streamed relationship edges
+- `showConceptualEdges: boolean` — toggle in GraphControls
+- `showTimeline: boolean` — fixes node Y-axis by publication year
+- `isAnalyzingRelations: boolean` — SSE stream in progress
 
 ---
 
