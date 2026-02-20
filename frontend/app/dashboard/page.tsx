@@ -4,8 +4,9 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import SavedGraphs from '@/components/dashboard/SavedGraphs';
+import RecommendationCard from '@/components/dashboard/RecommendationCard';
 import { api } from '@/lib/api';
-import type { WatchQuery } from '@/types';
+import type { WatchQuery, Recommendation } from '@/types';
 import {
   Search,
   LogOut,
@@ -21,6 +22,7 @@ import {
   Filter,
   Loader2,
   ExternalLink,
+  Sparkles,
 } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -32,6 +34,11 @@ export default function DashboardPage() {
   const [watchLoading, setWatchLoading] = useState(false);
   const [isChecking, setIsChecking] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+
+  // Recommendations state
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+  const [recsLoading, setRecsLoading] = useState(false);
+  const [dismissingId, setDismissingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -51,11 +58,24 @@ export default function DashboardPage() {
     }
   }, []);
 
+  const loadRecommendations = useCallback(async () => {
+    setRecsLoading(true);
+    try {
+      const recs = await api.getRecommendations();
+      setRecommendations(recs);
+    } catch {
+      // Silently fail — recommendations are optional
+    } finally {
+      setRecsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (user) {
       loadWatchQueries();
+      loadRecommendations();
     }
-  }, [user, loadWatchQueries]);
+  }, [user, loadWatchQueries, loadRecommendations]);
 
   const handleCheckNow = async () => {
     setIsChecking(true);
@@ -76,6 +96,18 @@ export default function DashboardPage() {
       setDeleteConfirm(null);
     } catch {
       // ignore
+    }
+  };
+
+  const handleDismissRecommendation = async (id: string) => {
+    setDismissingId(id);
+    try {
+      await api.dismissRecommendation(id);
+      setRecommendations((prev) => prev.filter((r) => r.id !== id));
+    } catch {
+      // ignore
+    } finally {
+      setDismissingId(null);
     }
   };
 
@@ -148,6 +180,40 @@ export default function DashboardPage() {
 
       {/* Content */}
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-10">
+        {/* Recommendations Section */}
+        {(recsLoading || recommendations.length > 0) && (
+          <section>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-xl font-bold text-text-primary flex items-center gap-2 mb-1">
+                  <Sparkles className="w-5 h-5 text-purple-400" />
+                  Recommended for You
+                </h2>
+                <p className="text-sm text-text-secondary">
+                  Papers matching your research interests
+                </p>
+              </div>
+            </div>
+
+            {recsLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {recommendations.slice(0, 6).map((rec) => (
+                  <RecommendationCard
+                    key={rec.id}
+                    rec={rec}
+                    onDismiss={handleDismissRecommendation}
+                    isDismissing={dismissingId === rec.id}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
         {/* Watch Queries Section */}
         <section>
           <div className="flex items-center justify-between mb-4">

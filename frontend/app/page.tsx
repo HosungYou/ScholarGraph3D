@@ -4,6 +4,9 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, FileText, HelpCircle, Box, Brain, Zap } from 'lucide-react';
+import { useAuth } from '@/lib/auth-context';
+import { api } from '@/lib/api';
+import type { UserProfile } from '@/types';
 
 type InputMode = 'keyword' | 'doi' | 'question';
 
@@ -26,6 +29,9 @@ export default function LandingPage() {
   }[] | null>(null);
   const router = useRouter();
 
+  const { user } = useAuth();
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+
   // Load recent searches from localStorage
   useEffect(() => {
     try {
@@ -33,6 +39,13 @@ export default function LandingPage() {
       if (saved) setRecentSearches(JSON.parse(saved));
     } catch {}
   }, []);
+
+  // Load user profile when logged in
+  useEffect(() => {
+    if (user) {
+      api.getUserProfile().then(setUserProfile).catch(() => {});
+    }
+  }, [user]);
 
   const saveRecentSearch = (q: string) => {
     try {
@@ -281,8 +294,53 @@ export default function LandingPage() {
           )}
         </AnimatePresence>
 
-        {/* Quick examples (keyword mode) */}
-        {activeMode === 'keyword' && !scaffoldAngles && (
+        {/* Continue Exploring — logged-in users */}
+        {user && (userProfile?.research_interests?.length || recentSearches.length > 0) && !scaffoldAngles && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.35 }}
+            className="mb-6 glass rounded-2xl p-5 border border-purple-500/20"
+          >
+            <p className="text-xs text-text-secondary/60 mb-3 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-purple-400 inline-block" />
+              Continue exploring
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {/* From research interests */}
+              {userProfile?.research_interests?.slice(0, 3).map((interest) => (
+                <button
+                  key={interest}
+                  onClick={() => handleKeywordSearch(interest)}
+                  className="px-3 py-1.5 bg-purple-900/30 hover:bg-purple-900/50 border border-purple-700/40 rounded-full text-xs text-purple-300 hover:text-purple-200 transition-all"
+                >
+                  {interest}
+                </button>
+              ))}
+              {/* From recent searches */}
+              {recentSearches.slice(0, 3).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => handleKeywordSearch(s)}
+                  className="px-3 py-1.5 bg-surface/60 hover:bg-surface border border-border/30 rounded-full text-xs text-text-secondary hover:text-text-primary transition-all"
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+            <div className="mt-2 flex items-center justify-between">
+              <span className="text-[10px] text-text-secondary/40">
+                {userProfile ? `${userProfile.total_searches} searches · ${userProfile.total_papers_viewed} papers viewed` : ''}
+              </span>
+              <a href="/dashboard" className="text-[10px] text-purple-400/70 hover:text-purple-300 transition-colors">
+                View dashboard →
+              </a>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Quick examples (keyword mode) — shown only when not logged in or no profile data */}
+        {activeMode === 'keyword' && !scaffoldAngles && !(user && (userProfile?.research_interests?.length || recentSearches.length > 0)) && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -302,8 +360,8 @@ export default function LandingPage() {
           </motion.div>
         )}
 
-        {/* Recent searches */}
-        {recentSearches.length > 0 && !scaffoldAngles && (
+        {/* Recent searches — shown only when not logged in */}
+        {recentSearches.length > 0 && !scaffoldAngles && !user && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

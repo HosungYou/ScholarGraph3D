@@ -13,6 +13,9 @@ import type {
   WatchQuery,
   CitationIntent,
   LitReview,
+  UserProfile,
+  Recommendation,
+  InteractionEvent,
 } from '@/types';
 import { getSession } from './supabase';
 
@@ -516,6 +519,48 @@ export const api = {
     redirect_query: string;
   }> =>
     request(`${API_BASE}/api/papers/by-doi?doi=${encodeURIComponent(doi)}`),
+
+  // ─── Phase 5: Personalization ──────────────────────────────────────
+
+  getUserProfile: (): Promise<UserProfile> =>
+    request<UserProfile>(`${API_BASE}/api/user/profile`),
+
+  updateUserProfile: (prefs: Partial<UserProfile>): Promise<UserProfile> =>
+    request<UserProfile>(`${API_BASE}/api/user/profile`, {
+      method: 'PUT',
+      body: JSON.stringify(prefs),
+    }),
+
+  logInteraction: (event: InteractionEvent): Promise<void> =>
+    request<void>(`${API_BASE}/api/user/events`, {
+      method: 'POST',
+      body: JSON.stringify(event),
+    }).catch(() => { /* fire-and-forget, never throw */ }),
+
+  logSearch: (
+    query: string,
+    mode: string,
+    resultCount: number,
+    filtersUsed?: Record<string, unknown>
+  ): Promise<void> =>
+    request<void>(`${API_BASE}/api/user/search-history`, {
+      method: 'POST',
+      body: JSON.stringify({ query, mode, result_count: resultCount, filters_used: filtersUsed }),
+    }).catch(() => { /* fire-and-forget */ }),
+
+  getRecommendations: (): Promise<Recommendation[]> =>
+    request<Recommendation[]>(`${API_BASE}/api/user/recommendations`),
+
+  dismissRecommendation: async (id: string): Promise<void> => {
+    const authHeaders = await getAuthHeaders();
+    const response = await fetch(`${API_BASE}/api/user/recommendations/${id}/dismiss`, {
+      method: 'DELETE',
+      headers: { ...authHeaders },
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to dismiss recommendation: ${response.status}`);
+    }
+  },
 };
 
 export default api;

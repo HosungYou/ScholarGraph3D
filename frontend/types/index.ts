@@ -275,3 +275,48 @@ export const CONCEPTUAL_EDGE_LABELS: Record<ConceptualEdgeType, string> = {
   context_shared: 'Shared Context',
   similarity_shared: 'Semantic Similarity',
 };
+
+// ─── Phase 5: Personalization ────────────────────────────────────────
+
+export interface UserProfile {
+  user_id: string;
+  display_name?: string;
+  avatar_url?: string;
+  research_interests: string[];
+  preferred_fields: string[];
+  default_year_min?: number;
+  default_year_max?: number;
+  default_min_citations: number;
+  preferred_result_count: number;
+  total_searches: number;
+  total_papers_viewed: number;
+  last_active_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Recommendation {
+  id: string;
+  paper_id: string;
+  score: number;
+  explanation?: string;
+  reason_tags: string[];
+  is_dismissed: boolean;
+  generated_at: string;
+  expires_at: string;
+  // Paper fields (joined)
+  title?: string;
+  authors?: Author[];
+  year?: number;
+  venue?: string;
+  citation_count?: number;
+  abstract?: string;
+  tldr?: string;
+  fields?: string[];
+}
+
+export interface InteractionEvent {
+  paper_id: string;
+  action: 'view' | 'save_graph' | 'expand_citations' | 'chat_mention' | 'lit_review';
+  session_id?: string;
+}

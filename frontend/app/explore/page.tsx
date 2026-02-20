@@ -205,8 +205,16 @@ function ExploreContent() {
   useEffect(() => {
     if (data) {
       setGraphData(data);
+      // Log search for personalization (fire-and-forget)
+      if (query) {
+        api.logSearch(query, 'keyword', data.nodes.length, {
+          ...(yearMin && { year_min: yearMin }),
+          ...(yearMax && { year_max: yearMax }),
+          ...(field && { field }),
+        });
+      }
     }
-  }, [data, setGraphData]);
+  }, [data, setGraphData, query, yearMin, yearMax, field]);
 
   useEffect(() => {
     if (queryError) {
@@ -312,6 +320,7 @@ function ExploreContent() {
       try {
         const result = await api.expandPaper(paper.id);
         useGraphStore.getState().addNodes(result.nodes, result.edges);
+        api.logInteraction({ paper_id: paper.id, action: 'expand_citations' });
       } catch (err) {
         console.error('Failed to expand paper:', err);
         setExpandError(err instanceof Error ? err.message : 'Failed to expand paper citations');
@@ -320,6 +329,13 @@ function ExploreContent() {
     },
     [setExpandError]
   );
+
+  const handlePaperSelect = useCallback((paper: Paper | null) => {
+    selectPaper(paper);
+    if (paper) {
+      api.logInteraction({ paper_id: paper.id, action: 'view' });
+    }
+  }, [selectPaper]);
 
   // Right panel: both can show simultaneously as independent columns
   const showPaperDetail = !!selectedPaper;
@@ -550,7 +566,7 @@ function ExploreContent() {
               />
               <PaperDetailPanel
                 paper={selectedPaper}
-                onClose={() => selectPaper(null)}
+                onClose={() => handlePaperSelect(null)}
                 onExpand={() => handleExpandPaper(selectedPaper)}
               />
             </motion.div>
@@ -593,12 +609,12 @@ function ExploreContent() {
           onClose={() => setCitationModalData(null)}
           onViewSourcePaper={(id) => {
             const paper = graphData?.nodes.find((n) => n.id === id);
-            if (paper) selectPaper(paper);
+            if (paper) handlePaperSelect(paper);
             setCitationModalData(null);
           }}
           onViewTargetPaper={(id) => {
             const paper = graphData?.nodes.find((n) => n.id === id);
-            if (paper) selectPaper(paper);
+            if (paper) handlePaperSelect(paper);
             setCitationModalData(null);
           }}
         />
