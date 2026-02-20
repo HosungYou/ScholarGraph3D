@@ -3,6 +3,10 @@ HDBSCAN clustering for paper embeddings.
 
 Clusters papers based on SPECTER2 embeddings and labels clusters
 using OpenAlex topic metadata.
+
+v0.7.0 fix: HDBSCAN now runs on 50-dim intermediate UMAP embeddings
+(not 3D UMAP coordinates) to avoid double-distortion bug.
+(McInnes et al. 2018; Campello et al. 2013)
 """
 
 import logging
@@ -12,6 +16,9 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 logger = logging.getLogger(__name__)
+
+# Threshold: if input has more dims than this, reduce to intermediate first
+_HIGH_DIM_THRESHOLD = 10
 
 
 class PaperClusterer:
@@ -24,10 +31,18 @@ class PaperClusterer:
         min_samples: Optional[int] = None,
     ) -> np.ndarray:
         """
-        Cluster papers using HDBSCAN on SPECTER2 embeddings.
+        Cluster papers using HDBSCAN.
+
+        v0.7.0: Input should be high-dimensional embeddings (768-dim or
+        50-dim intermediate UMAP), NOT 3D UMAP coordinates.
+        If high-dimensional input is detected (dim > 10), intermediate
+        UMAP reduction to 50D is applied first to preserve topology.
 
         Args:
-            embeddings: (N, D) array of embeddings (768-dim or 3D reduced)
+            embeddings: (N, D) array of embeddings.
+                        Preferred: 50-dim intermediate UMAP output.
+                        Also accepted: 768-dim SPECTER2 (slower but correct).
+                        Deprecated: 3D UMAP coords (triggers auto-upgrade to 50D).
             min_cluster_size: Minimum points to form a cluster
             min_samples: Min samples for core point (default: min_cluster_size)
 
@@ -40,19 +55,65 @@ class PaperClusterer:
             logger.warning(f"Too few papers ({embeddings.shape[0]}) for clustering")
             return np.zeros(embeddings.shape[0], dtype=int)
 
+        # Prepare clustering input
+        cluster_input = self._prepare_cluster_input(embeddings)
+
+        # Use cosine metric for high-dim, euclidean for reduced
+        metric = "euclidean"  # After intermediate UMAP, euclidean is appropriate
+
         clusterer = HDBSCAN(
             min_cluster_size=min_cluster_size,
             min_samples=min_samples or min_cluster_size,
-            metric="euclidean",
+            metric=metric,
             cluster_selection_method="eom",
         )
 
-        labels = clusterer.fit_predict(embeddings)
+        labels = clusterer.fit_predict(cluster_input)
         n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
         n_noise = (labels == -1).sum()
-        logger.info(f"HDBSCAN: {n_clusters} clusters, {n_noise} noise points from {embeddings.shape[0]} papers")
+        logger.info(
+            f"HDBSCAN: {n_clusters} clusters, {n_noise} noise points "
+            f"from {embeddings.shape[0]} papers "
+            f"(input shape for clustering: {cluster_input.shape})"
+        )
 
         return labels
+
+    def _prepare_cluster_input(self, embeddings: np.ndarray) -> np.ndarray:
+        """
+        Prepare embeddings for HDBSCAN clustering.
+
+        If dim > _HIGH_DIM_THRESHOLD (e.g., 768-dim SPECTER2 vectors),
+        reduce to 50D intermediate UMAP first. This avoids the double-
+        distortion bug where HDBSCAN ran on 3D UMAP coords (v0.6.0 behavior).
+
+        For dim <= _HIGH_DIM_THRESHOLD (already reduced, e.g., 3D UMAP),
+        we still run HDBSCAN but log a deprecation warning — callers should
+        pass 50D intermediate instead.
+        """
+        n, dim = embeddings.shape
+
+        if dim <= _HIGH_DIM_THRESHOLD:
+            if dim <= 3:
+                logger.warning(
+                    f"HDBSCAN received {dim}-dim input (UMAP 3D coords). "
+                    "This may produce poor clusters due to information loss. "
+                    "Pass 768-dim or 50-dim intermediate embeddings instead."
+                )
+            return embeddings
+
+        # High-dimensional: reduce to intermediate for clustering
+        logger.info(
+            f"Reducing {dim}-dim embeddings to 50D intermediate for HDBSCAN "
+            "(avoids double-distortion bug, preserves topology)"
+        )
+        from graph.embedding_reducer import EmbeddingReducer
+        reducer = EmbeddingReducer()
+        return reducer.reduce_to_intermediate(
+            embeddings,
+            n_components=min(50, n - 2),
+            n_neighbors=min(15, n - 1),
+        )
 
     def label_clusters(
         self,

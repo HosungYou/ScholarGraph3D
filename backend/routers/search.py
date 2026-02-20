@@ -217,13 +217,17 @@ async def search_papers(request: SearchRequest, db: Database = Depends(get_db)):
         embeddings = np.array([p.embedding for p in papers_with_embeddings])
         paper_ids = [str(i) for i in range(len(papers_with_embeddings))]
 
-        # 3. UMAP 3D reduction
+        # 3. UMAP 3D reduction with temporal Z-axis (Z = publication year)
         reducer = EmbeddingReducer()
-        coords_3d = await asyncio.to_thread(reducer.reduce_to_3d, embeddings)
+        years = [p.year for p in papers_with_embeddings]
+        coords_3d = await asyncio.to_thread(
+            lambda: reducer.reduce_to_3d(embeddings, years=years, use_temporal_z=True)
+        )
 
-        # 4. HDBSCAN clustering
+        # 4. HDBSCAN clustering on high-dim embeddings (avoids double-distortion bug)
+        # v0.7.0: pass 768-dim embeddings; clusterer internally reduces to 50D UMAP
         clusterer = PaperClusterer()
-        cluster_labels = await asyncio.to_thread(clusterer.cluster, coords_3d, request.min_cluster_size)
+        cluster_labels = await asyncio.to_thread(clusterer.cluster, embeddings, request.min_cluster_size)
 
         paper_dicts = [p.to_dict() for p in papers_with_embeddings]
         cluster_meta = clusterer.label_clusters(paper_dicts, cluster_labels)

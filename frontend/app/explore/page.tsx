@@ -260,14 +260,15 @@ function ExploreContent() {
   }, [query, queryLoading, yearMin, yearMax]);
 
   // Handle DOI-based navigation from landing page
+  // v0.7.0: Route to /explore/seed with paper_id for proper citation topology
   const doi = searchParams.get('doi');
   useEffect(() => {
     if (!doi) return;
     api.getPaperByDOI(doi).then((result) => {
-      if (result.redirect_query) {
+      if (result.paper_id) {
         const params = new URLSearchParams();
-        params.set('q', result.redirect_query);
-        window.location.replace(`/explore?${params.toString()}`);
+        params.set('paper_id', result.paper_id);
+        window.location.replace(`/explore/seed?${params.toString()}`);
       }
     }).catch((err) => {
       console.error('DOI lookup failed:', err);

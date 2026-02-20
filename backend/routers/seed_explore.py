@@ -219,14 +219,18 @@ async def seed_explore(request: SeedExploreRequest):
             paper_ids = [str(i) for i in range(len(papers_with_emb))]
             s2_to_node = {p.paper_id: str(i) for i, p in enumerate(papers_with_emb)}
 
-            # 5. UMAP 3D
+            # 5. UMAP 3D with temporal Z-axis (Z = publication year)
             reducer = EmbeddingReducer()
-            coords_3d = await asyncio.to_thread(reducer.reduce_to_3d, embeddings)
+            years = [p.year for p in papers_with_emb]
+            coords_3d = await asyncio.to_thread(
+                lambda: reducer.reduce_to_3d(embeddings, years=years, use_temporal_z=True)
+            )
 
-            # 6. HDBSCAN clustering
+            # 6. HDBSCAN clustering on high-dim embeddings (avoids double-distortion bug)
+            # v0.7.0: pass 768-dim embeddings; clusterer internally reduces to 50D UMAP
             clusterer = PaperClusterer()
             min_cluster = max(3, min(5, len(papers_with_emb) // 5))
-            cluster_labels = await asyncio.to_thread(clusterer.cluster, coords_3d, min_cluster)
+            cluster_labels = await asyncio.to_thread(clusterer.cluster, embeddings, min_cluster)
             paper_dicts = [{
                 "title": p.title,
                 "abstract": p.abstract or "",

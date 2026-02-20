@@ -71,6 +71,16 @@ async def lifespan(app: FastAPI):
     logger.info(f"  OA Email: {settings.oa_email or 'not set (no polite pool)'}")
     logger.info(f"  OA API Key: {'configured' if settings.oa_api_key else 'not set (free tier)'}")
 
+    # Preload SPECTER2 adhoc_query adapter for GraphRAG ANN search (v0.7.0)
+    # Avoids cold-start latency on first chat/RAG query
+    import asyncio as _asyncio
+    try:
+        from graph.graph_rag import _get_specter2_model
+        await _asyncio.to_thread(_get_specter2_model, "adhoc_query")
+        logger.info("  SPECTER2 adhoc_query adapter: preloaded")
+    except Exception as e:
+        logger.warning(f"  SPECTER2 preload skipped (will load on first request): {e}")
+
     yield
 
     # Shutdown

@@ -1,9 +1,12 @@
 """
 Data Fusion Service for ScholarGraph3D.
 
-OA-first search + S2 enrichment + DOI dedup + abstract fallback.
+OA-first search + S2 enrichment + DOI dedup + RRF scoring + abstract fallback.
 Merges results from OpenAlex (primary metadata) and Semantic Scholar
 (TLDR, SPECTER2 embeddings, citation intents).
+
+v0.7.0: Added Reciprocal Rank Fusion (RRF) for hybrid relevance scoring.
+(Cormack et al., SIGIR 2009)
 """
 
 import logging
@@ -17,6 +20,9 @@ from .semantic_scholar import (
 )
 
 logger = logging.getLogger(__name__)
+
+# RRF constant (TREC-validated, see Cormack et al. 2009)
+_RRF_K = 60
 
 
 class UnifiedPaper:
@@ -39,6 +45,7 @@ class UnifiedPaper:
         authors: Optional[List[Dict[str, Any]]] = None,
         s2_paper_id: Optional[str] = None,
         oa_work_id: Optional[str] = None,
+        rrf_score: float = 0.0,
     ):
         self.doi = doi
         self.title = title
@@ -55,6 +62,7 @@ class UnifiedPaper:
         self.authors = authors or []
         self.s2_paper_id = s2_paper_id
         self.oa_work_id = oa_work_id
+        self.rrf_score = rrf_score  # Reciprocal Rank Fusion score
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -138,16 +146,21 @@ def _s2_paper_to_unified(paper: SemanticScholarPaper) -> UnifiedPaper:
     )
 
 
+def _paper_key(paper: UnifiedPaper) -> str:
+    """Get a stable dedup key for a paper."""
+    return paper.doi or paper.title.lower().strip()
+
+
 class DataFusionService:
     """
-    OA-first search + S2 enrichment + DOI dedup + abstract fallback.
+    OA-first search + S2 enrichment + DOI dedup + RRF scoring + abstract fallback.
 
     Strategy:
-    1. OpenAlex keyword search (primary) - best metadata coverage
-    2. S2 search (supplementary) - provides TLDR + embeddings
-    3. DOI-based dedup + merge
+    1. Parallel OA + S2 search
+    2. DOI-based dedup + merge (OA metadata preferred + S2 TLDR/embeddings)
+    3. Reciprocal Rank Fusion (RRF) scoring from both source ranks
     4. Abstract fallback: OA abstract -> S2 TLDR -> "No abstract available"
-    5. Log embedding coverage
+    5. Prioritize: embeddings first, then RRF score
     6. Return unified paper list
     """
 
@@ -167,7 +180,7 @@ class DataFusionService:
         fields: Optional[List[str]] = None,
     ) -> List[UnifiedPaper]:
         """
-        Search papers using OA-first strategy with S2 enrichment.
+        Search papers using OA-first strategy with S2 enrichment + RRF scoring.
 
         Args:
             query: Search query string
@@ -176,7 +189,7 @@ class DataFusionService:
             fields: Optional fields of study filter
 
         Returns:
-            List of unified papers with embeddings
+            List of unified papers sorted by RRF score, embeddings prioritized
         """
         # 1. OpenAlex keyword search (primary)
         oa_filter_params = {}
@@ -216,18 +229,18 @@ class DataFusionService:
             s2_results = s2_raw
             logger.info(f"S2 search returned {len(s2_results)} results for '{query}'")
 
-        # 3. DOI-based dedup + merge
+        # 3. DOI-based dedup + merge with RRF scoring
         merged = self._merge_results(oa_results, s2_results)
         logger.info(f"Merged to {len(merged)} unique papers")
 
         # 4. Abstract fallback applied during merge
 
-        # 5. Log embedding coverage (embeddings now included in S2 search response)
+        # 5. Log embedding coverage
         papers_with_emb = sum(1 for p in merged if p.embedding is not None)
         logger.info(f"{papers_with_emb}/{len(merged)} papers have embeddings after merge")
 
-        # Prioritize papers with embeddings to avoid losing them during truncation
-        merged.sort(key=lambda p: (p.embedding is None,))
+        # Sort: embeddings first, then by RRF score descending
+        merged.sort(key=lambda p: (p.embedding is None, -p.rrf_score))
 
         # 6. Return unified paper list (up to limit)
         return merged[:limit]
@@ -237,11 +250,40 @@ class DataFusionService:
         oa_results: List[OpenAlexWork],
         s2_results: List[SemanticScholarPaper],
     ) -> List[UnifiedPaper]:
-        """DOI-based dedup, prefer OA metadata + S2 TLDR/embeddings."""
+        """
+        DOI-based dedup, prefer OA metadata + S2 TLDR/embeddings.
+        Apply Reciprocal Rank Fusion (RRF) scoring from both source ranks.
+
+        RRF(d) = 1/(k + rank_OA(d)) + 1/(k + rank_S2(d))
+        k=60 per Cormack et al. (SIGIR 2009)
+        """
+        # Build rank maps for RRF scoring
+        # OA: position 0 = most relevant (OA sorts by relevance_score)
+        oa_rank_by_doi: Dict[str, int] = {}
+        oa_rank_by_title: Dict[str, int] = {}
+        for rank, work in enumerate(oa_results):
+            doi = _normalize_doi(work.doi)
+            if doi:
+                oa_rank_by_doi[doi] = rank
+            if work.title:
+                oa_rank_by_title[work.title.lower().strip()] = rank
+
+        # S2: position 0 = most relevant
+        s2_rank_by_doi: Dict[str, int] = {}
+        s2_rank_by_title: Dict[str, int] = {}
+        for rank, paper in enumerate(s2_results):
+            doi = _normalize_doi(paper.doi)
+            if doi:
+                s2_rank_by_doi[doi] = rank
+            if paper.title:
+                s2_rank_by_title[paper.title.lower().strip()] = rank
+
+        n_oa = max(len(oa_results), 1)
+        n_s2 = max(len(s2_results), 1)
+
         # Index S2 results by DOI for fast lookup
         s2_by_doi: Dict[str, SemanticScholarPaper] = {}
         s2_by_title: Dict[str, SemanticScholarPaper] = {}
-        s2_unmatched: List[SemanticScholarPaper] = []
 
         for paper in s2_results:
             doi = _normalize_doi(paper.doi)
@@ -253,6 +295,13 @@ class DataFusionService:
         merged: List[UnifiedPaper] = []
         seen_dois: set = set()
         seen_titles: set = set()
+
+        def _compute_rrf(doi: Optional[str], title: str) -> float:
+            """Compute RRF score from OA and S2 ranks."""
+            title_key = title.lower().strip()
+            oa_rank = oa_rank_by_doi.get(doi, oa_rank_by_title.get(title_key, n_oa)) if doi else oa_rank_by_title.get(title_key, n_oa)
+            s2_rank = s2_rank_by_doi.get(doi, s2_rank_by_title.get(title_key, n_s2)) if doi else s2_rank_by_title.get(title_key, n_s2)
+            return 1.0 / (_RRF_K + oa_rank) + 1.0 / (_RRF_K + s2_rank)
 
         # Process OA results first (primary metadata source)
         for oa_work in oa_results:
@@ -281,6 +330,9 @@ class DataFusionService:
             if not unified.abstract and unified.tldr:
                 unified.abstract = unified.tldr
 
+            # RRF score
+            unified.rrf_score = _compute_rrf(doi, unified.title)
+
             if doi:
                 seen_dois.add(doi)
             if unified.title:
@@ -296,6 +348,7 @@ class DataFusionService:
                     unified = _s2_paper_to_unified(s2_paper)
                     if not unified.abstract and unified.tldr:
                         unified.abstract = unified.tldr
+                    unified.rrf_score = _compute_rrf(doi, unified.title)
                     merged.append(unified)
                     seen_dois.add(doi)
                     seen_titles.add(title_key)
@@ -309,6 +362,7 @@ class DataFusionService:
                 unified = _s2_paper_to_unified(s2_paper)
                 if not unified.abstract and unified.tldr:
                     unified.abstract = unified.tldr
+                unified.rrf_score = _compute_rrf(doi, unified.title)
                 merged.append(unified)
                 if doi:
                     seen_dois.add(doi)

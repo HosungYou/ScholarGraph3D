@@ -168,7 +168,9 @@ Search endpoint returns: `{ nodes: Paper[], edges: GraphEdge[], clusters: Cluste
 - Backend: 1 uvicorn worker (async handles concurrency; CPU ops via asyncio.to_thread)
 - DB pool: min=1, max=3 connections
 - LLM cache: max 200 entries with oldest-25% eviction
-- HDBSCAN runs on 3D UMAP coordinates (not 768-dim embeddings)
+- HDBSCAN runs on 50-dim intermediate UMAP embeddings (NOT 3D coords — double-distortion fix, v0.7.0)
+- Z-axis = publication year (not UMAP dim 3) — semantic topology on X/Y, time depth on Z (v0.7.0)
+- GraphRAG uses SPECTER2 adhoc_query adapter for query encoding + pgvector ANN search (v0.7.0)
 
 ## Documentation Map
 
@@ -178,6 +180,8 @@ Search endpoint returns: `{ nodes: Paper[], edges: GraphEdge[], clusters: Cluste
 | SPEC | Technical specification, API contracts, DB schema | docs/SPEC.md |
 | ARCHITECTURE | System design, data pipeline, deployment | docs/ARCHITECTURE.md |
 | SDD/TDD Plan | Test strategy, coverage requirements | docs/SDD_TDD_PLAN.md |
+| PHILOSOPHY | Design philosophy, "why" behind every feature decision | docs/PHILOSOPHY.md |
+| TECH_PROOF | Academic justification for all technical choices (SPECTER2, RRF, UMAP, HDBSCAN) | docs/TECH_PROOF.md |
 | CLAUDE.md | This file — Claude Code project context | ./CLAUDE.md |
 
 ## LLM Provider Architecture (Phase 2)

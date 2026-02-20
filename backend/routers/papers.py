@@ -411,8 +411,10 @@ async def get_paper_by_doi(
     doi: str = Query(..., description="DOI or URL of the paper"),
 ):
     """
-    Fetch a paper by DOI and build a citation network graph around it.
-    Returns GraphData compatible with the frontend.
+    Fetch a paper by DOI and return its Semantic Scholar paper_id for seed explore mode.
+
+    v0.7.0: Returns paper_id directly so frontend routes to /explore/seed
+    instead of doing a keyword search redirect (which bypasses seed paper topology).
     """
     import re
 
@@ -422,8 +424,6 @@ async def get_paper_by_doi(
     if doi_match:
         doi_clean = doi_match.group(0)
 
-    # Look up in DB first
-    # Then try Semantic Scholar API
     s2_client = _create_s2_client()
 
     try:
@@ -433,12 +433,17 @@ async def get_paper_by_doi(
         if not paper_data:
             raise HTTPException(status_code=404, detail=f"Paper not found for DOI: {doi_clean}")
 
-        # Return a minimal response pointing to explore page
+        paper_id = paper_data.get("paperId")
+        title = paper_data.get("title", "")
+
+        if not paper_id:
+            raise HTTPException(status_code=404, detail=f"No Semantic Scholar ID for DOI: {doi_clean}")
+
+        # Return paper_id for seed explore routing (not redirect_query keyword search)
         return {
-            "paper_id": paper_data.get("paperId"),
-            "title": paper_data.get("title", ""),
+            "paper_id": paper_id,
+            "title": title,
             "doi": doi_clean,
-            "redirect_query": f"{paper_data.get('title', doi_clean)[:80]}",
         }
     except HTTPException:
         raise

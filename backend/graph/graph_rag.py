@@ -3,6 +3,10 @@ GraphRAG context builder for chat.
 
 Builds structured context from graph data (papers, clusters, gaps)
 for use as LLM system prompt in the GraphRAG chat pipeline.
+
+v0.7.0: Replaced tsvector keyword search with SPECTER2 adhoc_query adapter
++ pgvector ANN search for semantically accurate paper retrieval.
+(Singh et al. 2022 — adhoc_query adapter designed for asymmetric query-doc matching)
 """
 
 import logging
@@ -12,6 +16,41 @@ from typing import Any, Dict, List, Optional
 from database import Database
 
 logger = logging.getLogger(__name__)
+
+# Lazy SPECTER2 model cache (loaded once per process)
+_specter2_model = None
+_specter2_adapter_loaded = None
+
+
+def _get_specter2_model(adapter: str = "adhoc_query"):
+    """
+    Lazily load SPECTER2 model with the specified adapter.
+
+    Uses adhoc_query adapter for query encoding (query → paper space mapping).
+    This is the correct adapter for asymmetric retrieval (Furnas et al. 1987 vocabulary
+    problem + Singh et al. 2022 SPECTER2 adapter design).
+    """
+    global _specter2_model, _specter2_adapter_loaded
+    if _specter2_model is not None and _specter2_adapter_loaded == adapter:
+        return _specter2_model
+
+    try:
+        from sentence_transformers import SentenceTransformer
+        logger.info(f"Loading SPECTER2 model with '{adapter}' adapter for GraphRAG...")
+        model = SentenceTransformer("allenai/specter2_base")
+        model.load_adapter(
+            f"allenai/specter2",
+            source="hf",
+            load_as=adapter,
+            set_active=True,
+        )
+        _specter2_model = model
+        _specter2_adapter_loaded = adapter
+        logger.info("SPECTER2 adhoc_query adapter loaded for GraphRAG.")
+        return model
+    except Exception as e:
+        logger.warning(f"SPECTER2 model load failed: {e}. Will use keyword fallback.")
+        return None
 
 
 @dataclass
@@ -44,7 +83,8 @@ class GraphRAGContextBuilder:
     Builds LLM-ready context from graph data.
 
     Pipeline:
-    1. Find relevant papers via keyword match or embedding similarity
+    1. Find relevant papers via SPECTER2 adhoc_query ANN search (pgvector)
+       or keyword match fallback
     2. Collect cluster context for matched papers
     3. Get citation relationships between matched papers
     4. Format into structured context string with [1][2] citations
@@ -127,11 +167,14 @@ class GraphRAGContextBuilder:
         max_papers: int = 20,
     ) -> RAGContext:
         """
-        Build context with optional pgvector similarity search from the database.
+        Build context with SPECTER2 adhoc_query ANN search from the database.
 
-        Falls back to keyword matching if DB is unavailable.
+        v0.7.0: Uses SPECTER2 adhoc_query adapter to encode the query into
+        the same embedding space as papers, then retrieves nearest neighbors
+        via pgvector ivfflat ANN search.
+
+        Falls back to keyword matching if DB/model is unavailable.
         """
-        # Try pgvector search first if DB is connected
         if self.db.is_connected:
             try:
                 db_papers = await self._pgvector_search(query, max_papers)
@@ -229,7 +272,6 @@ class GraphRAGContextBuilder:
             title = (paper.get("title") or "").lower()
             abstract = (paper.get("abstract") or "").lower()
             tldr = (paper.get("tldr") or "").lower()
-            text = f"{title} {abstract} {tldr}"
 
             # Score: count of matching query terms, weighted by location
             score = 0.0
@@ -279,11 +321,61 @@ class GraphRAGContextBuilder:
         limit: int,
     ) -> List[Dict[str, Any]]:
         """
-        Search papers by text similarity using PostgreSQL full-text search.
+        Search papers by SPECTER2 adhoc_query embedding + pgvector ANN.
 
-        Note: For embedding-based search, the query would need to be embedded
-        first via SPECTER2. This method uses simple text matching as a fallback.
+        v0.7.0: Encodes query with SPECTER2 adhoc_query adapter (designed for
+        asymmetric query-document matching, Singh et al. 2022) then retrieves
+        semantically similar papers via pgvector ivfflat cosine ANN search.
+
+        Falls back to tsvector keyword search if SPECTER2 unavailable.
         """
+        # Try SPECTER2 embedding search first
+        model = _get_specter2_model(adapter="adhoc_query")
+        if model is not None:
+            try:
+                embedding = model.encode([query], show_progress_bar=False)[0]
+                embedding_list = embedding.tolist()
+
+                rows = await self.db.fetch(
+                    """
+                    SET ivfflat.probes = 10;
+                    SELECT id, s2_paper_id, title, abstract, year, venue,
+                           citation_count, fields_of_study, tldr, authors,
+                           is_open_access, oa_url, doi,
+                           1 - (embedding <=> $1::vector) as similarity_score
+                    FROM papers
+                    WHERE embedding IS NOT NULL
+                    ORDER BY embedding <=> $1::vector
+                    LIMIT $2
+                    """,
+                    embedding_list,
+                    limit,
+                )
+
+                if rows:
+                    logger.debug(f"SPECTER2 ANN search returned {len(rows)} papers for '{query}'")
+                    return [
+                        {
+                            "id": str(row["id"]),
+                            "s2_paper_id": row["s2_paper_id"],
+                            "title": row["title"],
+                            "abstract": row["abstract"],
+                            "year": row["year"],
+                            "venue": row["venue"],
+                            "citation_count": row["citation_count"] or 0,
+                            "fields": row["fields_of_study"] or [],
+                            "tldr": row["tldr"],
+                            "authors": row["authors"] or [],
+                            "is_open_access": row["is_open_access"],
+                            "oa_url": row["oa_url"],
+                            "doi": row["doi"],
+                        }
+                        for row in rows
+                    ]
+            except Exception as e:
+                logger.warning(f"SPECTER2 ANN search failed, falling back to keyword: {e}")
+
+        # Fallback: PostgreSQL full-text search
         rows = await self.db.fetch(
             """
             SELECT id, s2_paper_id, title, abstract, year, venue,
