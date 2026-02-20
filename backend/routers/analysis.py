@@ -437,7 +437,7 @@ async def _call_groq(api_key: str, model: str, prompt: str) -> List[str]:
         return _parse_hypotheses(text)
 
 
-@router.get("/conceptual-edges/stream")
+@router.get("/api/analysis/conceptual-edges/stream")
 async def stream_conceptual_edges(
     paper_ids: str = QueryParam(..., description="Comma-separated paper IDs"),
     request: Request = None,
@@ -684,7 +684,7 @@ Return a JSON array with one object per paper. Be specific and concise."""
     )
 
 
-@router.post("/scaffold-angles")
+@router.post("/api/analysis/scaffold-angles")
 async def generate_scaffold_angles(
     body: dict,
 ):
