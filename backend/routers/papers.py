@@ -74,6 +74,10 @@ class StableExpandNode(BaseModel):
     venue: Optional[str] = None
     is_open_access: bool = False
     doi: Optional[str] = None
+    authors: List[Dict[str, Any]] = []
+    abstract: Optional[str] = None
+    tldr: Optional[str] = None
+    fields: List[str] = []
     initial_x: float = 0.0
     initial_y: float = 0.0
     initial_z: float = 0.0
@@ -408,6 +412,10 @@ async def expand_paper_stable(
             venue=paper.venue,
             is_open_access=paper.is_open_access,
             doi=paper.doi,
+            authors=paper.authors,
+            abstract=paper.abstract,
+            tldr=paper.tldr,
+            fields=paper.fields_of_study,
             initial_x=ix,
             initial_y=iy,
             initial_z=iz,

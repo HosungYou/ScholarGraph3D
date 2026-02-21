@@ -288,7 +288,7 @@ function SeedExploreContent() {
         </div>
 
         {/* Center: 3D Graph */}
-        <div className="flex-1 relative">
+        <div className="flex-1 relative min-w-0 overflow-hidden">
           {isLoading && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/80">
               <div className="text-center">

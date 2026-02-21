@@ -237,8 +237,22 @@ async def seed_explore(request: SeedExploreRequest):
             "title": p.title,
             "abstract": p.abstract or "",
             "fields_of_study": p.fields_of_study,
+            "oa_topics": [],
         } for p in papers_with_emb]
         cluster_meta = clusterer.label_clusters(paper_dicts, cluster_labels)
+        # Deduplicate cluster labels (e.g., multiple "Computer Science" clusters)
+        label_counts: Dict[str, int] = {}
+        for cid, info in cluster_meta.items():
+            label = info["label"]
+            if label in label_counts:
+                label_counts[label] += 1
+                info["label"] = f"{label} ({label_counts[label]})"
+            else:
+                label_counts[label] = 1
+        for cid, info in cluster_meta.items():
+            base_label = info["label"].split(" (")[0]
+            if label_counts.get(base_label, 0) > 1 and "(" not in info["label"]:
+                info["label"] = f"{base_label} (1)"
         hulls = clusterer.compute_hulls(coords_3d, cluster_labels)
 
         # 7. Similarity edges
