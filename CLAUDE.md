@@ -251,6 +251,7 @@ Search endpoint returns: `{ nodes: Paper[], edges: GraphEdge[], clusters: Cluste
 | RELEASE_v1.0.0 | v1.0.0 release notes | docs/RELEASE_v1.0.0.md |
 | RELEASE_v1.0.1 | v1.0.1 visibility fix release notes | docs/RELEASE_v1.0.1.md |
 | RELEASE_v1.1.0 | v1.1.0 release notes | docs/RELEASE_v1.1.0.md |
+| RELEASE_v1.1.1 | v1.1.1 codebase audit release notes | docs/RELEASE_v1.1.1.md |
 | release-notes/ | Additional release notes (v0.4.0, v0.5.0, v0.5.1, v0.5.2, v0.7.2) | release-notes/ |
 | DEVELOPMENT.md | Development guide | ./DEVELOPMENT.md |
 | AGENTS.md | Agent configuration | ./AGENTS.md |
@@ -288,3 +289,4 @@ Patterns: CachedLLMProvider (decorator, in-memory TTL), CircuitBreaker (5 failur
 - **v1.0.0 (Cosmic Universe Theme)**: ✅ — full UI redesign: papers=stars (GLSL twinkle shaders), clusters=nebulae (particle clouds), edges=light streams (flow shaders), Three.js starfield landing, HUD panels, warp transition, 10 new files, 27 modified files, showCosmicTheme toggle
 - **v1.0.1 (Visibility Enhancement)**: ✅ — dramatic field color differentiation (max hue separation), sqrt node sizing (4-30 range), glow opacity 0.9/scale 6x, nebula opacity 0.3/0.5, linkDirectionalParticles for citation flow, GraphLegend uses STAR_COLOR_MAP, stronger supernova/corona textures
 - **v1.1.0 (Legend · Expand · Error Resilience)**: ✅ — Visual Guide legend (8 features), expansion visual effects (pulse/glow/edge highlight 3s), DOI fallback expand, API timeout+retry (20s AbortController, 429 auto-retry), ExpandMeta partial success reporting, specific error messages, PaperDetailPanel badges (Top 10%/Bridge/OA) + "Expanded from", diagnostic logging (dev mode)
+- **v1.1.1 (Codebase Audit)**: ✅ — API contract fixes (citation intents 404, search filters, streaming chat), Three.js memory leak fixes (disposeGroup, CosmicAnimationManager deregister, scene disposal), ~160 lines dead code removed, backend race condition fix, 8 documentation files updated for consistency
