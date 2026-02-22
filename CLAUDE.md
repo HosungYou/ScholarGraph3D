@@ -166,24 +166,28 @@ Search endpoint returns: `{ nodes: Paper[], edges: GraphEdge[], clusters: Cluste
 - Landing: Three.js starfield (3000 stars + Milky Way) + warp transition on search
 - See: docs/DESIGN_THEME.md for full design system reference
 
-### Node Visual Mapping (Cosmic Star Nodes)
-- Size: `Math.max(3, Math.log(citation_count + 1) * 3)`
-- Color: Field → stellar temperature (CS=Blue Giant #7EB8FF, Bio=Green Nebula #5BFF8F, Med=Red Supergiant #FF6B5B, Physics=Purple #B580D9, Social=K-type Orange #FFa040)
+### Node Visual Mapping (Cosmic Star Nodes) — v1.0.1
+- Size: `Math.min(30, Math.max(4, Math.sqrt(citation_count + 1) * 1.5))` — sqrt scale for dramatic size differences
+- Color: Maximum hue separation (CS=Blue #4DA6FF, Bio=Green #69F0AE, Med=Red #FF5252, Physics=Magenta #EA80FC, Engineering=Purple #B388FF, Business=Orange #FF9100, Economics=Gold #FFD740)
 - Twinkle: GLSL shader — rate 1.5Hz (old papers) → 6.0Hz (new papers)
 - Opacity: `0.3 + 0.7 * ((year - minYear) / (maxYear - minYear))` (base); 3-tier dimming on select
+- Glow: Sprite with opacity `displayOpacity * 0.9`, scale `size * 6`, additive blending
 - Label: First author last name + year (e.g., "Vaswani 2017"); shown only for top-20% citation papers
 - Star layers: glow sprite (additive), lens flare (selected), corona (OA), supernova burst (top 10%), binary star (bridge)
 
-### Cluster Visual Mapping (Nebula Clouds)
+### Cluster Visual Mapping (Nebula Clouds) — v1.0.1
 - Gaussian-distributed THREE.Points particles per cluster (Box-Muller)
-- Particle count: `min(200, nodeCount * 15)` per cluster
+- Particle count: `min(250, max(50, nodeCount * 20))` per cluster
+- Base opacity: 0.3 (normal) / 0.5 (emerging) — dramatically increased from v1.0.0
+- Point size: 5.0 (camera-relative), spread multipliers 0.8/0.8/0.6 (XY/Z)
 - AdditiveBlending, shimmer shader, distance-based alpha falloff
 
-### Edge Visual Mapping (Light Streams)
-- Citation: TubeGeometry + UV-offset flow shader (direction = citing → cited)
-- Similarity: TubeGeometry + sinusoidal wave shader
+### Edge Visual Mapping (Light Streams) — v1.0.1
+- Citation: `linkDirectionalParticles` (4 cyan particles, speed 0.006) for flow animation
+- Citation color: intent color or `#00E5FF80` (cyan), linkOpacity 0.8
+- Similarity: Dashed lines (#4a90d9), no directional particles
 - Ghost: LineDashedMaterial (dim)
-- LOD: Distance > 2000 → fall back to simple lines
+- LOD: Distance > 2000 → similarity edges hidden; > 3000 → weak edges hidden
 
 ### Data Fusion Strategy
 1. OpenAlex keyword search (primary, 10 credits/page)
@@ -251,3 +255,4 @@ Patterns: CachedLLMProvider (decorator, in-memory TTL), CircuitBreaker (5 failur
 - v0.9.0 ✅ — node ID fix (S2 paper IDs, not integers), right panel visibility (AnimatePresence mode="wait"), zoomToFit after data load, Three.js rgba warning fix
 - v0.9.1 ✅ — expand data completeness (StableExpandNode +authors/abstract/tldr/fields), recursive expand fix (s2_paper_id/doi mapping), right panel layout fix (min-w-0), cluster label dedup
 - **v1.0.0 (Cosmic Universe Theme)**: ✅ — full UI redesign: papers=stars (GLSL twinkle shaders), clusters=nebulae (particle clouds), edges=light streams (flow shaders), Three.js starfield landing, HUD panels, warp transition, 10 new files, 27 modified files, showCosmicTheme toggle
+- **v1.0.1 (Visibility Enhancement)**: ✅ — dramatic field color differentiation (max hue separation), sqrt node sizing (4-30 range), glow opacity 0.9/scale 6x, nebula opacity 0.3/0.5, linkDirectionalParticles for citation flow, GraphLegend uses STAR_COLOR_MAP, stronger supernova/corona textures

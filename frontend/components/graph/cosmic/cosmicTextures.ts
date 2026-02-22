@@ -12,9 +12,10 @@ export function getGlowTexture(): THREE.Texture {
   canvas.height = 128;
   const ctx = canvas.getContext('2d')!;
   const gradient = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
-  gradient.addColorStop(0, 'rgba(255, 255, 255, 0.6)');
-  gradient.addColorStop(0.3, 'rgba(255, 255, 255, 0.15)');
-  gradient.addColorStop(0.7, 'rgba(255, 255, 255, 0.03)');
+  gradient.addColorStop(0, 'rgba(255, 255, 255, 1.0)');
+  gradient.addColorStop(0.2, 'rgba(255, 255, 255, 0.5)');
+  gradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.15)');
+  gradient.addColorStop(0.8, 'rgba(255, 255, 255, 0.04)');
   gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, 128, 128);
@@ -30,8 +31,8 @@ export function getCoronaTexture(): THREE.Texture {
   const ctx = canvas.getContext('2d')!;
   const gradient = ctx.createRadialGradient(64, 64, 20, 64, 64, 64);
   gradient.addColorStop(0, 'rgba(46, 204, 113, 0)');
-  gradient.addColorStop(0.5, 'rgba(46, 204, 113, 0.15)');
-  gradient.addColorStop(0.8, 'rgba(46, 204, 113, 0.08)');
+  gradient.addColorStop(0.5, 'rgba(46, 204, 113, 0.35)');
+  gradient.addColorStop(0.8, 'rgba(46, 204, 113, 0.15)');
   gradient.addColorStop(1, 'rgba(46, 204, 113, 0)');
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, 128, 128);

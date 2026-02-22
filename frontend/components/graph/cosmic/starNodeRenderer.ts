@@ -59,7 +59,7 @@ export function createStarNode(options: StarNodeOptions): THREE.Group {
       uPhase: { value: phase },
       uTwinkleRate: { value: twinkleRate },
       uOpacity: { value: displayOpacity },
-      uEmissiveIntensity: { value: isSelected ? 0.6 : isHighlighted ? 0.4 : 0.2 },
+      uEmissiveIntensity: { value: isSelected ? 0.8 : isHighlighted ? 0.6 : 0.35 },
     },
     transparent: true,
     depthWrite: displayOpacity > 0.5,
@@ -74,12 +74,12 @@ export function createStarNode(options: StarNodeOptions): THREE.Group {
       map: getGlowTexture(),
       color: new THREE.Color(starColors.glow),
       transparent: true,
-      opacity: displayOpacity * 0.6,
+      opacity: displayOpacity * 0.9,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     })
   );
-  glowSprite.scale.setScalar(size * 4);
+  glowSprite.scale.setScalar(size * 6);
   group.add(glowSprite);
 
   // Selected: lens flare sprite
@@ -126,7 +126,7 @@ export function createStarNode(options: StarNodeOptions): THREE.Group {
     const ringMat = new THREE.MeshBasicMaterial({
       color: new THREE.Color('#FFD700'),
       transparent: true,
-      opacity: 0.2,
+      opacity: 0.4,
       side: THREE.DoubleSide,
       depthWrite: false,
     });
@@ -141,7 +141,7 @@ export function createStarNode(options: StarNodeOptions): THREE.Group {
       update: (time) => {
         const scale = 1.0 + Math.sin(time * 2 + phase) * 0.4;
         ring.scale.setScalar(scale);
-        ringMat.opacity = 0.15 + Math.sin(time * 2 + phase) * 0.1;
+        ringMat.opacity = 0.3 + Math.sin(time * 2 + phase) * 0.15;
       },
     });
 
@@ -158,9 +158,9 @@ export function createStarNode(options: StarNodeOptions): THREE.Group {
     particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     const particleMat = new THREE.PointsMaterial({
       color: 0xFFD700,
-      size: 0.8,
+      size: 1.2,
       transparent: true,
-      opacity: 0.5,
+      opacity: 0.8,
       blending: THREE.AdditiveBlending,
     });
     const particles = new THREE.Points(particleGeo, particleMat);

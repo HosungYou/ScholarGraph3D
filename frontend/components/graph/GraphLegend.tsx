@@ -2,14 +2,28 @@
 
 import { useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
-import { FIELD_COLORS } from '@/types';
 import { useGraphStore } from '@/hooks/useGraphStore';
+import { STAR_COLOR_MAP } from './cosmic/cosmicConstants';
 
 export default function GraphLegend() {
   const [collapsed, setCollapsed] = useState(false);
   const { showEnhancedIntents } = useGraphStore();
 
-  const fieldEntries = Object.entries(FIELD_COLORS).filter(([k]) => k !== 'Other');
+  const LEGEND_FIELDS = [
+    'Computer Science',
+    'Medicine',
+    'Biology',
+    'Physics',
+    'Economics',
+    'Engineering',
+    'Business',
+    'Chemistry',
+    'Psychology',
+    'Environmental Science',
+  ];
+  const fieldEntries = LEGEND_FIELDS
+    .filter(f => STAR_COLOR_MAP[f])
+    .map(f => [f, STAR_COLOR_MAP[f].core] as [string, string]);
 
   if (collapsed) {
     return (
@@ -52,13 +66,15 @@ export default function GraphLegend() {
           {fieldEntries.map(([field, color]) => (
             <div key={field} className="flex items-center gap-1.5">
               <div
-                className="w-2 h-2 rounded-full flex-shrink-0"
-                style={{ backgroundColor: color, boxShadow: `0 0 4px ${color}60` }}
+                className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                style={{ backgroundColor: color, boxShadow: `0 0 6px ${color}90, 0 0 12px ${color}40` }}
               />
               <span className="truncate">
                 {field
+                  .replace(' Science', '')
                   .replace(' Sciences', '')
-                  .replace('Arts & ', '')}
+                  .replace('Environmental', 'Environ.')
+                  .replace('Computer', 'CS')}
               </span>
             </div>
           ))}
@@ -68,7 +84,7 @@ export default function GraphLegend() {
       {/* Edge types */}
       <div className="mb-1.5 flex flex-col gap-0.5">
         <div className="flex items-center gap-2">
-          <div className="w-5 h-0 border-t border-[#00E5FF]/60 flex-shrink-0" />
+          <div className="w-5 h-0.5 bg-gradient-to-r from-[#00E5FF]/80 to-transparent flex-shrink-0 rounded-full" />
           <span>Citation</span>
         </div>
         <div className="flex items-center gap-2">
@@ -131,7 +147,7 @@ export default function GraphLegend() {
 
       {/* Cluster */}
       <div className="text-[#7B8CDE]/60">
-        Hull = topic cluster
+        Nebula cloud = topic cluster
       </div>
     </div>
   );

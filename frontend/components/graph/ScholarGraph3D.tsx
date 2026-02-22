@@ -250,7 +250,8 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         const paperYear = paper.year || yearRange.min;
         const opacity =
           0.3 + 0.7 * ((paperYear - yearRange.min) / yearSpan);
-        const size = Math.max(3, Math.log((paper.citation_count || 0) + 1) * 3);
+        const rawCitations = paper.citation_count || 0;
+        const size = Math.min(30, Math.max(4, Math.sqrt(rawCitations + 1) * 1.5));
         const authorName = paper.authors?.[0]?.name?.split(' ').pop() || 'Unknown';
         const citationPercentile = citationRankMap.get(paper.id) || 0;
 
@@ -697,7 +698,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
   // Link width
   const linkWidth = useCallback((linkData: unknown) => {
     const link = linkData as ForceGraphLink;
-    return link.width;
+    return Math.max(0.5, link.width || 0.5);
   }, []);
 
   // Link color
@@ -711,16 +712,17 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       const isVeryFar = camDist > 3000;
 
       if (isFar && link.edgeType === 'similarity') {
-        return '#000000'; // invisible on dark background
+        return '#050510'; // invisible on dark background
       }
       if (isVeryFar && link.width < 1.5) {
-        return '#000000'; // hide weak edges at far distances
+        return '#050510'; // hide weak edges at far distances
       }
 
       if (!selectedPaper) {
+        // Stronger default colors for better visibility
         return link.dashed
-          ? '#4a90d9'
-          : '#8890a5';
+          ? '#4a90d9'   // similarity = blue dashed
+          : link.color || '#00E5FF80';  // citation = cyan (semi-transparent)
       }
 
       const sourceId =
@@ -733,9 +735,9 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
           : (link.target as ForceGraphNode).id;
 
       if (highlightSet.has(sourceId) && highlightSet.has(targetId)) {
-        return link.color + 'CC';
+        return link.color || '#00E5FF';
       }
-      return '#050510'; // near-invisible on dark background (was rgba(255,255,255,0.03))
+      return '#050510'; // near-invisible on dark background
     },
     [selectedPaper, highlightSet, fgRef]
   );
@@ -1512,7 +1514,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         }}
         linkWidth={linkWidth}
         linkColor={linkColor}
-        linkOpacity={0.6}
+        linkOpacity={0.8}
         linkThreeObject={linkThreeObject as never}
         linkPositionUpdate={linkPositionUpdate as never}
         linkLabel={(linkData: unknown) => {
@@ -1534,6 +1536,23 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         }}
         linkDirectionalArrowLength={3}
         linkDirectionalArrowRelPos={1}
+        linkDirectionalParticles={(linkData: unknown) => {
+          const link = linkData as ForceGraphLink;
+          if (link.dashed) return 0; // no particles on similarity edges
+          return 4; // 4 flowing particles on citation edges
+        }}
+        linkDirectionalParticleWidth={(linkData: unknown) => {
+          const link = linkData as ForceGraphLink;
+          return link.dashed ? 0 : 2;
+        }}
+        linkDirectionalParticleSpeed={(linkData: unknown) => {
+          const link = linkData as ForceGraphLink;
+          return link.dashed ? 0 : 0.006;
+        }}
+        linkDirectionalParticleColor={(linkData: unknown) => {
+          const link = linkData as ForceGraphLink;
+          return link.dashed ? '#4a90d9' : '#00E5FF';
+        }}
         backgroundColor="#050510"
         onNodeClick={handleNodeClick}
         onNodeHover={handleNodeHover}
