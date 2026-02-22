@@ -223,6 +223,7 @@ Search endpoint returns: `{ nodes: Paper[], edges: GraphEdge[], clusters: Cluste
 | TECH_PROOF | Academic justification for all technical choices (SPECTER2, RRF, UMAP, HDBSCAN) | docs/TECH_PROOF.md |
 | DESIGN_THEME | Cosmic Universe theme design system reference | docs/DESIGN_THEME.md |
 | RELEASE_v1.0.0 | v1.0.0 release notes | docs/RELEASE_v1.0.0.md |
+| RELEASE_v1.0.1 | v1.0.1 visibility fix release notes | docs/RELEASE_v1.0.1.md |
 | CLAUDE.md | This file — Claude Code project context | ./CLAUDE.md |
 
 ## LLM Provider Architecture (Phase 2)

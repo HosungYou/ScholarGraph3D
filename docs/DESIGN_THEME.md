@@ -33,17 +33,25 @@
 | `cosmic-star` | `#a29bfe` | Star lavender accent |
 | `accent-warm` | `#fd79a8` | Warm pink accent |
 
-### Star Color Map (Field → Stellar Temperature)
+### Star Color Map (Field → Stellar Temperature) — v1.0.1
+
+> **Design principle:** Maximum hue separation so researchers can instantly distinguish fields at a glance.
 
 | Academic Field | Core Color | Glow Color | Stellar Type |
 |---------------|-----------|-----------|-------------|
-| Computer Science | `#7EB8FF` | `#4A90D9` | Blue Giant |
-| Biology / Life Sciences | `#5BFF8F` | `#2ECC71` | Green Nebula Star |
-| Medicine / Health | `#FF6B5B` | `#E74C3C` | Red Supergiant |
-| Physics | `#B580D9` | `#9B59B6` | Exotic Purple |
-| Social Sciences | `#FFa040` | `#E67E22` | K-type Orange |
-| Arts & Humanities | `#FFD700` | `#F39C12` | Yellow Dwarf |
-| Environmental | `#4ECDC4` | `#1ABC9C` | Teal Pulsar |
+| Computer Science | `#4DA6FF` | `#2979FF` | Blue Giant |
+| Engineering | `#B388FF` | `#7C4DFF` | Vivid Purple |
+| Mathematics | `#18FFFF` | `#00E5FF` | Cyan Dwarf |
+| Medicine / Health | `#FF5252` | `#D50000` | Red Supergiant |
+| Biology / Life Sciences | `#69F0AE` | `#00E676` | Green Nebula Star |
+| Physics | `#EA80FC` | `#D500F9` | Magenta Exotic |
+| Chemistry | `#FF80AB` | `#FF4081` | Pink Giant |
+| Economics | `#FFD740` | `#FFC400` | Gold Dwarf |
+| Sociology | `#FFAB40` | `#FF9100` | K-type Orange |
+| Business | `#FF9100` | `#FF6D00` | Vivid Orange |
+| Psychology | `#A7FFEB` | `#64FFDA` | Light Teal |
+| Environmental | `#76FF03` | `#64DD17` | Vivid Lime |
+| Arts & Humanities | `#FFF176` | `#FFEE58` | Yellow Dwarf |
 
 ## CSS Utility Classes
 
@@ -95,10 +103,10 @@
 | Layer | Condition | Visual |
 |-------|-----------|--------|
 | Core sphere | Always | ShaderMaterial with twinkle + fresnel rim glow |
-| Glow sprite | Always | Additive-blend radial gradient texture |
+| Glow sprite | Always | Additive-blend radial gradient texture (opacity ×0.9, scale ×6) |
 | Lens flare | `isSelected` | 6-pointed star sprite (rotating) |
 | Corona | `is_open_access` | Green additive-blend ring sprite |
-| Supernova burst | Top 10% citations | Pulsing ring (scale 1.0-1.8) + 12 orbiting particles |
+| Supernova burst | Top 10% citations | Pulsing ring (opacity 0.4, scale 1.0-1.8) + 12 orbiting particles (size 1.2) |
 | Binary star | `is_bridge` | 2 small companion spheres orbiting main star |
 | Bloom halo | `isSelected + showBloom` | Larger transparent sphere |
 
@@ -141,9 +149,9 @@ Oldest papers twinkle slowly (1.5Hz), newest papers twinkle rapidly (6.0Hz).
 | Glow sprites | 400 tris, 0.1ms |
 | Supernova particles | ~240 points, <0.1ms |
 | Binary companions | ~5K tris, 0.1ms |
-| Nebula particles | ~2000 points, 0.2ms |
-| Citation tubes | ~19K tris, 0.5ms |
-| Similarity tubes | ~6K tris, 0.2ms |
+| Nebula particles | ~3000 points, 0.3ms |
+| Citation particles (directional) | ~800 points, 0.1ms |
+| Similarity dashed lines | ~500 lines, 0.1ms |
 | **Total** | **~130K tris, ~2.7ms / 16.6ms** |
 
 Target: 60fps with safe margin (~16% frame budget used).
