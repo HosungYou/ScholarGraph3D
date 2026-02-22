@@ -121,7 +121,7 @@ export default function TimelineView({ onClose }: TimelineViewProps) {
         .attr('y', yScale(cid)!)
         .attr('width', innerWidth)
         .attr('height', yScale.bandwidth())
-        .attr('fill', info?.color || '#555')
+        .attr('fill', info?.color || '#1a2555')
         .attr('opacity', 0.06)
         .attr('rx', 4);
 
@@ -131,9 +131,10 @@ export default function TimelineView({ onClose }: TimelineViewProps) {
         .attr('y', yScale(cid)! + yScale.bandwidth() / 2)
         .attr('text-anchor', 'end')
         .attr('dominant-baseline', 'middle')
-        .attr('fill', info?.color || '#888')
+        .attr('fill', info?.color || '#7B8CDE')
         .attr('font-size', '11px')
         .attr('font-weight', '500')
+        .attr('font-family', 'monospace')
         .text((info?.label || 'Unclustered').substring(0, 20));
     });
 
@@ -145,10 +146,11 @@ export default function TimelineView({ onClose }: TimelineViewProps) {
     g.append('g')
       .attr('transform', `translate(0,${Math.min(innerHeight, laneHeight * allLanes.length)})`)
       .call(xAxis)
-      .attr('color', '#555')
+      .attr('color', '#1a2555')
       .selectAll('text')
-      .attr('fill', '#888')
-      .attr('font-size', '10px');
+      .attr('fill', '#7B8CDE')
+      .attr('font-size', '10px')
+      .attr('font-family', 'monospace');
 
     // Year grid lines
     const yearTicks = xScale.ticks(Math.min(maxYear - minYear + 1, 15));
@@ -158,7 +160,7 @@ export default function TimelineView({ onClose }: TimelineViewProps) {
         .attr('x2', xScale(year))
         .attr('y1', 0)
         .attr('y2', Math.min(innerHeight, laneHeight * allLanes.length))
-        .attr('stroke', '#333')
+        .attr('stroke', '#1a2555')
         .attr('stroke-dasharray', '2,3');
     });
 
@@ -173,7 +175,7 @@ export default function TimelineView({ onClose }: TimelineViewProps) {
       .attr('orient', 'auto')
       .append('path')
       .attr('d', 'M0,-5L10,0L0,5')
-      .attr('fill', '#555')
+      .attr('fill', '#1a2555')
       .attr('opacity', 0.5);
 
     // Node size scale
@@ -230,12 +232,20 @@ export default function TimelineView({ onClose }: TimelineViewProps) {
         .style('cursor', 'pointer')
         .on('click', () => handleNodeClick(paper));
 
+      // Glow filter for selected nodes
+      if (isSelected) {
+        nodeG.append('circle')
+          .attr('r', r + 3)
+          .attr('fill', color)
+          .attr('opacity', 0.2);
+      }
+
       // Circle
       nodeG.append('circle')
         .attr('r', r)
         .attr('fill', color)
         .attr('opacity', isSelected ? 1 : 0.7)
-        .attr('stroke', isSelected ? '#FFD700' : 'none')
+        .attr('stroke', isSelected ? '#00E5FF' : 'none')
         .attr('stroke-width', isSelected ? 2 : 0);
 
       // Tooltip on hover
@@ -256,7 +266,7 @@ export default function TimelineView({ onClose }: TimelineViewProps) {
       edgeGroup.append('path')
         .attr('d', `M${src.x},${src.y} A${dr},${dr} 0 0,1 ${tgt.x},${tgt.y}`)
         .attr('fill', 'none')
-        .attr('stroke', '#555')
+        .attr('stroke', '#1a2555')
         .attr('stroke-width', 0.5)
         .attr('stroke-opacity', 0.3)
         .attr('marker-end', 'url(#arrowhead)');
@@ -267,10 +277,12 @@ export default function TimelineView({ onClose }: TimelineViewProps) {
       .attr('x', width / 2)
       .attr('y', 20)
       .attr('text-anchor', 'middle')
-      .attr('fill', '#aaa')
-      .attr('font-size', '13px')
+      .attr('fill', '#7B8CDE')
+      .attr('font-size', '11px')
       .attr('font-weight', '600')
-      .text('Publication Timeline');
+      .attr('font-family', 'monospace')
+      .attr('letter-spacing', '0.15em')
+      .text('PUBLICATION TIMELINE');
 
   }, [graphData, selectedPaper, clusterMap, citationEdges, handleNodeClick]);
 
@@ -292,17 +304,17 @@ export default function TimelineView({ onClose }: TimelineViewProps) {
   if (!graphData) return null;
 
   return (
-    <div className="flex flex-col h-full bg-gray-900/95 border-t border-border/30">
+    <div className="flex flex-col h-full bg-[#050510]/95 border-t border-[#1a2555]">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-border/30">
-        <div className="flex items-center gap-2 text-sm text-text-secondary">
-          <span className="font-medium text-text-primary">2D Timeline</span>
-          <span className="text-text-secondary/50">|</span>
-          <span className="text-xs">{graphData.nodes.length} papers</span>
+      <div className="flex items-center justify-between px-4 py-2 border-b border-[#1a2555]">
+        <div className="flex items-center gap-2 text-sm text-[#7B8CDE]">
+          <span className="font-mono font-medium text-[#E8EAF6] uppercase tracking-widest text-xs">2D Timeline</span>
+          <span className="text-[#7B8CDE]/30">|</span>
+          <span className="text-xs font-mono text-[#7B8CDE]">{graphData.nodes.length} papers</span>
         </div>
         <button
           onClick={onClose}
-          className="p-1.5 rounded-lg hover:bg-surface-hover text-text-secondary hover:text-text-primary transition-colors text-xs"
+          className="p-1.5 rounded-lg hover:bg-[#111833] text-[#7B8CDE] hover:text-[#E8EAF6] transition-colors text-xs font-mono uppercase tracking-wider"
         >
           Close
         </button>

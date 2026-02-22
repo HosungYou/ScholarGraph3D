@@ -33,24 +33,24 @@ export default function RecommendationCard({
   const snippet = rec.tldr || rec.explanation || (rec.abstract ? rec.abstract.slice(0, 120) + '...' : '');
 
   return (
-    <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 hover:border-gray-500 transition-colors flex flex-col gap-2 relative group">
+    <div className="hud-panel p-4 hover:border-cosmic-glow/20 transition-colors flex flex-col gap-2 relative group">
       {/* Dismiss button */}
       <button
         onClick={() => onDismiss(rec.id)}
         disabled={isDismissing}
-        className="absolute top-2 right-2 p-1 rounded text-gray-600 hover:text-gray-300 hover:bg-gray-700 opacity-0 group-hover:opacity-100 transition-all disabled:opacity-40"
+        className="absolute top-2 right-2 p-1 rounded text-[#7B8CDE]/40 hover:text-[#7B8CDE] hover:bg-[#0a0f1e] opacity-0 group-hover:opacity-100 transition-all disabled:opacity-40"
         title="Not interested"
       >
         <X className="w-3.5 h-3.5" />
       </button>
 
       {/* Title */}
-      <p className="text-sm font-medium text-gray-100 leading-snug pr-6 line-clamp-2">
+      <p className="text-sm font-medium text-[#E8EAF6] leading-snug pr-6 line-clamp-2">
         {title}
       </p>
 
       {/* Meta */}
-      <div className="flex items-center gap-2 text-[10px] text-gray-400 flex-wrap">
+      <div className="flex items-center gap-2 text-[10px] text-[#7B8CDE] flex-wrap font-mono">
         {authorStr && <span>{authorStr}</span>}
         {year && <span>{year}</span>}
         {citationCount > 0 && (
@@ -63,7 +63,7 @@ export default function RecommendationCard({
 
       {/* Explanation / snippet */}
       {snippet && (
-        <p className="text-[11px] text-gray-400 leading-relaxed line-clamp-2">
+        <p className="text-[11px] text-[#7B8CDE]/70 leading-relaxed line-clamp-2">
           {snippet}
         </p>
       )}
@@ -74,7 +74,7 @@ export default function RecommendationCard({
           {rec.reason_tags.map((tag) => (
             <span
               key={tag}
-              className="px-1.5 py-0.5 bg-blue-900/30 border border-blue-800/40 rounded text-[9px] text-blue-300"
+              className="px-1.5 py-0.5 bg-cosmic-glow/10 border border-cosmic-glow/20 rounded text-[9px] text-cosmic-glow"
             >
               {tag.replace(/_/g, ' ')}
             </span>
@@ -84,12 +84,12 @@ export default function RecommendationCard({
 
       {/* Score + Explore */}
       <div className="flex items-center justify-between mt-auto pt-1">
-        <span className="text-[9px] text-gray-600">
+        <span className="text-[9px] text-[#7B8CDE]/40 font-mono">
           Match: {Math.round(rec.score * 100)}%
         </span>
         <button
           onClick={() => router.push(`/explore?q=${encodeURIComponent(title)}`)}
-          className="flex items-center gap-1 text-[10px] text-blue-400 hover:text-blue-300 transition-colors"
+          className="flex items-center gap-1 text-[10px] text-cosmic-glow hover:text-cosmic-glow/70 transition-colors font-mono"
         >
           Explore
           <ExternalLink className="w-2.5 h-2.5" />

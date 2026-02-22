@@ -1,12 +1,19 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, FileText, HelpCircle, GitBranch, Layers, Clock } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api';
 import type { UserProfile } from '@/types';
+import dynamic from 'next/dynamic';
+import type { StarfieldBackgroundRef } from '@/components/cosmic/StarfieldBackground';
+
+const StarfieldBackground = dynamic(
+  () => import('@/components/cosmic/StarfieldBackground'),
+  { ssr: false }
+);
 
 type InputMode = 'doi' | 'keyword' | 'question';
 
@@ -42,6 +49,9 @@ export default function LandingPage() {
     type: string;
   }[] | null>(null);
   const router = useRouter();
+
+  const starfieldRef = useRef<StarfieldBackgroundRef>(null);
+  const [isWarping, setIsWarping] = useState(false);
 
   const { user } = useAuth();
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -154,12 +164,31 @@ export default function LandingPage() {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setDoiError(null);
+
+    if (isWarping) return;
+
+    // For keyword and question modes, trigger warp before navigation
+    if (activeMode === 'keyword' && inputValue.trim()) {
+      if (looksLikeDoi(inputValue)) {
+        setActiveMode('doi');
+        setInputValue(inputValue.trim());
+        handleDOILookup(inputValue.trim());
+        return;
+      }
+      setIsWarping(true);
+      starfieldRef.current?.triggerWarp();
+      saveRecentSearch(inputValue.trim());
+      setTimeout(() => {
+        router.push(`/explore?q=${encodeURIComponent(inputValue.trim())}`);
+      }, 600);
+      return;
+    }
+
     if (activeMode === 'doi') handleDOILookup(inputValue);
-    else if (activeMode === 'keyword') handleKeywordSearch(inputValue);
-    else handleQuestionSubmit(inputValue);
+    else if (activeMode === 'question') handleQuestionSubmit(inputValue);
   };
 
   const switchMode = (mode: InputMode) => {
@@ -172,11 +201,9 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden">
       {/* Background */}
-      <div className="absolute inset-0 bg-gradient-to-b from-background via-background to-surface pointer-events-none" />
-      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[900px] rounded-full bg-accent/4 blur-[140px] pointer-events-none" />
-      <div className="absolute top-1/2 right-1/4 w-[400px] h-[400px] rounded-full bg-accent-purple/3 blur-[100px] pointer-events-none" />
+      <StarfieldBackground ref={starfieldRef} />
 
-      <div className="relative z-10 w-full max-w-3xl px-6">
+      <div className={`relative z-10 w-full max-w-3xl px-6 ${isWarping ? 'animate-warp' : ''}`}>
 
         {/* Hero */}
         <motion.div
@@ -185,12 +212,12 @@ export default function LandingPage() {
           transition={{ duration: 0.7 }}
           className="text-center mb-10"
         >
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-accent/10 border border-accent/20 text-xs text-accent/80 mb-5">
-            <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cosmic-glow/5 border border-cosmic-glow/20 text-xs text-cosmic-glow/80 mb-5 font-mono uppercase tracking-wider">
+            <span className="w-1.5 h-1.5 rounded-full bg-cosmic-glow animate-cosmic-pulse" />
             Navigate the topology of knowledge
           </div>
-          <h1 className="text-5xl font-bold tracking-tight mb-4 leading-tight">
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-accent via-accent-purple to-accent-green">
+          <h1 className="text-5xl font-bold tracking-tight mb-4 leading-tight cosmic-glow">
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-cosmic-glow via-cosmic-nebula to-accent-green">
               ScholarGraph3D
             </span>
           </h1>
@@ -232,7 +259,7 @@ export default function LandingPage() {
               <form onSubmit={handleSubmit}>
                 <div className="relative group">
                   <div className="absolute -inset-0.5 bg-gradient-to-r from-accent/40 via-accent-purple/30 to-accent-green/30 rounded-2xl blur opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-500" />
-                  <div className="relative flex items-center glass-strong rounded-2xl overflow-hidden border border-accent/20">
+                  <div className="relative flex items-center hud-panel rounded-2xl overflow-hidden border border-accent/20">
                     <FileText className="w-5 h-5 text-accent/60 ml-5 flex-shrink-0" />
                     <input
                       type="text"
@@ -248,12 +275,12 @@ export default function LandingPage() {
                     <button
                       type="submit"
                       disabled={!inputValue.trim() || isLoadingDoi}
-                      className="px-8 py-5 bg-accent hover:bg-accent/90 text-white font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+                      className="px-8 py-5 hud-button uppercase font-mono tracking-wider disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
                     >
                       {isLoadingDoi && (
                         <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                       )}
-                      {isLoadingDoi ? 'Finding…' : 'Explore'}
+                      {isLoadingDoi ? 'Finding…' : 'EXPLORE'}
                     </button>
                   </div>
                 </div>
@@ -274,7 +301,7 @@ export default function LandingPage() {
                   <button
                     key={s.doi}
                     onClick={() => handleDOILookup(s.doi)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface/60 hover:bg-surface border border-border/30 hover:border-accent/30 text-xs text-text-secondary hover:text-accent transition-all"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface/60 hover:bg-surface border border-cosmic-glow/10 hover:border-cosmic-glow/30 text-xs text-text-secondary hover:text-cosmic-glow transition-all"
                   >
                     <span>{s.label}</span>
                     <span className="text-text-secondary/30">{s.field}</span>
@@ -296,7 +323,7 @@ export default function LandingPage() {
               <form onSubmit={handleSubmit}>
                 <div className="relative group">
                   <div className="absolute -inset-0.5 bg-gradient-to-r from-accent/20 to-accent-purple/20 rounded-2xl blur opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-500" />
-                  <div className="relative flex items-center glass-strong rounded-2xl overflow-hidden">
+                  <div className="relative flex items-center hud-panel rounded-2xl overflow-hidden">
                     <Search className="w-5 h-5 text-text-secondary ml-5 flex-shrink-0" />
                     <input
                       type="text"
@@ -309,9 +336,9 @@ export default function LandingPage() {
                     <button
                       type="submit"
                       disabled={!inputValue.trim()}
-                      className="px-8 py-5 bg-surface hover:bg-surface-hover text-text-primary font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed border-l border-border/30"
+                      className="px-8 py-5 hud-button uppercase font-mono tracking-wider disabled:opacity-40 disabled:cursor-not-allowed"
                     >
-                      Search
+                      SCAN
                     </button>
                   </div>
                 </div>
@@ -326,10 +353,10 @@ export default function LandingPage() {
                   <button
                     key={ex.label}
                     onClick={() => handleKeywordSearch(ex.label)}
-                    className="px-3 py-1.5 bg-surface/60 hover:bg-surface border border-border/30 rounded-full text-xs text-text-secondary hover:text-text-primary transition-all"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface/60 hover:bg-surface border border-cosmic-glow/10 hover:border-cosmic-glow/30 text-xs text-text-secondary hover:text-cosmic-glow transition-all"
                   >
                     {ex.label}
-                    <span className="ml-1.5 text-text-secondary/30">{ex.field}</span>
+                    <span className="ml-0.5 text-text-secondary/30">{ex.field}</span>
                   </button>
                 ))}
               </div>
@@ -348,7 +375,7 @@ export default function LandingPage() {
               <form onSubmit={handleSubmit}>
                 <div className="relative group">
                   <div className="absolute -inset-0.5 bg-gradient-to-r from-accent-purple/20 to-accent-green/20 rounded-2xl blur opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-500" />
-                  <div className="relative flex items-center glass-strong rounded-2xl overflow-hidden">
+                  <div className="relative flex items-center hud-panel rounded-2xl overflow-hidden">
                     <HelpCircle className="w-5 h-5 text-text-secondary ml-5 flex-shrink-0" />
                     <input
                       type="text"
@@ -364,12 +391,12 @@ export default function LandingPage() {
                     <button
                       type="submit"
                       disabled={!inputValue.trim() || isLoadingScaffold}
-                      className="px-8 py-5 bg-surface hover:bg-surface-hover text-text-primary font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed border-l border-border/30 flex items-center gap-2"
+                      className="px-8 py-5 hud-button uppercase font-mono tracking-wider disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
                     >
                       {isLoadingScaffold && (
-                        <div className="w-4 h-4 border-2 border-text-secondary/30 border-t-text-secondary rounded-full animate-spin" />
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                       )}
-                      {scaffoldAngles ? 'New Question' : 'Suggest Angles'}
+                      {scaffoldAngles ? 'NEW QUESTION' : 'ANALYZE'}
                     </button>
                   </div>
                 </div>
@@ -385,7 +412,7 @@ export default function LandingPage() {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
-                    className="mt-4 glass rounded-2xl p-4 border border-accent/20"
+                    className="mt-4 hud-panel rounded-2xl p-4"
                   >
                     <p className="text-xs text-text-secondary/60 mb-3 font-medium">
                       Choose your exploration angle:
@@ -398,9 +425,9 @@ export default function LandingPage() {
                             saveRecentSearch(angle.query);
                             router.push(`/explore?q=${encodeURIComponent(angle.query)}`);
                           }}
-                          className="flex items-center gap-3 px-4 py-3 rounded-xl text-left bg-surface/60 hover:bg-surface border border-border/30 hover:border-accent/30 transition-all group"
+                          className="flex items-center gap-3 px-4 py-3 rounded-xl text-left bg-surface/60 hover:bg-surface border border-cosmic-glow/10 hover:border-cosmic-glow/30 transition-all group"
                         >
-                          <span className="text-sm font-medium text-text-primary group-hover:text-accent transition-colors">
+                          <span className="text-sm font-medium text-text-primary group-hover:text-cosmic-glow transition-colors">
                             {angle.label}
                           </span>
                           <span className="text-xs text-text-secondary/40 ml-auto font-mono">
@@ -422,7 +449,7 @@ export default function LandingPage() {
           )}
         </AnimatePresence>
 
-        {/* Mode switcher — compact, secondary */}
+        {/* Mode switcher — HUD segmented controls */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -431,20 +458,18 @@ export default function LandingPage() {
         >
           {(
             [
-              { mode: 'doi' as InputMode, icon: FileText, label: 'Seed Paper', primary: true },
-              { mode: 'keyword' as InputMode, icon: Search, label: 'Topic Search', primary: false },
-              { mode: 'question' as InputMode, icon: HelpCircle, label: 'Research Question', primary: false },
+              { mode: 'doi' as InputMode, icon: FileText, label: 'Seed Paper' },
+              { mode: 'keyword' as InputMode, icon: Search, label: 'Topic Search' },
+              { mode: 'question' as InputMode, icon: HelpCircle, label: 'Research Question' },
             ] as const
-          ).map(({ mode, icon: Icon, label, primary }) => (
+          ).map(({ mode, icon: Icon, label }) => (
             <button
               key={mode}
               onClick={() => switchMode(mode)}
               className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all border ${
                 activeMode === mode
-                  ? primary
-                    ? 'bg-accent/15 border-accent/30 text-accent'
-                    : 'bg-surface border-border/40 text-text-primary'
-                  : 'bg-transparent border-transparent text-text-secondary/50 hover:text-text-secondary hover:border-border/20'
+                  ? 'bg-cosmic-glow/10 border-cosmic-glow/30 text-cosmic-glow font-mono'
+                  : 'bg-transparent border-transparent text-text-secondary/50 hover:text-text-secondary hover:border-cosmic-glow/10 font-mono'
               }`}
             >
               <Icon className="w-3.5 h-3.5" />
@@ -459,10 +484,10 @@ export default function LandingPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.4 }}
-            className="mb-8 glass rounded-2xl p-4 border border-purple-500/15"
+            className="mb-8 hud-panel rounded-2xl p-4"
           >
             <p className="text-xs text-text-secondary/50 mb-3 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-purple-400 inline-block" />
+              <span className="w-1.5 h-1.5 rounded-full bg-cosmic-glow inline-block" />
               Continue exploring
             </p>
             <div className="flex flex-wrap gap-2">
@@ -470,7 +495,7 @@ export default function LandingPage() {
                 <button
                   key={interest}
                   onClick={() => handleKeywordSearch(interest)}
-                  className="px-3 py-1.5 bg-purple-900/30 hover:bg-purple-900/50 border border-purple-700/40 rounded-full text-xs text-purple-300 hover:text-purple-200 transition-all"
+                  className="px-3 py-1.5 bg-cosmic-nebula/20 hover:bg-cosmic-nebula/30 border border-cosmic-nebula/30 rounded-full text-xs text-cosmic-star hover:text-cosmic-star transition-all"
                 >
                   {interest}
                 </button>
@@ -491,7 +516,7 @@ export default function LandingPage() {
                   ? `${userProfile.total_searches} searches · ${userProfile.total_papers_viewed} papers viewed`
                   : ''}
               </span>
-              <a href="/dashboard" className="text-[10px] text-purple-400/60 hover:text-purple-300 transition-colors">
+              <a href="/dashboard" className="text-[10px] text-cosmic-glow/60 hover:text-cosmic-glow transition-colors">
                 Dashboard →
               </a>
             </div>
@@ -528,7 +553,7 @@ export default function LandingPage() {
             <motion.div
               key={f.title}
               whileHover={{ y: -2 }}
-              className="glass rounded-xl p-4 border border-border/20 hover:border-border/40 transition-colors"
+              className="hud-panel rounded-xl p-4 hover:border-cosmic-glow/30 transition-colors"
             >
               <f.icon className="w-5 h-5 mb-3" style={{ color: f.color }} />
               <h3 className="text-sm font-semibold mb-1">{f.title}</h3>

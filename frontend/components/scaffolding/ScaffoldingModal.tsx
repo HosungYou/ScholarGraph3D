@@ -47,24 +47,24 @@ export default function ScaffoldingModal({ question, angles, onClose }: Scaffold
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#050510]/80 backdrop-blur-sm">
         <motion.div
           initial={{ opacity: 0, scale: 0.95, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
-          className="glass-strong rounded-2xl border border-border/40 w-full max-w-xl shadow-2xl"
+          className="hud-panel hud-scanline rounded-2xl border border-[#1a2555] w-full max-w-xl shadow-2xl"
         >
           {/* Header */}
-          <div className="flex items-start justify-between p-5 border-b border-border/30">
+          <div className="flex items-start justify-between p-5 border-b border-[#1a2555]">
             <div>
-              <h2 className="text-base font-semibold text-text-primary mb-1">
-                🤔 Research Angles
+              <h2 className="text-sm font-mono uppercase tracking-widest text-[#E8EAF6] mb-1">
+                Research Angles
               </h2>
-              <p className="text-sm text-text-secondary/70 line-clamp-2">{question}</p>
+              <p className="text-sm font-mono text-[#7B8CDE]/70 line-clamp-2">{question}</p>
             </div>
             <button
               onClick={onClose}
-              className="p-1.5 rounded-lg text-text-secondary/50 hover:text-text-secondary hover:bg-surface transition-all ml-4 flex-shrink-0"
+              className="p-1.5 rounded-lg text-[#7B8CDE]/50 hover:text-cosmic-glow hover:bg-[#111833] transition-all ml-4 flex-shrink-0"
             >
               <X className="w-4 h-4" />
             </button>
@@ -72,7 +72,7 @@ export default function ScaffoldingModal({ question, angles, onClose }: Scaffold
 
           {/* Angles */}
           <div className="p-5 space-y-2">
-            <p className="text-xs text-text-secondary/50 mb-3">
+            <p className="text-xs font-mono text-[#7B8CDE]/50 mb-3 uppercase tracking-wider">
               Select one or more exploration angles:
             </p>
             {angles.map((angle, i) => (
@@ -81,28 +81,28 @@ export default function ScaffoldingModal({ question, angles, onClose }: Scaffold
                 onClick={() => handleToggle(i)}
                 className={`w-full flex items-start gap-3 px-4 py-3.5 rounded-xl text-left transition-all border ${
                   selected.has(i)
-                    ? 'bg-accent/10 border-accent/40 text-text-primary'
-                    : 'bg-surface/60 border-border/30 text-text-secondary hover:border-border/50 hover:text-text-primary'
+                    ? 'bg-cosmic-glow/10 border-cosmic-glow/30 text-[#E8EAF6]'
+                    : 'bg-[#0a0f1e] border-[#1a2555] text-[#7B8CDE] hover:border-cosmic-glow/20 hover:text-[#E8EAF6]'
                 }`}
               >
                 <div
                   className={`w-5 h-5 rounded border mt-0.5 flex-shrink-0 flex items-center justify-center transition-all ${
-                    selected.has(i) ? 'bg-accent border-accent' : 'border-border/50'
+                    selected.has(i) ? 'bg-cosmic-glow border-cosmic-glow' : 'border-[#1a2555]'
                   }`}
                 >
                   {selected.has(i) && (
-                    <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                    <svg className="w-3 h-3 text-[#050510]" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                     </svg>
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-medium text-sm mb-0.5">{angle.label}</div>
-                  <div className="text-xs text-text-secondary/60">
+                  <div className="font-mono font-medium text-sm mb-0.5 uppercase tracking-wide">{angle.label}</div>
+                  <div className="text-xs font-mono text-[#7B8CDE]/60">
                     {TYPE_DESCRIPTIONS[angle.type] || angle.type}
                   </div>
-                  <div className="text-xs font-mono text-text-secondary/40 mt-1 truncate">
-                    → {angle.query}
+                  <div className="text-xs font-mono text-[#7B8CDE]/40 mt-1 truncate">
+                    &rarr; {angle.query}
                   </div>
                 </div>
               </button>
@@ -110,10 +110,10 @@ export default function ScaffoldingModal({ question, angles, onClose }: Scaffold
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-between p-5 border-t border-border/30">
+          <div className="flex items-center justify-between p-5 border-t border-[#1a2555]">
             <button
               onClick={onClose}
-              className="text-sm text-text-secondary/50 hover:text-text-secondary transition-colors"
+              className="text-sm font-mono text-[#7B8CDE]/50 hover:text-[#7B8CDE] transition-colors uppercase tracking-wider"
             >
               Cancel
             </button>
@@ -123,14 +123,14 @@ export default function ScaffoldingModal({ question, angles, onClose }: Scaffold
                   onClose();
                   // Let user type their own query
                 }}
-                className="px-4 py-2 text-sm text-text-secondary hover:text-text-primary border border-border/30 rounded-lg transition-all"
+                className="px-4 py-2 text-sm font-mono text-[#7B8CDE] hover:text-[#E8EAF6] border border-[#1a2555] hover:border-cosmic-glow/20 rounded-lg transition-all uppercase tracking-wider"
               >
                 Type my own
               </button>
               <button
                 onClick={handleExplore}
                 disabled={selected.size === 0}
-                className="px-5 py-2 bg-accent hover:bg-accent/90 text-white text-sm font-medium rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                className="hud-button px-5 py-2 uppercase font-mono tracking-wider text-sm disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Explore {selected.size > 1 ? `${selected.size} angles` : 'selected'}
               </button>

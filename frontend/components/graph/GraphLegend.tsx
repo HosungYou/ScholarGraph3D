@@ -15,17 +15,17 @@ export default function GraphLegend() {
     return (
       <button
         onClick={() => setCollapsed(false)}
-        className="absolute bottom-16 left-4 glass rounded-lg px-2 py-1 text-xs text-text-secondary hover:text-text-primary transition-colors z-10 flex items-center gap-1"
+        className="absolute bottom-16 left-4 hud-panel rounded-lg px-2 py-1 text-[10px] font-mono text-[#7B8CDE] hover:text-text-primary transition-colors z-10 flex items-center gap-1"
       >
-        <ChevronUp className="w-3 h-3" /> Legend
+        <ChevronUp className="w-3 h-3" /> STAR CHART
       </button>
     );
   }
 
   return (
-    <div className="absolute bottom-16 left-4 glass rounded-lg px-3 py-2.5 text-xs text-text-secondary z-10 max-w-[220px] border border-border/30 bg-gray-900/80 backdrop-blur-sm">
+    <div className="absolute bottom-16 left-4 hud-panel rounded-lg px-3 py-2.5 text-[10px] font-mono text-[#7B8CDE] z-10 max-w-[220px] border border-[#1a2555]/30 bg-[#050510]/80 backdrop-blur-sm">
       <div className="flex items-center justify-between mb-2">
-        <span className="font-medium text-text-primary/80">Legend</span>
+        <span className="font-mono uppercase tracking-widest text-[10px] text-[#00E5FF]/60">STAR CHART</span>
         <button
           onClick={() => setCollapsed(true)}
           className="hover:text-text-primary transition-colors"
@@ -39,8 +39,8 @@ export default function GraphLegend() {
       <div className="mb-2">
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1 flex-shrink-0">
-            <div className="w-2 h-2 rounded-full bg-text-secondary/40" />
-            <div className="w-3.5 h-3.5 rounded-full bg-text-secondary/40" />
+            <div className="w-2 h-2 rounded-full bg-[#7B8CDE]/40" />
+            <div className="w-3.5 h-3.5 rounded-full bg-[#7B8CDE]/40" />
           </div>
           <span>Size = citation count</span>
         </div>
@@ -53,7 +53,7 @@ export default function GraphLegend() {
             <div key={field} className="flex items-center gap-1.5">
               <div
                 className="w-2 h-2 rounded-full flex-shrink-0"
-                style={{ backgroundColor: color }}
+                style={{ backgroundColor: color, boxShadow: `0 0 4px ${color}60` }}
               />
               <span className="truncate">
                 {field
@@ -68,7 +68,7 @@ export default function GraphLegend() {
       {/* Edge types */}
       <div className="mb-1.5 flex flex-col gap-0.5">
         <div className="flex items-center gap-2">
-          <div className="w-5 h-0 border-t border-blue-400/60 flex-shrink-0" />
+          <div className="w-5 h-0 border-t border-[#00E5FF]/60 flex-shrink-0" />
           <span>Citation</span>
         </div>
         <div className="flex items-center gap-2">
@@ -78,8 +78,8 @@ export default function GraphLegend() {
       </div>
 
       {/* Citation Intent Colors */}
-      <div className="mb-1.5 pt-1.5 border-t border-border/20">
-        <div className="text-[10px] font-medium text-text-primary/60 uppercase tracking-wide mb-1">
+      <div className="mb-1.5 pt-1.5 border-t border-[#1a2555]/20">
+        <div className="text-[10px] font-mono uppercase tracking-widest text-text-primary/60 mb-1">
           Edge Intents
         </div>
         <div className="flex flex-col gap-0.5">
@@ -98,8 +98,8 @@ export default function GraphLegend() {
         </div>
 
         {showEnhancedIntents && (
-          <div className="mt-1 pt-1 border-t border-border/10">
-            <div className="text-[10px] text-text-secondary/50 mb-0.5">Enhanced</div>
+          <div className="mt-1 pt-1 border-t border-[#1a2555]/10">
+            <div className="text-[10px] text-[#7B8CDE]/50 mb-0.5">Enhanced</div>
             <div className="flex flex-col gap-0.5">
               <div className="flex items-center gap-2">
                 <div className="w-5 h-0 border-t-2 flex-shrink-0" style={{ borderColor: '#2ECC71' }} />
@@ -124,13 +124,13 @@ export default function GraphLegend() {
             </div>
           </div>
         )}
-        <div className="text-[10px] text-text-secondary/40 mt-1 italic">
+        <div className="text-[10px] text-[#7B8CDE]/40 mt-1 italic">
           Hover edges for details
         </div>
       </div>
 
       {/* Cluster */}
-      <div className="text-text-secondary/60">
+      <div className="text-[#7B8CDE]/60">
         Hull = topic cluster
       </div>
     </div>

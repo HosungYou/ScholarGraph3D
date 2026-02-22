@@ -48,10 +48,10 @@ function TrendSkeleton() {
   return (
     <div className="space-y-3 animate-pulse">
       {[1, 2, 3].map((i) => (
-        <div key={i} className="bg-gray-800 rounded-lg p-4">
-          <div className="h-4 bg-gray-700 rounded w-3/4 mb-2" />
-          <div className="h-3 bg-gray-700 rounded w-1/2 mb-2" />
-          <div className="h-8 bg-gray-700 rounded w-full" />
+        <div key={i} className="bg-[#0a0f1e] rounded-lg p-4 border border-[#1a2555]">
+          <div className="h-4 bg-[#111833] rounded w-3/4 mb-2" />
+          <div className="h-3 bg-[#111833] rounded w-1/2 mb-2" />
+          <div className="h-8 bg-[#111833] rounded w-full" />
         </div>
       ))}
     </div>
@@ -72,14 +72,14 @@ function TrendCard({
   return (
     <button
       onClick={() => onHighlight(trend.representative_papers)}
-      className="w-full text-left bg-gray-800 rounded-lg p-3 hover:bg-gray-750 transition-all duration-200 border border-transparent hover:border-gray-600"
+      className="w-full text-left bg-[#0a0f1e] rounded-lg p-3 hover:bg-[#111833] transition-all duration-200 border border-[#1a2555] hover:border-cosmic-glow/20"
     >
       <div className="flex items-center justify-between mb-1">
-        <span className="text-sm font-medium text-gray-100 truncate flex-1 mr-2">
+        <span className="text-sm font-mono font-medium text-[#E8EAF6] truncate flex-1 mr-2">
           {trend.cluster_label}
         </span>
         <span
-          className="rounded-full px-2 py-0.5 text-xs font-medium flex-shrink-0"
+          className="rounded-full px-2 py-0.5 text-xs font-mono font-medium flex-shrink-0"
           style={{
             backgroundColor: color + '20',
             color: color,
@@ -90,7 +90,7 @@ function TrendCard({
         </span>
       </div>
 
-      <div className="flex items-center gap-3 text-xs text-gray-400 mb-2">
+      <div className="flex items-center gap-3 text-xs font-mono text-[#7B8CDE]/80 mb-2">
         <span>{trend.paper_count} papers</span>
         <span>
           {trend.year_range[0]}-{trend.year_range[1]}
@@ -99,11 +99,11 @@ function TrendCard({
 
       {/* Trend strength bar */}
       <div className="mb-1">
-        <div className="flex items-center justify-between text-xs text-gray-500 mb-0.5">
+        <div className="flex items-center justify-between text-xs font-mono text-[#7B8CDE]/50 mb-0.5">
           <span>Strength</span>
           <span>{strengthPercent}%</span>
         </div>
-        <div className="w-full h-1.5 bg-gray-700 rounded-full overflow-hidden">
+        <div className="w-full h-1.5 bg-[#111833] rounded-full overflow-hidden">
           <div
             className="h-full rounded-full transition-all duration-500"
             style={{
@@ -135,6 +135,13 @@ function TrendSection({
   const [expanded, setExpanded] = useState(true);
   const color = TREND_COLORS[classification];
 
+  const titleColorClass =
+    classification === 'emerging'
+      ? 'text-green-400'
+      : classification === 'stable'
+        ? 'text-cosmic-glow'
+        : 'text-[#7B8CDE]/50';
+
   if (trends.length === 0) return null;
 
   return (
@@ -147,14 +154,14 @@ function TrendSection({
           className="w-2 h-2 rounded-full flex-shrink-0"
           style={{ backgroundColor: color }}
         />
-        <span className="text-xs font-medium uppercase tracking-wide text-gray-400 group-hover:text-gray-300 transition-colors">
+        <span className={`text-xs font-mono font-medium uppercase tracking-widest ${titleColorClass} group-hover:opacity-80 transition-opacity`}>
           {title}
         </span>
-        <span className="text-xs text-gray-500 ml-auto">
+        <span className="text-xs font-mono text-[#7B8CDE]/50 ml-auto">
           {trends.length}
         </span>
         <span
-          className={`text-gray-500 text-xs transition-transform duration-200 ${
+          className={`text-[#7B8CDE]/50 text-xs transition-transform duration-200 ${
             expanded ? 'rotate-0' : '-rotate-90'
           }`}
         >
@@ -215,10 +222,10 @@ export default function TrendPanel() {
   if (!graphData) {
     return (
       <div className="p-4">
-        <div className="text-xs font-medium uppercase tracking-wide text-gray-400 mb-3">
-          Trend Analysis
+        <div className="text-xs font-mono font-medium uppercase tracking-widest text-cosmic-glow/60 mb-3">
+          TREND ANALYSIS
         </div>
-        <p className="text-sm text-gray-500">
+        <p className="text-sm font-mono text-[#7B8CDE]/50">
           Search to analyze research trends
         </p>
       </div>
@@ -228,9 +235,9 @@ export default function TrendPanel() {
   return (
     <div className="p-4">
       <div className="flex items-center gap-2 mb-4">
-        <span className="text-base">~</span>
-        <span className="text-xs font-medium uppercase tracking-wide text-gray-400">
-          Trend Analysis
+        <span className="text-base text-cosmic-glow/60">~</span>
+        <span className="text-xs font-mono font-medium uppercase tracking-widest text-cosmic-glow/60">
+          TREND ANALYSIS
         </span>
       </div>
 
@@ -238,15 +245,15 @@ export default function TrendPanel() {
       {!trendAnalysis && !isAnalyzing && (
         <button
           onClick={handleAnalyze}
-          className="w-full px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors mb-4"
+          className="hud-button w-full px-4 py-2.5 uppercase font-mono tracking-wider text-sm mb-4"
         >
-          Analyze Trends
+          ANALYZE TRENDS
         </button>
       )}
 
       {/* Error */}
       {error && (
-        <div className="mb-4 p-3 bg-red-900/30 border border-red-800/50 rounded-lg text-sm text-red-300">
+        <div className="mb-4 p-3 bg-red-900/30 border border-red-800/50 rounded-lg text-sm font-mono text-red-300">
           {error}
           <button
             onClick={handleAnalyze}
@@ -264,22 +271,22 @@ export default function TrendPanel() {
       {trendAnalysis && !isAnalyzing && (
         <>
           {/* Summary */}
-          <div className="bg-gray-800 rounded-lg p-3 mb-4 text-xs text-gray-400">
+          <div className="bg-[#0a0f1e] rounded-lg p-3 mb-4 text-xs font-mono text-[#7B8CDE]/80 border border-[#1a2555]">
             <div className="grid grid-cols-3 gap-2 text-center">
               <div>
-                <div className="text-sm font-medium text-gray-200">
+                <div className="text-sm font-medium text-[#E8EAF6]/90">
                   {trendAnalysis.summary.total_papers}
                 </div>
                 <div>Papers</div>
               </div>
               <div>
-                <div className="text-sm font-medium text-gray-200">
+                <div className="text-sm font-medium text-[#E8EAF6]/90">
                   {trendAnalysis.summary.cluster_count}
                 </div>
                 <div>Clusters</div>
               </div>
               <div>
-                <div className="text-sm font-medium text-gray-200">
+                <div className="text-sm font-medium text-[#E8EAF6]/90">
                   {trendAnalysis.summary.year_range[0]}-
                   {trendAnalysis.summary.year_range[1]}
                 </div>
@@ -310,9 +317,9 @@ export default function TrendPanel() {
           {/* Re-analyze button */}
           <button
             onClick={handleAnalyze}
-            className="w-full px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg text-xs font-medium transition-colors mt-2"
+            className="w-full px-4 py-2 bg-[#111833] hover:bg-[#1a2555] text-[#7B8CDE] rounded-lg text-xs font-mono uppercase tracking-wider font-medium transition-colors mt-2 border border-[#1a2555]"
           >
-            Re-analyze
+            RE-ANALYZE
           </button>
         </>
       )}

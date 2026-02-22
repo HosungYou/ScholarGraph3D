@@ -110,10 +110,10 @@ export default function ClusterPanel() {
   if (!graphData) {
     return (
       <div className="p-4">
-        <div className="text-xs font-medium uppercase tracking-wide text-text-secondary mb-3">
-          Clusters
+        <div className="text-[10px] font-mono uppercase tracking-widest text-[#00E5FF]/60 mb-3">
+          SECTOR SCANNER
         </div>
-        <p className="text-sm text-text-secondary/60">
+        <p className="text-sm text-[#7B8CDE]/60">
           Search to see topic clusters
         </p>
       </div>
@@ -125,11 +125,11 @@ export default function ClusterPanel() {
   return (
     <div className="p-4">
       <div className="flex items-center gap-2 mb-4">
-        <Layers className="w-4 h-4 text-accent" />
-        <span className="text-xs font-medium uppercase tracking-wide text-text-secondary">
-          Topic Clusters
+        <Layers className="w-4 h-4 text-[#00E5FF]" />
+        <span className="text-[10px] font-mono uppercase tracking-widest text-[#00E5FF]/60">
+          SECTOR SCANNER
         </span>
-        <span className="ml-auto text-xs text-text-secondary/60">
+        <span className="ml-auto text-[10px] font-mono text-[#7B8CDE]/60">
           {clusters.length}
         </span>
       </div>
@@ -149,16 +149,18 @@ export default function ClusterPanel() {
               transition={{ delay: i * 0.03 }}
               className={`rounded-lg border transition-all ${
                 isSelected
-                  ? 'bg-surface-hover border-border/60'
-                  : 'hover:bg-surface-hover/50 border-transparent'
+                  ? 'bg-[#111833] border-[#1a2555]/60'
+                  : 'hover:bg-[#111833]/50 border-transparent'
               } ${isHidden ? 'opacity-40' : ''}`}
             >
               <div className="flex items-center gap-2 p-3">
-                {/* Color dot */}
-                <div
-                  className="w-3 h-3 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: cluster.color }}
-                />
+                {/* Pulsing color dot */}
+                <div className="relative flex-shrink-0">
+                  <div
+                    className="w-3 h-3 rounded-full animate-cosmic-pulse"
+                    style={{ backgroundColor: cluster.color }}
+                  />
+                </div>
 
                 {/* Main cluster info - clickable */}
                 <button
@@ -168,15 +170,15 @@ export default function ClusterPanel() {
                   <div className="text-sm font-medium text-text-primary truncate">
                     {cluster.label}
                   </div>
-                  <div className="flex items-center gap-2 text-xs text-text-secondary mt-0.5">
+                  <div className="flex items-center gap-2 text-[10px] font-mono text-[#7B8CDE] mt-0.5">
                     <span>{cluster.paper_count} papers</span>
                     {edgeCount > 0 && (
-                      <span className="text-text-secondary/50">· {edgeCount} edges</span>
+                      <span className="text-[#7B8CDE]/50">· {edgeCount} edges</span>
                     )}
                   </div>
 
                   {/* Density bar */}
-                  <div className="mt-1.5 h-1 bg-surface-hover rounded-full overflow-hidden">
+                  <div className="mt-1.5 h-1 bg-[#0a0f1e] rounded-full overflow-hidden">
                     <div
                       className="h-full rounded-full transition-all duration-500"
                       style={{
@@ -197,7 +199,11 @@ export default function ClusterPanel() {
                       toggleClusterVisibility(cluster.id);
                     }}
                     title={isHidden ? 'Show cluster' : 'Hide cluster'}
-                    className="p-1 rounded text-text-secondary/40 hover:text-text-secondary transition-colors"
+                    className={`p-1 rounded transition-colors ${
+                      isHidden
+                        ? 'text-[#7B8CDE]/40 hover:text-[#7B8CDE]'
+                        : 'text-[#00E5FF]/60 hover:text-[#00E5FF] shadow-[0_0_6px_rgba(0,229,255,0.1)]'
+                    }`}
                   >
                     {isHidden ? (
                       <EyeOff className="w-3.5 h-3.5" />
@@ -215,13 +221,13 @@ export default function ClusterPanel() {
                       );
                     }}
                     title="Focus on cluster"
-                    className="p-1 rounded text-text-secondary/40 hover:text-text-secondary transition-colors"
+                    className="p-1 rounded text-[#7B8CDE]/40 hover:text-[#7B8CDE] transition-colors"
                   >
                     <Focus className="w-3.5 h-3.5" />
                   </button>
 
                   <ChevronRight
-                    className={`w-4 h-4 text-text-secondary/40 transition-transform ${
+                    className={`w-4 h-4 text-[#7B8CDE]/40 transition-transform ${
                       isSelected ? 'rotate-90' : ''
                     }`}
                   />
@@ -243,14 +249,14 @@ export default function ClusterPanel() {
           >
             {/* Topics */}
             <div className="p-3 glass rounded-lg" style={{ borderLeft: `3px solid ${selectedCluster.color}` }}>
-              <div className="text-xs font-medium uppercase tracking-wide text-text-secondary mb-2">
+              <div className="text-[10px] font-mono uppercase tracking-widest text-[#7B8CDE] mb-2">
                 Top Topics
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {selectedCluster.topics.slice(0, 6).map((topic) => (
                   <span
                     key={topic}
-                    className="px-2 py-0.5 rounded text-xs bg-surface-hover text-text-secondary border border-border/30"
+                    className="px-2 py-0.5 rounded text-[10px] font-mono bg-[#0a0f1e] text-[#7B8CDE] border border-[#1a2555]/30"
                   >
                     {topic}
                   </span>
@@ -262,18 +268,18 @@ export default function ClusterPanel() {
             {clusterStats && (
               <div className="p-3 glass rounded-lg">
                 <div className="flex items-center gap-1.5 mb-2">
-                  <BarChart3 className="w-3.5 h-3.5 text-text-secondary/60" />
-                  <span className="text-xs font-medium uppercase tracking-wide text-text-secondary">
+                  <BarChart3 className="w-3.5 h-3.5 text-[#7B8CDE]/60" />
+                  <span className="text-[10px] font-mono uppercase tracking-widest text-[#7B8CDE]">
                     Statistics
                   </span>
                 </div>
-                <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
                   <div>
-                    <div className="text-text-secondary/50">Avg Citations</div>
+                    <div className="text-[#7B8CDE]/50">Avg Citations</div>
                     <div className="text-text-primary font-medium">{clusterStats.avgCitations.toLocaleString()}</div>
                   </div>
                   <div>
-                    <div className="text-text-secondary/50">Year Range</div>
+                    <div className="text-[#7B8CDE]/50">Year Range</div>
                     <div className="text-text-primary font-medium">
                       {clusterStats.yearMin && clusterStats.yearMax
                         ? `${clusterStats.yearMin}–${clusterStats.yearMax}`
@@ -281,11 +287,11 @@ export default function ClusterPanel() {
                     </div>
                   </div>
                   <div>
-                    <div className="text-text-secondary/50">Primary Field</div>
+                    <div className="text-[#7B8CDE]/50">Primary Field</div>
                     <div className="text-text-primary font-medium truncate">{clusterStats.topField}</div>
                   </div>
                   <div>
-                    <div className="text-text-secondary/50">Edge Ratio</div>
+                    <div className="text-[#7B8CDE]/50">Edge Ratio</div>
                     <div className="text-text-primary font-medium">
                       {clusterStats.internalEdges}i / {clusterStats.externalEdges}e
                     </div>
@@ -297,11 +303,11 @@ export default function ClusterPanel() {
             {/* Paper list */}
             <div className="p-3 glass rounded-lg">
               <div className="flex items-center gap-1.5 mb-2">
-                <FileText className="w-3.5 h-3.5 text-text-secondary/60" />
-                <span className="text-xs font-medium uppercase tracking-wide text-text-secondary">
+                <FileText className="w-3.5 h-3.5 text-[#7B8CDE]/60" />
+                <span className="text-[10px] font-mono uppercase tracking-widest text-[#7B8CDE]">
                   Papers
                 </span>
-                <span className="ml-auto text-xs text-text-secondary/40">
+                <span className="ml-auto text-[10px] font-mono text-[#7B8CDE]/40">
                   {clusterPapers.length}
                 </span>
               </div>
@@ -310,12 +316,12 @@ export default function ClusterPanel() {
                   <button
                     key={paper.id}
                     onClick={() => selectPaper(paper)}
-                    className="w-full text-left p-1.5 rounded hover:bg-surface-hover/80 transition-colors group"
+                    className="w-full text-left p-1.5 rounded hover:bg-[#111833] border-b border-[#1a2555]/30 transition-colors group"
                   >
-                    <div className="text-xs text-text-primary truncate group-hover:text-accent transition-colors">
+                    <div className="text-xs text-text-primary truncate group-hover:text-[#00E5FF] transition-colors">
                       {paper.title}
                     </div>
-                    <div className="flex items-center gap-2 text-[10px] text-text-secondary/50 mt-0.5">
+                    <div className="flex items-center gap-2 text-[10px] font-mono text-[#7B8CDE]/50 mt-0.5">
                       {paper.year && <span>{paper.year}</span>}
                       <span>{(paper.citation_count || 0).toLocaleString()} cit.</span>
                     </div>
@@ -325,7 +331,7 @@ export default function ClusterPanel() {
               {clusterPapers.length > 10 && !showAllPapers && (
                 <button
                   onClick={() => setShowAllPapers(true)}
-                  className="w-full mt-2 py-1.5 text-xs text-accent hover:text-accent/80 transition-colors"
+                  className="hud-button w-full mt-2 py-1.5 text-[10px] uppercase font-mono tracking-wider"
                 >
                   Show all {clusterPapers.length} papers
                 </button>
@@ -333,7 +339,7 @@ export default function ClusterPanel() {
               {showAllPapers && clusterPapers.length > 10 && (
                 <button
                   onClick={() => setShowAllPapers(false)}
-                  className="w-full mt-2 py-1.5 text-xs text-text-secondary hover:text-text-primary transition-colors"
+                  className="w-full mt-2 py-1.5 text-[10px] font-mono text-[#7B8CDE] hover:text-text-primary transition-colors"
                 >
                   Show less
                 </button>

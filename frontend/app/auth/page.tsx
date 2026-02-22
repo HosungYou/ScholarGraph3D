@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import LoginForm from '@/components/auth/LoginForm';
 import SignupForm from '@/components/auth/SignupForm';
+import CosmicStarfield from '@/components/cosmic/CosmicStarfield';
 import { ArrowLeft } from 'lucide-react';
 
 export default function AuthPage() {
@@ -29,12 +30,13 @@ export default function AuthPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background relative">
       {/* Background */}
-      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-accent/3 blur-[100px] pointer-events-none" />
+      <CosmicStarfield density="dense" />
+      <div className="fixed inset-0 z-[1] hud-scanline pointer-events-none" />
 
       {/* Back button */}
       <a
         href="/"
-        className="absolute top-6 left-6 flex items-center gap-2 text-sm text-text-secondary hover:text-text-primary transition-colors"
+        className="absolute top-6 left-6 flex items-center gap-2 text-sm text-text-secondary hover:text-text-primary transition-colors font-mono z-10"
       >
         <ArrowLeft className="w-4 h-4" />
         Home

@@ -14,6 +14,10 @@ import * as THREE from 'three';
 import { useGraphStore } from '@/hooks/useGraphStore';
 import type { Paper, GraphEdge, CitationIntent } from '@/types';
 import { ENHANCED_INTENT_COLORS } from '@/types';
+import { createStarNode } from './cosmic/starNodeRenderer';
+import { createNebulaCluster } from './cosmic/nebulaClusterRenderer';
+import CosmicAnimationManager from './cosmic/CosmicAnimationManager';
+import { getStarColors } from './cosmic/cosmicConstants';
 
 const ForceGraph3D = dynamic(() => import('react-force-graph-3d'), {
   ssr: false,
@@ -168,6 +172,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     setHoveredPaper,
     toggleMultiSelect,
     highlightedPaperIds,
+    showCosmicTheme,
   } = useGraphStore();
 
   const lastClickRef = useRef<{ nodeId: string; timestamp: number } | null>(
@@ -239,7 +244,8 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       .filter((paper) => !hiddenClusterIds.has(paper.cluster_id))
       .map((paper) => {
         const primaryField = paper.fields?.[0] || 'Other';
-        const color = FIELD_COLOR_MAP[primaryField] || '#95A5A6';
+        const starCol = getStarColors(primaryField);
+        const color = starCol.core;
         const yearSpan = yearRange.max - yearRange.min || 1;
         const paperYear = paper.year || yearRange.min;
         const opacity =
@@ -375,13 +381,132 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
   const nodeThreeObject = useCallback(
     (nodeData: unknown) => {
       const node = nodeData as ForceGraphNode;
-      const group = new THREE.Group();
-      group.userData.nodeId = node.id;
 
       const isHighlighted = highlightSet.has(node.id);
       const isSelected = selectedPaperIdRef.current === node.id;
       const hasSelection = selectedPaperIdRef.current !== null;
       const isHighlightedByPanel = highlightedPaperIds.has(node.id);
+
+      // === COSMIC THEME: Star nodes ===
+      if (showCosmicTheme) {
+        const cosmicOpacity = (() => {
+          if (isSelected || isHighlightedByPanel || isHighlighted) return 1;
+          if (hasSelection) return 0.15;
+          return node.opacity;
+        })();
+
+        const group = createStarNode({
+          field: node.paper.fields?.[0] || 'Other',
+          size: node.val,
+          opacity: cosmicOpacity,
+          year: node.paper.year || yearRange.min,
+          yearRange,
+          isSelected,
+          isHighlighted,
+          isHighlightedByPanel,
+          hasSelection,
+          isBridge: !!node.paper.is_bridge,
+          isOpenAccess: !!node.paper.is_open_access,
+          isTopCited: node.citationPercentile > 0.9,
+          showBloom,
+          showOARings,
+          showCitationAura,
+        });
+        group.userData.nodeId = node.id;
+
+        // Centrality-based label: show only top 20% OR highlighted/selected
+        const showLabel = showLabels && node.name && (
+          isSelected || isHighlighted || node.citationPercentile > 0.8
+        );
+
+        if (showLabel) {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            const scale = 2;
+            canvas.width = 256 * scale;
+            canvas.height = 64 * scale;
+            ctx.scale(scale, scale);
+
+            const fontSize = isSelected ? 16 : 10 + 18 * node.citationPercentile;
+            const labelOpacity = isSelected ? 1.0 :
+              isHighlighted ? 0.9 :
+              0.3 + 0.7 * node.citationPercentile;
+
+            ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
+            ctx.shadowBlur = 6;
+            ctx.shadowOffsetX = 1;
+            ctx.shadowOffsetY = 2;
+            ctx.fillStyle = isSelected
+              ? '#FFD700'
+              : isHighlighted
+                ? '#4ECDC4'
+                : '#FFFFFF';
+            ctx.globalAlpha = labelOpacity;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(
+              node.name.length > 18
+                ? node.name.substring(0, 16) + '..'
+                : node.name,
+              canvas.width / scale / 2,
+              canvas.height / scale / 2
+            );
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.needsUpdate = true;
+            const spriteMaterial = new THREE.SpriteMaterial({
+              map: texture,
+              transparent: true,
+              depthTest: false,
+            });
+            const sprite = new THREE.Sprite(spriteMaterial);
+            sprite.scale.set(40, 10, 1);
+            sprite.position.set(0, node.val + 5, 0);
+            group.add(sprite);
+          }
+        }
+
+        // Role badge: Review paper (R) or Methodology (M)
+        const abstract = (node.paper?.abstract || node.paper?.tldr || '').toLowerCase();
+        const isReviewPaper = /systematic review|meta-analysis|scoping review|literature review/.test(abstract);
+        const isMethodPaper = /randomized controlled trial|rct\b|survey methodology|mixed method/.test(abstract);
+
+        if ((isReviewPaper || isMethodPaper) && node.val >= 3) {
+          const badgeCanvas = document.createElement('canvas');
+          const bCtx = badgeCanvas.getContext('2d');
+          if (bCtx) {
+            badgeCanvas.width = 32;
+            badgeCanvas.height = 32;
+            bCtx.fillStyle = isReviewPaper ? '#4A90D9' : '#9B59B6';
+            bCtx.globalAlpha = 0.85;
+            bCtx.beginPath();
+            bCtx.arc(16, 16, 14, 0, Math.PI * 2);
+            bCtx.fill();
+            bCtx.globalAlpha = 1;
+            bCtx.fillStyle = '#FFFFFF';
+            bCtx.font = 'bold 16px Arial';
+            bCtx.textAlign = 'center';
+            bCtx.textBaseline = 'middle';
+            bCtx.fillText(isReviewPaper ? 'R' : 'M', 16, 16);
+
+            const badgeTexture = new THREE.CanvasTexture(badgeCanvas);
+            const badgeSprite = new THREE.Sprite(
+              new THREE.SpriteMaterial({ map: badgeTexture, transparent: true, depthTest: false })
+            );
+            badgeSprite.scale.set(node.val * 1.5, node.val * 1.5, 1);
+            badgeSprite.position.set(node.val * 0.8, node.val * 0.8, 0);
+            group.add(badgeSprite);
+          }
+        }
+
+        return group;
+      }
+
+      // === FALLBACK: Original renderer (when showCosmicTheme is false) ===
+      const group = new THREE.Group();
+      group.userData.nodeId = node.id;
 
       let displayColor = node.color;
       if (isSelected) displayColor = '#FFD700';
@@ -566,7 +691,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
 
       return group;
     },
-    [highlightSet, showLabels, showBloom, bridgeNodeIds, showOARings, showCitationAura, highlightedPaperIds]
+    [highlightSet, showLabels, showBloom, bridgeNodeIds, showOARings, showCitationAura, highlightedPaperIds, showCosmicTheme, yearRange]
   );
 
   // Link width
@@ -610,7 +735,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       if (highlightSet.has(sourceId) && highlightSet.has(targetId)) {
         return link.color + 'CC';
       }
-      return '#0a0e1a'; // near-invisible on dark background (was rgba(255,255,255,0.03))
+      return '#050510'; // near-invisible on dark background (was rgba(255,255,255,0.03))
     },
     [selectedPaper, highlightSet, fgRef]
   );
@@ -807,47 +932,79 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         }
       });
 
-      graphData!.clusters.forEach((cluster) => {
-        const clusterNodes = graphData!.nodes.filter(
-          (p) => p.cluster_id === cluster.id
-        );
-        const positions = clusterNodes
-          .map((p) => nodePositions.get(p.id))
-          .filter(Boolean) as { x: number; y: number; z: number }[];
+      if (showCosmicTheme) {
+        // Nebula clusters
+        graphData!.clusters.forEach((cluster) => {
+          if (hiddenClusterIds.has(cluster.id)) return;
+          const clusterNodes = graphData!.nodes.filter((p) => p.cluster_id === cluster.id);
+          const positions = clusterNodes
+            .map((p) => nodePositions.get(p.id))
+            .filter(Boolean) as { x: number; y: number; z: number }[];
+          if (positions.length < 2) return;
 
-        if (positions.length < 3) return;
+          const centroid = { x: 0, y: 0, z: 0 };
+          positions.forEach((p) => { centroid.x += p.x; centroid.y += p.y; centroid.z += p.z; });
+          centroid.x /= positions.length;
+          centroid.y /= positions.length;
+          centroid.z /= positions.length;
 
-        const centroidZ =
-          positions.reduce((s, p) => s + p.z, 0) / positions.length;
-        const points2D = positions.map(
-          (p) => new THREE.Vector2(p.x, p.y)
-        );
-        const hull = computeConvexHull2D(points2D);
-        if (hull.length < 3) return;
+          // Compute spread (average distance from centroid)
+          const spread = positions.reduce((sum, p) => {
+            return sum + Math.sqrt((p.x - centroid.x) ** 2 + (p.y - centroid.y) ** 2 + (p.z - centroid.z) ** 2);
+          }, 0) / positions.length;
 
-        const curve = new THREE.CatmullRomCurve3(
-          hull.map((p) => new THREE.Vector3(p.x, p.y, centroidZ - 5)),
-          true,
-          'catmullrom',
-          0.5
-        );
-        const curvePoints = curve.getPoints(hull.length * 8);
-        const shape = new THREE.Shape(
-          curvePoints.map((p) => new THREE.Vector2(p.x, p.y))
-        );
-
-        const geometry = new THREE.ShapeGeometry(shape);
-        const material = new THREE.MeshBasicMaterial({
-          color: new THREE.Color(cluster.color),
-          transparent: true,
-          opacity: 0.06,
-          side: THREE.DoubleSide,
-          depthWrite: false,
+          const nebula = createNebulaCluster({
+            color: cluster.color,
+            centroid,
+            nodeCount: clusterNodes.length,
+            spread: spread || 30,
+          });
+          overlayGroup.add(nebula);
         });
-        const mesh = new THREE.Mesh(geometry, material);
-        mesh.position.z = centroidZ - 5;
-        overlayGroup.add(mesh);
-      });
+      } else {
+        // Original hull code
+        graphData!.clusters.forEach((cluster) => {
+          const clusterNodes = graphData!.nodes.filter(
+            (p) => p.cluster_id === cluster.id
+          );
+          const positions = clusterNodes
+            .map((p) => nodePositions.get(p.id))
+            .filter(Boolean) as { x: number; y: number; z: number }[];
+
+          if (positions.length < 3) return;
+
+          const centroidZ =
+            positions.reduce((s, p) => s + p.z, 0) / positions.length;
+          const points2D = positions.map(
+            (p) => new THREE.Vector2(p.x, p.y)
+          );
+          const hull = computeConvexHull2D(points2D);
+          if (hull.length < 3) return;
+
+          const curve = new THREE.CatmullRomCurve3(
+            hull.map((p) => new THREE.Vector3(p.x, p.y, centroidZ - 5)),
+            true,
+            'catmullrom',
+            0.5
+          );
+          const curvePoints = curve.getPoints(hull.length * 8);
+          const shape = new THREE.Shape(
+            curvePoints.map((p) => new THREE.Vector2(p.x, p.y))
+          );
+
+          const geometry = new THREE.ShapeGeometry(shape);
+          const material = new THREE.MeshBasicMaterial({
+            color: new THREE.Color(cluster.color),
+            transparent: true,
+            opacity: 0.06,
+            side: THREE.DoubleSide,
+            depthWrite: false,
+          });
+          const mesh = new THREE.Mesh(geometry, material);
+          mesh.position.z = centroidZ - 5;
+          overlayGroup.add(mesh);
+        });
+      }
     };
 
     const interval = setInterval(updateHulls, 1000);
@@ -864,7 +1021,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         clusterOverlayRef.current = null;
       }
     };
-  }, [showClusterHulls, graphData]);
+  }, [showClusterHulls, graphData, showCosmicTheme, hiddenClusterIds]);
 
   // Gap overlay useEffect
   useEffect(() => {
@@ -1283,6 +1440,16 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     }
   }, [graphData?.nodes?.length]);
 
+  // Cosmic animation manager lifecycle
+  useEffect(() => {
+    if (showCosmicTheme) {
+      CosmicAnimationManager.getInstance().start();
+    }
+    return () => {
+      CosmicAnimationManager.reset();
+    };
+  }, [showCosmicTheme]);
+
   // Cleanup
   useEffect(() => {
     return () => {
@@ -1333,7 +1500,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
           if (p.is_open_access) badges.push('🔓 OA');
           if (p.year && p.year >= 2024) badges.push('◆ New');
           return `
-            <div style="background: rgba(10,14,26,0.95); padding: 12px 14px; border-radius: 10px; font-family: system-ui; font-size: 12px; max-width: 320px; border: 1px solid rgba(42,48,80,0.7); box-shadow: 0 4px 24px rgba(0,0,0,0.4);">
+            <div style="background: rgba(5,5,16,0.95); padding: 12px 14px; border-radius: 10px; font-family: system-ui; font-size: 12px; max-width: 320px; border: 1px solid rgba(0,229,255,0.15); box-shadow: 0 4px 24px rgba(0,0,0,0.4);">
               <div style="font-weight: 600; color: ${node.color}; margin-bottom: 5px; line-height: 1.4;">${p.title.length > 80 ? p.title.substring(0, 80) + '...' : p.title}</div>
               <div style="color: #8890a5; font-size: 11px; margin-bottom: 3px;">${p.authors.slice(0, 3).map((a) => a.name).join(', ')}${p.authors.length > 3 ? ' et al.' : ''}</div>
               <div style="color: #6870a0; font-size: 11px; margin-bottom: 5px;">${p.venue || ''} ${p.year || ''} | ${p.citation_count.toLocaleString()} citations</div>
@@ -1367,7 +1534,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         }}
         linkDirectionalArrowLength={3}
         linkDirectionalArrowRelPos={1}
-        backgroundColor="#0a0e1a"
+        backgroundColor="#050510"
         onNodeClick={handleNodeClick}
         onNodeHover={handleNodeHover}
         onLinkClick={handleLinkClick}

@@ -70,14 +70,14 @@ export default function GraphControls() {
           className={cn(
             'p-2 rounded-lg transition-all border',
             ctrl.active
-              ? 'glass-strong border-accent/30 text-accent'
-              : 'glass border-border/20 text-text-secondary/50 hover:text-text-secondary'
+              ? 'bg-[#00E5FF]/15 border-[#00E5FF]/30 text-[#00E5FF] shadow-[0_0_10px_rgba(0,229,255,0.15)]'
+              : 'bg-[#0a0f1e]/80 border-[#1a2555] text-[#7B8CDE]/60 hover:text-[#7B8CDE] hover:border-[#00E5FF]/15'
           )}
         >
           <ctrl.icon className="w-4 h-4" />
         </button>
       ))}
-      <div className="h-px bg-border/20 my-1" />
+      <div className="h-px bg-[#1a2555]/20 my-1" />
       <button
         onClick={() => {
           // Reset camera via global ref or store action
@@ -85,14 +85,14 @@ export default function GraphControls() {
           window.dispatchEvent(event);
         }}
         title="Reset Camera"
-        className="p-2 rounded-lg glass border border-border/20 text-text-secondary/50 hover:text-text-secondary transition-all"
+        className="p-2 rounded-lg bg-[#0a0f1e]/80 border border-[#1a2555] text-[#7B8CDE]/60 hover:text-[#7B8CDE] hover:border-[#00E5FF]/15 transition-all"
       >
         <RotateCcw className="w-4 h-4" />
       </button>
       <button
         onClick={handleFullscreen}
         title="Fullscreen"
-        className="p-2 rounded-lg glass border border-border/20 text-text-secondary/50 hover:text-text-secondary transition-all"
+        className="p-2 rounded-lg bg-[#0a0f1e]/80 border border-[#1a2555] text-[#7B8CDE]/60 hover:text-[#7B8CDE] hover:border-[#00E5FF]/15 transition-all"
       >
         <Maximize className="w-4 h-4" />
       </button>

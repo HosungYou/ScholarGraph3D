@@ -16,11 +16,11 @@ import type { ChatMessage, ChatResponse } from '@/types';
 function renderMarkdown(text: string): string {
   let html = text
     // Code blocks
-    .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre class="bg-gray-900 rounded p-2 my-2 text-xs overflow-x-auto"><code>$2</code></pre>')
+    .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre class="bg-[#050510] rounded p-2 my-2 text-xs overflow-x-auto border border-[#1a2555]"><code>$2</code></pre>')
     // Inline code
-    .replace(/`([^`]+)`/g, '<code class="bg-gray-700 px-1 py-0.5 rounded text-xs">$1</code>')
+    .replace(/`([^`]+)`/g, '<code class="bg-[#111833] px-1 py-0.5 rounded text-xs text-[#00E5FF]">$1</code>')
     // Bold
-    .replace(/\*\*(.+?)\*\*/g, '<strong class="font-semibold text-gray-100">$1</strong>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong class="font-semibold text-[#E8EAF6]">$1</strong>')
     // Italic
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
     // Line breaks
@@ -45,7 +45,7 @@ function CitationMarker({
   return (
     <button
       onClick={() => onClickCitation(paperId)}
-      className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-600/30 text-blue-400 text-xs font-medium hover:bg-blue-600/50 transition-colors mx-0.5 align-super"
+      className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-cosmic-glow/15 text-cosmic-glow text-xs font-mono hover:bg-cosmic-glow/25 transition-colors mx-0.5 align-super"
       title={title}
     >
       {index}
@@ -85,12 +85,12 @@ function MessageBubble({
       <div
         className={`max-w-[85%] rounded-lg px-3 py-2.5 ${
           isUser
-            ? 'bg-blue-600/20 border border-blue-600/30 text-gray-100'
-            : 'bg-gray-800 border border-gray-700/50 text-gray-200'
+            ? 'bg-cosmic-glow/10 border border-cosmic-glow/15 text-[#E8EAF6]'
+            : 'bg-[#0a0f1e] border border-[#1a2555] text-[#E8EAF6]/90'
         }`}
       >
         {isUser ? (
-          <div className="text-sm">{message.content}</div>
+          <div className="text-sm font-mono">{message.content}</div>
         ) : (
           <div className="text-sm leading-relaxed">
             <MessageContent
@@ -101,8 +101,8 @@ function MessageBubble({
           </div>
         )}
         <div
-          className={`text-xs mt-1.5 ${
-            isUser ? 'text-blue-400/50' : 'text-gray-500'
+          className={`text-xs mt-1.5 font-mono ${
+            isUser ? 'text-cosmic-glow/50' : 'text-[#7B8CDE]/50'
           }`}
         >
           {new Date(message.timestamp).toLocaleTimeString([], {
@@ -142,7 +142,7 @@ function MessageContent({
         // Create a button element
         const btn = document.createElement('button');
         btn.className =
-          'inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-600/30 text-blue-400 text-xs font-medium hover:bg-blue-600/50 transition-colors mx-0.5 align-super';
+          'inline-flex items-center justify-center w-5 h-5 rounded-full bg-cosmic-glow/15 text-cosmic-glow text-xs font-mono hover:bg-cosmic-glow/25 transition-colors mx-0.5 align-super';
         btn.textContent = index;
         btn.title = title;
         btn.onclick = () => onClickCitation(paperId);
@@ -164,15 +164,15 @@ function MessageContent({
 function StreamingIndicator() {
   return (
     <div className="flex justify-start mb-3">
-      <div className="bg-gray-800 border border-gray-700/50 rounded-lg px-3 py-2.5">
+      <div className="bg-[#0a0f1e] border border-[#1a2555] rounded-lg px-3 py-2.5">
         <div className="flex items-center gap-1">
-          <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+          <div className="w-1.5 h-1.5 rounded-full bg-cosmic-glow animate-pulse" />
           <div
-            className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"
+            className="w-1.5 h-1.5 rounded-full bg-cosmic-glow animate-pulse"
             style={{ animationDelay: '0.2s' }}
           />
           <div
-            className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"
+            className="w-1.5 h-1.5 rounded-full bg-cosmic-glow animate-pulse"
             style={{ animationDelay: '0.4s' }}
           />
         </div>
@@ -333,11 +333,11 @@ export default function ChatPanel() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700/50">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-[#1a2555]">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-gray-200">Chat</span>
+          <span className="text-xs font-mono uppercase tracking-widest text-cosmic-glow/60">COMM CHANNEL</span>
           {hasLLM && (
-            <span className="rounded-full px-2 py-0.5 text-xs bg-green-900/30 text-green-400 border border-green-800/40">
+            <span className="rounded-full px-2 py-0.5 text-xs font-mono bg-green-900/30 text-green-400 border border-green-800/40">
               {llmSettings!.provider}
             </span>
           )}
@@ -345,7 +345,7 @@ export default function ChatPanel() {
         {chatMessages.length > 0 && (
           <button
             onClick={clearChat}
-            className="text-xs text-gray-500 hover:text-gray-400 transition-colors"
+            className="text-xs font-mono text-[#7B8CDE]/50 hover:text-[#7B8CDE]/80 transition-colors uppercase tracking-wider"
           >
             Clear
           </button>
@@ -357,10 +357,10 @@ export default function ChatPanel() {
         {chatMessages.length === 0 && !isStreaming && (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <div className="text-3xl mb-3 opacity-30">&#128172;</div>
-            <p className="text-sm text-gray-400 mb-1">
+            <p className="text-sm text-[#7B8CDE]/80 mb-1">
               Ask about the research field, trends, or gaps
             </p>
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-[#7B8CDE]/50">
               {hasLLM
                 ? 'AI will analyze your graph data to answer'
                 : 'Configure LLM settings first'}
@@ -377,7 +377,7 @@ export default function ChatPanel() {
                   <button
                     key={suggestion}
                     onClick={() => handleFollowup(suggestion)}
-                    className="w-full text-left px-3 py-2 bg-gray-800 hover:bg-gray-750 border border-gray-700/50 rounded-lg text-xs text-gray-300 transition-colors"
+                    className="w-full text-left px-3 py-2 bg-[#0a0f1e] hover:bg-[#111833] border border-[#1a2555] rounded-lg text-xs text-[#7B8CDE] font-mono transition-colors"
                   >
                     {suggestion}
                   </button>
@@ -398,9 +398,9 @@ export default function ChatPanel() {
         {/* Streaming content */}
         {isStreaming && streamingContent && (
           <div className="flex justify-start mb-3">
-            <div className="max-w-[85%] bg-gray-800 border border-gray-700/50 rounded-lg px-3 py-2.5">
+            <div className="max-w-[85%] bg-[#0a0f1e] border border-[#1a2555] rounded-lg px-3 py-2.5">
               <div
-                className="text-sm text-gray-200 leading-relaxed"
+                className="text-sm text-[#E8EAF6]/90 leading-relaxed"
                 dangerouslySetInnerHTML={{
                   __html: renderMarkdown(streamingContent),
                 }}
@@ -414,7 +414,7 @@ export default function ChatPanel() {
         {/* Suggested follow-ups */}
         {suggestedFollowups.length > 0 && !isStreaming && (
           <div className="mt-2 mb-2">
-            <div className="text-xs text-gray-500 mb-1.5">
+            <div className="text-xs font-mono text-[#7B8CDE]/50 mb-1.5 uppercase tracking-wider">
               Suggested follow-ups
             </div>
             <div className="flex flex-wrap gap-1.5">
@@ -422,7 +422,7 @@ export default function ChatPanel() {
                 <button
                   key={i}
                   onClick={() => handleFollowup(text)}
-                  className="px-2.5 py-1.5 bg-gray-800 hover:bg-gray-750 border border-gray-700/50 rounded-full text-xs text-gray-300 transition-colors"
+                  className="px-2.5 py-1.5 bg-[#0a0f1e] hover:bg-[#111833] border border-[#1a2555] rounded-full text-xs text-[#7B8CDE] font-mono transition-colors"
                 >
                   {text}
                 </button>
@@ -435,10 +435,10 @@ export default function ChatPanel() {
       </div>
 
       {/* Input area */}
-      <div className="px-4 py-3 border-t border-gray-700/50">
+      <div className="px-4 py-3 border-t border-[#1a2555]">
         {!hasLLM ? (
           <div className="text-center py-2">
-            <p className="text-xs text-gray-500">
+            <p className="text-xs font-mono text-[#7B8CDE]/50">
               Configure LLM settings to start chatting
             </p>
           </div>
@@ -451,7 +451,7 @@ export default function ChatPanel() {
               onKeyDown={handleKeyDown}
               placeholder="Ask about this research..."
               rows={1}
-              className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-600 resize-none max-h-24"
+              className="flex-1 bg-[#0a0f1e] border border-[#1a2555] rounded-lg px-3 py-2 text-sm text-[#E8EAF6] placeholder:text-[#7B8CDE]/40 focus:outline-none focus:border-cosmic-glow/40 resize-none max-h-24 font-mono"
               style={{
                 height: 'auto',
                 minHeight: '38px',
@@ -467,7 +467,7 @@ export default function ChatPanel() {
             <button
               onClick={handleSend}
               disabled={!input.trim() || isStreaming}
-              className="flex-shrink-0 px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded-lg text-sm font-medium transition-colors"
+              className="hud-button flex-shrink-0 px-3 py-2 uppercase font-mono disabled:opacity-40 disabled:cursor-not-allowed text-sm"
             >
               {isStreaming ? '...' : '&#9654;'}
             </button>

@@ -202,20 +202,20 @@ export default function LLMSettingsModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        className="absolute inset-0 bg-[#050510]/80 backdrop-blur-sm"
         onClick={onClose}
       />
 
       {/* Modal */}
-      <div className="relative bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+      <div className="relative hud-panel hud-scanline w-full max-w-md mx-4 overflow-hidden rounded-xl shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-700/50">
-          <h2 className="text-base font-semibold text-gray-100">
-            LLM Settings
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#1a2555]">
+          <h2 className="text-sm font-mono uppercase tracking-widest text-[#E8EAF6]">
+            COMM RELAY CONFIGURATION
           </h2>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-gray-800 transition-colors text-gray-400 hover:text-gray-200"
+            className="p-1.5 rounded-lg hover:bg-[#111833] transition-colors text-[#7B8CDE] hover:text-cosmic-glow"
           >
             &#10005;
           </button>
@@ -225,18 +225,18 @@ export default function LLMSettingsModal({
         <div className="px-5 py-4 space-y-4">
           {/* Provider tabs */}
           <div>
-            <label className="text-xs font-medium uppercase tracking-wide text-gray-400 mb-2 block">
+            <label className="text-xs font-mono uppercase tracking-widest text-[#7B8CDE]/80 mb-2 block">
               Provider
             </label>
-            <div className="grid grid-cols-4 gap-1 bg-gray-800 rounded-lg p-1">
+            <div className="grid grid-cols-4 gap-1 bg-[#050510] rounded-lg p-1">
               {PROVIDERS.map((p) => (
                 <button
                   key={p}
                   onClick={() => handleProviderChange(p)}
-                  className={`px-2 py-2 rounded-md text-xs font-medium transition-all ${
+                  className={`px-2 py-2 rounded-md text-xs font-mono font-medium transition-all ${
                     provider === p
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-gray-400 hover:text-gray-200 hover:bg-gray-700/50'
+                      ? 'bg-cosmic-glow/15 border border-cosmic-glow/30 text-cosmic-glow shadow-sm'
+                      : 'text-[#7B8CDE]/60 hover:text-[#7B8CDE] hover:bg-[#0a0f1e] border border-transparent'
                   }`}
                 >
                   {PROVIDER_CONFIGS[p].name}
@@ -247,7 +247,7 @@ export default function LLMSettingsModal({
 
           {/* API Key */}
           <div>
-            <label className="text-xs font-medium uppercase tracking-wide text-gray-400 mb-2 block">
+            <label className="text-xs font-mono uppercase tracking-widest text-[#7B8CDE]/80 mb-2 block">
               API Key
             </label>
             <div className="relative">
@@ -259,27 +259,27 @@ export default function LLMSettingsModal({
                   setTestStatus('idle');
                 }}
                 placeholder={config.placeholder}
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-600 pr-16 font-mono"
+                className="w-full bg-[#0a0f1e] border border-[#1a2555] rounded-lg px-3 py-2.5 text-sm text-[#E8EAF6] placeholder:text-[#7B8CDE]/40 focus:outline-none focus:border-cosmic-glow/40 pr-16 font-mono"
               />
               <button
                 onClick={() => setShowKey(!showKey)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 px-2 py-1 text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                className="absolute right-2 top-1/2 -translate-y-1/2 px-2 py-1 text-xs font-mono text-[#7B8CDE]/50 hover:text-[#7B8CDE] transition-colors"
               >
                 {showKey ? 'Hide' : 'Show'}
               </button>
             </div>
-            <p className="text-xs text-gray-500 mt-1.5">{config.helpText}</p>
+            <p className="text-xs font-mono text-[#7B8CDE]/50 mt-1.5">{config.helpText}</p>
           </div>
 
           {/* Model selector */}
           <div>
-            <label className="text-xs font-medium uppercase tracking-wide text-gray-400 mb-2 block">
+            <label className="text-xs font-mono uppercase tracking-widest text-[#7B8CDE]/80 mb-2 block">
               Model
             </label>
             <select
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-gray-100 focus:outline-none focus:border-blue-600 appearance-none cursor-pointer"
+              className="w-full bg-[#0a0f1e] border border-[#1a2555] rounded-lg px-3 py-2.5 text-sm text-[#E8EAF6] focus:outline-none focus:border-cosmic-glow/40 appearance-none cursor-pointer font-mono"
             >
               {config.models.map((m) => (
                 <option key={m} value={m}>
@@ -294,45 +294,45 @@ export default function LLMSettingsModal({
             <button
               onClick={handleTestConnection}
               disabled={!apiKey.trim() || testStatus === 'testing'}
-              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:text-gray-600 text-gray-200 rounded-lg text-sm font-medium transition-colors"
+              className="px-4 py-2 bg-[#111833] hover:bg-[#1a2555] disabled:bg-[#0a0f1e] disabled:text-[#7B8CDE]/30 text-[#7B8CDE] rounded-lg text-xs font-mono uppercase tracking-wider font-medium transition-colors border border-[#1a2555]"
             >
-              {testStatus === 'testing' ? 'Testing...' : 'Test Connection'}
+              {testStatus === 'testing' ? 'TESTING...' : 'TEST CONNECTION'}
             </button>
             {testStatus === 'success' && (
-              <span className="text-sm text-green-400">
+              <span className="text-sm font-mono text-green-400">
                 &#10003; Connection valid
               </span>
             )}
             {testStatus === 'error' && (
-              <span className="text-sm text-red-400">{testError}</span>
+              <span className="text-sm font-mono text-red-400">{testError}</span>
             )}
           </div>
 
           {/* Pricing link */}
-          <div className="text-xs text-gray-500">
+          <div className="text-xs font-mono text-[#7B8CDE]/50">
             <a
               href={config.pricingUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="hover:text-gray-400 underline transition-colors"
+              className="hover:text-cosmic-glow underline transition-colors"
             >
               View {config.name} pricing
             </a>
           </div>
 
           {/* Privacy notice */}
-          <div className="bg-gray-800/50 border border-gray-700/30 rounded-lg p-3 text-xs text-gray-500">
+          <div className="bg-[#0a0f1e] border border-[#1a2555] rounded-lg p-3 text-xs font-mono text-[#7B8CDE]/50">
             Your API key is stored locally in your browser and never sent to our
             servers. It is only used for direct API calls to {config.name}.
           </div>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-5 py-4 border-t border-gray-700/50 bg-gray-800/30">
+        <div className="flex items-center justify-between px-5 py-4 border-t border-[#1a2555] bg-[#0a0f1e]/30">
           {llmSettings ? (
             <button
               onClick={handleRemove}
-              className="px-3 py-2 text-sm text-red-400 hover:text-red-300 transition-colors"
+              className="px-3 py-2 text-sm font-mono text-red-400 hover:text-red-300 transition-colors"
             >
               Remove Key
             </button>
@@ -342,16 +342,16 @@ export default function LLMSettingsModal({
           <div className="flex items-center gap-2">
             <button
               onClick={onClose}
-              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg text-sm font-medium transition-colors"
+              className="px-4 py-2 bg-[#111833] hover:bg-[#1a2555] text-[#7B8CDE] rounded-lg text-xs font-mono uppercase tracking-wider font-medium transition-colors border border-[#1a2555]"
             >
               Cancel
             </button>
             <button
               onClick={handleSave}
               disabled={!apiKey.trim()}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded-lg text-sm font-medium transition-colors"
+              className="hud-button px-4 py-2 uppercase font-mono tracking-wider text-xs disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              Save
+              SAVE
             </button>
           </div>
         </div>

@@ -17,6 +17,7 @@ import LLMSettingsModal, {
   loadLLMSettings,
 } from '@/components/settings/LLMSettingsModal';
 import CitationContextModal from '@/components/graph/CitationContextModal';
+import RadarLoader from '@/components/cosmic/RadarLoader';
 import type { Paper } from '@/types';
 
 function ExploreContent() {
@@ -346,7 +347,7 @@ function ExploreContent() {
       {/* Top bar with search */}
       <div className="flex-shrink-0 border-b border-border/50 glass-strong z-20">
         <div className="flex items-center gap-4 px-4 py-3">
-          <a href="/" className="text-lg font-bold text-accent flex-shrink-0">
+          <a href="/" className="text-lg font-bold text-[#00E5FF] flex-shrink-0 font-mono tracking-wider">
             SG3D
           </a>
           <SearchBar />
@@ -356,10 +357,10 @@ function ExploreContent() {
             {/* Chat toggle */}
             <button
               onClick={() => setShowChat(!showChat)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border font-mono uppercase tracking-wider ${
                 showChat
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-800 text-gray-400 hover:text-gray-200 hover:bg-gray-700 border border-gray-700'
+                  ? 'bg-[#00E5FF]/10 text-[#00E5FF] border-[#00E5FF]/20'
+                  : 'bg-[#0a0f1e] text-[#7B8CDE] hover:text-[#E8EAF6] hover:bg-[#111833] border-[#1a2555]'
               }`}
               title="Toggle AI Chat"
             >
@@ -369,10 +370,10 @@ function ExploreContent() {
             {/* LLM Settings */}
             <button
               onClick={() => setShowLLMModal(true)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border font-mono uppercase tracking-wider ${
                 llmSettings
                   ? 'bg-green-900/20 text-green-400 border-green-800/40 hover:bg-green-900/30'
-                  : 'bg-gray-800 text-gray-400 border-gray-700 hover:text-gray-200 hover:bg-gray-700'
+                  : 'bg-[#0a0f1e] text-[#7B8CDE] border-[#1a2555] hover:text-[#E8EAF6] hover:bg-[#111833]'
               }`}
               title="LLM Settings"
             >
@@ -383,7 +384,12 @@ function ExploreContent() {
       </div>
 
       {/* Main content area */}
-      <div className="flex-1 flex overflow-hidden relative">
+      <motion.div
+        className="flex-1 flex overflow-hidden relative"
+        initial={{ scale: 1.02, filter: 'blur(4px)' }}
+        animate={{ scale: 1, filter: 'blur(0px)' }}
+        transition={{ duration: 0.5 }}
+      >
         {/* Left panel: clusters */}
         <div style={{ width: leftPanelWidth }} className="flex-shrink-0 border-r border-border/30 glass flex flex-col relative">
           <div className="flex-1 overflow-y-auto">
@@ -392,7 +398,7 @@ function ExploreContent() {
 
           {/* Left panel drag handle */}
           <div
-            className="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-blue-500/40 active:bg-blue-500/60 transition-colors z-10"
+            className="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-[#00E5FF]/30 active:bg-[#00E5FF]/50 transition-colors z-10"
             onMouseDown={handleLeftPanelResizeStart}
           />
         </div>
@@ -403,20 +409,18 @@ function ExploreContent() {
           {isLoading && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/80">
               <div className="text-center max-w-sm w-full px-8">
-                <div className="w-12 h-12 border-2 border-accent border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-                {searchProgress ? (
+                <RadarLoader message="SCANNING SECTOR..." />
+                {searchProgress && (
                   <>
-                    <p className="text-sm text-text-secondary mb-3">{searchProgress.message}</p>
-                    <div className="w-full bg-gray-800 rounded-full h-1.5">
+                    <p className="text-sm text-[#7B8CDE] mb-3 mt-4 font-mono">{searchProgress.message}</p>
+                    <div className="w-full bg-[#0a0f1e] rounded-full h-1.5 border border-[#1a2555]/30">
                       <div
-                        className="bg-accent h-1.5 rounded-full transition-all duration-500"
+                        className="bg-[#00E5FF] h-1.5 rounded-full transition-all duration-500"
                         style={{ width: `${searchProgress.progress * 100}%` }}
                       />
                     </div>
-                    <p className="text-xs text-text-secondary/50 mt-2">{Math.round(searchProgress.progress * 100)}%</p>
+                    <p className="text-xs text-[#7B8CDE]/50 mt-2 font-mono">{Math.round(searchProgress.progress * 100)}%</p>
                   </>
-                ) : (
-                  <p className="text-sm text-text-secondary">Searching papers...</p>
                 )}
               </div>
             </div>
@@ -424,7 +428,7 @@ function ExploreContent() {
 
           {!isLoading && !graphData && query && (
             <div className="absolute inset-0 flex items-center justify-center">
-              <p className="text-text-secondary">
+              <p className="text-[#7B8CDE] font-mono">
                 No results found for &ldquo;{query}&rdquo;
               </p>
             </div>
@@ -433,15 +437,15 @@ function ExploreContent() {
           {!query && (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="text-center max-w-lg px-4">
-                <div className="text-4xl mb-4">🔭</div>
-                <h2 className="text-xl font-semibold text-text-primary mb-2">
-                  Explore Academic Literature in 3D
+                <div className="text-[10px] font-mono uppercase tracking-widest text-[#00E5FF]/40 mb-3">[ SYSTEM READY ]</div>
+                <h2 className="text-xl font-semibold text-text-primary mb-2 font-mono">
+                  AWAITING SCAN VECTOR
                 </h2>
-                <p className="text-text-secondary/70 text-sm mb-6">
-                  Search papers → 3D graph appears → click nodes to explore
+                <p className="text-[#7B8CDE]/70 text-sm mb-6 font-mono">
+                  Search papers &rarr; 3D graph appears &rarr; click nodes to explore
                 </p>
-                <p className="text-text-secondary/50 text-xs mb-4">
-                  Nodes = papers · Distance = semantic similarity · Clusters = research topics
+                <p className="text-[#7B8CDE]/50 text-xs mb-4 font-mono">
+                  Nodes = papers &middot; Distance = semantic similarity &middot; Clusters = research topics
                 </p>
                 <div className="flex flex-wrap gap-2 justify-center mb-6">
                   {[
@@ -456,14 +460,14 @@ function ExploreContent() {
                         params.set('q', example);
                         window.location.href = `/explore?${params.toString()}`;
                       }}
-                      className="px-4 py-2 bg-surface/80 hover:bg-surface border border-border/40 rounded-full text-sm text-text-secondary hover:text-text-primary transition-all"
+                      className="px-4 py-2 bg-[#0a0f1e]/80 hover:bg-[#111833] border border-[#1a2555]/40 rounded-full text-sm text-[#7B8CDE] hover:text-text-primary transition-all font-mono"
                     >
                       {example}
                     </button>
                   ))}
                 </div>
-                <p className="text-text-secondary/40 text-xs">
-                  💡 Tip: Use the 🤖 AI Search mode with a Groq API key for natural language queries
+                <p className="text-[#7B8CDE]/40 text-xs font-mono">
+                  TIP: Use AI Search mode with a Groq API key for natural language queries
                 </p>
               </div>
             </div>
@@ -476,7 +480,7 @@ function ExploreContent() {
 
           {/* Meta info */}
           {graphData && (
-            <div className="absolute bottom-4 left-4 glass rounded-lg px-3 py-2 text-xs text-text-secondary">
+            <div className="absolute bottom-4 left-4 glass rounded-lg px-3 py-2 text-xs text-[#7B8CDE] font-mono">
               {graphData.meta.total} papers | {graphData.edges.filter(e => e.type === 'citation').length} citation | {graphData.edges.filter(e => e.type === 'similarity').length} similarity | {graphData.clusters.length} clusters
             </div>
           )}
@@ -501,7 +505,7 @@ function ExploreContent() {
             >
               {/* Right panel drag handle */}
               <div
-                className="absolute left-0 top-0 h-full w-1 cursor-col-resize hover:bg-blue-500/40 active:bg-blue-500/60 transition-colors z-10"
+                className="absolute left-0 top-0 h-full w-1 cursor-col-resize hover:bg-[#00E5FF]/30 active:bg-[#00E5FF]/50 transition-colors z-10"
                 onMouseDown={handleRightPanelResizeStart}
               />
               <PaperDetailPanel
@@ -525,14 +529,14 @@ function ExploreContent() {
             >
               {/* Right panel drag handle */}
               <div
-                className="absolute left-0 top-0 h-full w-1 cursor-col-resize hover:bg-blue-500/40 active:bg-blue-500/60 transition-colors z-10"
+                className="absolute left-0 top-0 h-full w-1 cursor-col-resize hover:bg-[#00E5FF]/30 active:bg-[#00E5FF]/50 transition-colors z-10"
                 onMouseDown={handleRightPanelResizeStart}
               />
               <ChatPanel />
             </motion.div>
           )}
         </AnimatePresence>
-      </div>
+      </motion.div>
 
       {/* Citation Context Modal */}
       {citationModalData && (
@@ -565,7 +569,7 @@ function ExploreContent() {
       {/* Expand error toast */}
       {expandError && (
         <div className="fixed bottom-4 right-4 z-50 bg-red-900/90 border border-red-700/50 text-red-200 px-4 py-3 rounded-lg text-sm max-w-sm shadow-xl">
-          ⚠️ {expandError}
+          &#9888; {expandError}
         </div>
       )}
 
@@ -584,7 +588,7 @@ export default function ExplorePage() {
     <Suspense
       fallback={
         <div className="h-screen flex items-center justify-center bg-background">
-          <div className="w-12 h-12 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+          <div className="w-12 h-12 border-2 border-[#00E5FF] border-t-transparent rounded-full animate-spin" />
         </div>
       }
     >

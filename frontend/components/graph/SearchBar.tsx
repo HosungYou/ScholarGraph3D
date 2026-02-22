@@ -82,14 +82,14 @@ export default function SearchBar() {
   return (
     <form onSubmit={handleSearch} className="flex-1 flex items-center gap-2">
       {/* Mode toggle */}
-      <div className="flex-shrink-0 flex items-center bg-gray-800/50 rounded-lg p-0.5 border border-gray-700/30">
+      <div className="flex-shrink-0 flex items-center bg-[#0a0f1e]/50 rounded-lg p-0.5 border border-[#1a2555]/30">
         <button
           type="button"
           onClick={() => setAiMode(false)}
           className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1 ${
             !aiMode
-              ? 'bg-gray-700 text-gray-100 shadow-sm'
-              : 'text-gray-500 hover:text-gray-300'
+              ? 'bg-[#1a2555] text-[#E8EAF6] shadow-sm'
+              : 'text-[#7B8CDE]/50 hover:text-[#7B8CDE]'
           }`}
         >
           <Search className="w-3 h-3" />
@@ -100,8 +100,8 @@ export default function SearchBar() {
           onClick={() => setAiMode(true)}
           className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1 ${
             aiMode
-              ? 'bg-purple-700/80 text-purple-100 shadow-sm'
-              : 'text-gray-500 hover:text-gray-300'
+              ? 'bg-[#6c5ce7]/80 text-[#a29bfe] shadow-sm'
+              : 'text-[#7B8CDE]/50 hover:text-[#7B8CDE]'
           }`}
           title={!llmSettings || llmSettings.provider !== 'groq' ? 'Set Groq API key in LLM Settings for AI Search' : 'AI Search mode'}
         >
@@ -110,11 +110,14 @@ export default function SearchBar() {
         </button>
       </div>
 
-      <div className="flex-1 relative flex items-center">
+      <div className="flex-1 relative flex items-center hud-scanline">
+        <span className="absolute top-0 left-0 right-0 text-[9px] font-mono text-[#00E5FF]/30 uppercase tracking-widest pointer-events-none px-2 leading-none" style={{ marginTop: '-10px' }}>
+          NAVIGATION CONSOLE
+        </span>
         {aiMode ? (
-          <Sparkles className="absolute left-3 w-4 h-4 text-purple-400 pointer-events-none" />
+          <Sparkles className="absolute left-3 w-4 h-4 text-[#a29bfe] pointer-events-none" />
         ) : (
-          <Search className="absolute left-3 w-4 h-4 text-text-secondary pointer-events-none" />
+          <Search className="absolute left-3 w-4 h-4 text-[#7B8CDE] pointer-events-none" />
         )}
         <input
           type="text"
@@ -125,10 +128,10 @@ export default function SearchBar() {
               ? 'Describe what you\'re looking for... e.g. "How is AI adopted in healthcare since 2020?"'
               : 'Search papers...'
           }
-          className={`w-full bg-surface/50 border rounded-lg pl-9 pr-4 py-2 text-sm text-text-primary placeholder:text-text-secondary/60 outline-none transition-colors ${
+          className={`w-full bg-transparent border rounded-lg pl-9 pr-4 py-2 text-sm text-text-primary placeholder:text-[#7B8CDE]/60 outline-none transition-colors ${
             aiMode
-              ? 'border-purple-700/40 focus:border-purple-500/50'
-              : 'border-border/30 focus:border-accent/50'
+              ? 'border-[#6c5ce7]/40 focus:border-[#a29bfe]/50'
+              : 'border-[#1a2555]/30 focus:border-[#00E5FF]/40'
           }`}
         />
       </div>
@@ -138,8 +141,8 @@ export default function SearchBar() {
         onClick={() => setShowFilters(!showFilters)}
         className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm transition-colors border ${
           showFilters
-            ? 'bg-accent/10 border-accent/30 text-accent'
-            : 'bg-surface/50 border-border/30 text-text-secondary hover:text-text-primary'
+            ? 'bg-[#00E5FF]/10 border-[#00E5FF]/30 text-[#00E5FF]'
+            : 'bg-[#0a0f1e]/50 border-[#1a2555]/30 text-[#7B8CDE] hover:text-text-primary'
         }`}
       >
         <Filter className="w-3.5 h-3.5" />
@@ -152,13 +155,13 @@ export default function SearchBar() {
       <button
         type="submit"
         disabled={!query.trim() || isAiSearching}
-        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-white ${
+        className={`hud-button uppercase font-mono tracking-wider text-sm disabled:opacity-40 disabled:cursor-not-allowed ${
           aiMode
-            ? 'bg-purple-600 hover:bg-purple-700'
-            : 'bg-accent hover:bg-accent/90'
+            ? 'bg-[#6c5ce7]/15 border-[#a29bfe]/30 text-[#a29bfe] hover:bg-[#6c5ce7]/25'
+            : ''
         }`}
       >
-        {isAiSearching ? 'Searching...' : aiMode ? '✨ Search' : 'Search'}
+        {isAiSearching ? 'SCANNING...' : aiMode ? '✨ SCAN' : 'SCAN'}
       </button>
 
       {/* Filter dropdown */}
@@ -172,7 +175,7 @@ export default function SearchBar() {
           >
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
-                <label className="text-xs text-text-secondary whitespace-nowrap">
+                <label className="text-xs text-[#7B8CDE] whitespace-nowrap font-mono">
                   Year Range
                 </label>
                 <input
@@ -182,9 +185,9 @@ export default function SearchBar() {
                   placeholder="From"
                   min="1900"
                   max="2026"
-                  className="w-20 bg-surface border border-border/30 rounded px-2 py-1 text-xs text-text-primary outline-none focus:border-accent/50"
+                  className="w-20 bg-[#0a0f1e] border border-[#1a2555]/30 rounded px-2 py-1 text-xs text-text-primary outline-none focus:border-[#00E5FF]/40"
                 />
-                <span className="text-text-secondary/40">-</span>
+                <span className="text-[#7B8CDE]/40">-</span>
                 <input
                   type="number"
                   value={yearMax}
@@ -192,18 +195,18 @@ export default function SearchBar() {
                   placeholder="To"
                   min="1900"
                   max="2026"
-                  className="w-20 bg-surface border border-border/30 rounded px-2 py-1 text-xs text-text-primary outline-none focus:border-accent/50"
+                  className="w-20 bg-[#0a0f1e] border border-[#1a2555]/30 rounded px-2 py-1 text-xs text-text-primary outline-none focus:border-[#00E5FF]/40"
                 />
               </div>
 
               <div className="flex items-center gap-2">
-                <label className="text-xs text-text-secondary whitespace-nowrap">
+                <label className="text-xs text-[#7B8CDE] whitespace-nowrap font-mono">
                   Field
                 </label>
                 <select
                   value={field}
                   onChange={(e) => setField(e.target.value)}
-                  className="bg-surface border border-border/30 rounded px-2 py-1 text-xs text-text-primary outline-none focus:border-accent/50"
+                  className="bg-[#0a0f1e] border border-[#1a2555]/30 rounded px-2 py-1 text-xs text-text-primary outline-none focus:border-[#00E5FF]/40"
                 >
                   <option value="">All Fields</option>
                   {OA_FIELDS.map((f) => (
@@ -222,15 +225,15 @@ export default function SearchBar() {
                     setYearMax('');
                     setField('');
                   }}
-                  className="text-xs text-accent hover:text-accent/80 transition-colors"
+                  className="text-xs text-[#00E5FF] hover:text-[#00E5FF]/80 transition-colors font-mono"
                 >
                   Clear
                 </button>
               )}
             </div>
             {aiMode && (!llmSettings || llmSettings.provider !== 'groq') && (
-              <p className="text-xs text-purple-400/70 mt-2">
-                💡 Set a Groq API key in LLM Settings to enable AI-powered query expansion
+              <p className="text-xs text-[#a29bfe]/70 mt-2 font-mono">
+                Set a Groq API key in LLM Settings to enable AI-powered query expansion
               </p>
             )}
           </motion.div>

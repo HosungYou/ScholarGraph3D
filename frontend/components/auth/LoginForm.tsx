@@ -26,9 +26,9 @@ export default function LoginForm({ onSwitchToSignup }: LoginFormProps) {
   };
 
   return (
-    <div className="w-full max-w-sm">
-      <h2 className="text-2xl font-bold text-text-primary mb-2">
-        Welcome back
+    <div className="hud-panel w-full max-w-sm p-8">
+      <h2 className="text-2xl font-mono uppercase tracking-widest text-cosmic-glow/80 mb-2">
+        STATION ACCESS
       </h2>
       <p className="text-sm text-text-secondary mb-8">
         Sign in to access your saved graphs
@@ -49,7 +49,7 @@ export default function LoginForm({ onSwitchToSignup }: LoginFormProps) {
             onChange={(e) => setEmail(e.target.value)}
             placeholder="Email address"
             required
-            className="w-full bg-surface border border-border/50 rounded-lg pl-10 pr-4 py-3 text-sm text-text-primary placeholder:text-text-secondary/60 outline-none focus:border-accent/50 transition-colors"
+            className="w-full bg-[#0a0f1e] border border-[#1a2555] rounded-lg pl-10 pr-4 py-3 text-sm text-[#E8EAF6] placeholder:text-[#7B8CDE]/40 outline-none focus:border-cosmic-glow/40 focus:shadow-[0_0_10px_rgba(0,229,255,0.1)] transition-colors"
           />
         </div>
 
@@ -61,7 +61,7 @@ export default function LoginForm({ onSwitchToSignup }: LoginFormProps) {
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Password"
             required
-            className="w-full bg-surface border border-border/50 rounded-lg pl-10 pr-10 py-3 text-sm text-text-primary placeholder:text-text-secondary/60 outline-none focus:border-accent/50 transition-colors"
+            className="w-full bg-[#0a0f1e] border border-[#1a2555] rounded-lg pl-10 pr-10 py-3 text-sm text-[#E8EAF6] placeholder:text-[#7B8CDE]/40 outline-none focus:border-cosmic-glow/40 focus:shadow-[0_0_10px_rgba(0,229,255,0.1)] transition-colors"
           />
           <button
             type="button"
@@ -79,18 +79,18 @@ export default function LoginForm({ onSwitchToSignup }: LoginFormProps) {
         <button
           type="submit"
           disabled={isLoading}
-          className="w-full py-3 bg-accent hover:bg-accent/90 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full py-3 hud-button uppercase font-mono tracking-wider text-sm disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {isLoading ? 'Signing in...' : 'Sign In'}
+          {isLoading ? 'Connecting...' : 'INITIATE ACCESS'}
         </button>
       </form>
 
       <div className="relative my-6">
         <div className="absolute inset-0 flex items-center">
-          <div className="w-full border-t border-border/30" />
+          <div className="w-full border-t border-[#1a2555]/60" />
         </div>
         <div className="relative flex justify-center text-xs">
-          <span className="px-3 bg-background text-text-secondary/60">
+          <span className="px-3 bg-[#0a0f1e] text-[#7B8CDE]/60">
             or continue with
           </span>
         </div>
@@ -100,26 +100,26 @@ export default function LoginForm({ onSwitchToSignup }: LoginFormProps) {
         <button
           onClick={signInWithGoogle}
           disabled={isLoading}
-          className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-surface border border-border/50 rounded-lg text-sm text-text-secondary hover:text-text-primary hover:border-border transition-colors disabled:opacity-50"
+          className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-[#0a0f1e] border border-[#1a2555] rounded-lg text-sm text-text-secondary hover:text-text-primary hover:border-cosmic-glow/30 hover:bg-[#111833] transition-colors disabled:opacity-50"
         >
           <Chrome className="w-4 h-4" />
-          Google
+          Google Dock
         </button>
         <button
           onClick={signInWithGithub}
           disabled={isLoading}
-          className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-surface border border-border/50 rounded-lg text-sm text-text-secondary hover:text-text-primary hover:border-border transition-colors disabled:opacity-50"
+          className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-[#0a0f1e] border border-[#1a2555] rounded-lg text-sm text-text-secondary hover:text-text-primary hover:border-cosmic-glow/30 hover:bg-[#111833] transition-colors disabled:opacity-50"
         >
           <Github className="w-4 h-4" />
-          GitHub
+          GitHub Dock
         </button>
       </div>
 
       <p className="mt-6 text-center text-sm text-text-secondary">
-        Don&apos;t have an account?{' '}
+        No station credentials?{' '}
         <button
           onClick={onSwitchToSignup}
-          className="text-accent hover:text-accent/80 transition-colors"
+          className="text-cosmic-glow hover:text-cosmic-glow/80 transition-colors"
         >
           Sign up
         </button>

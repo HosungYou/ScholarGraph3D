@@ -11,7 +11,6 @@ import {
   Search,
   LogOut,
   User,
-  ArrowLeft,
   Eye,
   Bell,
   BellOff,
@@ -20,7 +19,6 @@ import {
   Plus,
   Calendar,
   Filter,
-  Loader2,
   ExternalLink,
   Sparkles,
   Settings,
@@ -199,17 +197,23 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b border-border/30 glass-strong">
+      <header className="border-b border-[#1a2555]/50 glass-strong">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <a
-              href="/"
-              className="text-lg font-bold text-accent"
-            >
-              SG3D
-            </a>
+            <div className="flex flex-col">
+              <a
+                href="/"
+                className="text-lg font-bold text-accent"
+              >
+                SG3D
+              </a>
+              <span className="text-xs font-mono text-cosmic-glow/60 uppercase tracking-widest">COMMAND CENTER</span>
+            </div>
             <span className="text-text-secondary/40">|</span>
-            <span className="text-sm text-text-secondary">Dashboard</span>
+            <div className="flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-cosmic-pulse" />
+              <span className="text-[10px] font-mono text-text-secondary/50">ONLINE</span>
+            </div>
           </div>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 text-sm text-text-secondary">
@@ -247,38 +251,38 @@ export default function DashboardPage() {
           >
             <div>
               <h2 className="text-xl font-bold text-text-primary flex items-center gap-2 mb-1">
-                <Settings className="w-5 h-5 text-gray-400" />
-                Research Settings
+                <Settings className="w-5 h-5 text-cosmic-glow/60" />
+                STATION CONFIGURATION
               </h2>
               <p className="text-sm text-text-secondary text-left">
                 Customize your search defaults and interests
               </p>
             </div>
             {showSettings ? (
-              <ChevronUp className="w-5 h-5 text-gray-400" />
+              <ChevronUp className="w-5 h-5 text-[#7B8CDE]" />
             ) : (
-              <ChevronDown className="w-5 h-5 text-gray-400" />
+              <ChevronDown className="w-5 h-5 text-[#7B8CDE]" />
             )}
           </button>
 
           {showSettings && (
-            <div className="bg-gray-800/50 rounded-lg border border-gray-700/50 p-6 space-y-6">
+            <div className="hud-panel p-6 space-y-6">
               {profileLoading ? (
                 <div className="flex items-center justify-center py-4">
-                  <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+                  <div className="text-xs font-mono text-cosmic-glow/50 animate-cosmic-pulse uppercase tracking-widest">LOADING CONFIG...</div>
                 </div>
               ) : (
                 <>
                   {/* Research Interests */}
                   <div>
-                    <label className="text-sm font-medium text-gray-300 mb-2 block">
+                    <label className="font-mono text-xs uppercase tracking-wide text-[#7B8CDE] mb-2 block">
                       Research Interests
                     </label>
                     <div className="flex flex-wrap gap-2 mb-3">
                       {researchInterests.map((interest) => (
                         <span
                           key={interest}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-900/30 border border-blue-700/40 text-blue-300 rounded-full text-xs"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-cosmic-glow/10 border border-cosmic-glow/20 text-cosmic-glow rounded-full text-xs"
                         >
                           <Tag className="w-3 h-3" />
                           {interest}
@@ -303,11 +307,11 @@ export default function DashboardPage() {
                           }
                         }}
                         placeholder="e.g., machine learning, climate change..."
-                        className="flex-1 px-3 py-1.5 bg-gray-900 border border-gray-700 rounded-lg text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                        className="flex-1 px-3 py-1.5 bg-[#0a0f1e] border border-[#1a2555] rounded-lg text-sm text-[#E8EAF6] placeholder-[#7B8CDE]/40 focus:outline-none focus:border-cosmic-glow/40"
                       />
                       <button
                         onClick={handleAddInterest}
-                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition-colors"
+                        className="px-3 py-1.5 hud-button text-xs font-medium rounded-lg transition-colors"
                       >
                         <Plus className="w-3.5 h-3.5" />
                       </button>
@@ -316,7 +320,7 @@ export default function DashboardPage() {
 
                   {/* Year Range */}
                   <div>
-                    <label className="text-sm font-medium text-gray-300 mb-2 block">
+                    <label className="font-mono text-xs uppercase tracking-wide text-[#7B8CDE] mb-2 block">
                       Default Year Range
                     </label>
                     <div className="flex items-center gap-3">
@@ -326,23 +330,23 @@ export default function DashboardPage() {
                         onChange={(e) => setDefaultYearMin(Number(e.target.value))}
                         min={1950}
                         max={2026}
-                        className="w-24 px-3 py-1.5 bg-gray-900 border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+                        className="w-24 px-3 py-1.5 bg-[#0a0f1e] border border-[#1a2555] rounded-lg text-sm text-[#E8EAF6] focus:outline-none focus:border-cosmic-glow/40"
                       />
-                      <span className="text-gray-500">to</span>
+                      <span className="text-[#7B8CDE]/50">to</span>
                       <input
                         type="number"
                         value={defaultYearMax}
                         onChange={(e) => setDefaultYearMax(Number(e.target.value))}
                         min={1950}
                         max={2026}
-                        className="w-24 px-3 py-1.5 bg-gray-900 border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+                        className="w-24 px-3 py-1.5 bg-[#0a0f1e] border border-[#1a2555] rounded-lg text-sm text-[#E8EAF6] focus:outline-none focus:border-cosmic-glow/40"
                       />
                     </div>
                   </div>
 
                   {/* Min Citations */}
                   <div>
-                    <label className="text-sm font-medium text-gray-300 mb-2 block">
+                    <label className="font-mono text-xs uppercase tracking-wide text-[#7B8CDE] mb-2 block">
                       Default Minimum Citations
                     </label>
                     <input
@@ -350,7 +354,7 @@ export default function DashboardPage() {
                       value={defaultMinCitations}
                       onChange={(e) => setDefaultMinCitations(Number(e.target.value))}
                       min={0}
-                      className="w-32 px-3 py-1.5 bg-gray-900 border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+                      className="w-32 px-3 py-1.5 bg-[#0a0f1e] border border-[#1a2555] rounded-lg text-sm text-[#E8EAF6] focus:outline-none focus:border-cosmic-glow/40"
                     />
                   </div>
 
@@ -359,10 +363,10 @@ export default function DashboardPage() {
                     <button
                       onClick={handleSaveProfile}
                       disabled={profileSaving}
-                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+                      className="flex items-center gap-2 px-4 py-2 hud-button text-sm font-mono uppercase tracking-wider disabled:opacity-50"
                     >
                       {profileSaving ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <div className="w-4 h-4 border border-current border-t-transparent rounded-full animate-spin" />
                       ) : (
                         <Save className="w-4 h-4" />
                       )}
@@ -381,8 +385,8 @@ export default function DashboardPage() {
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-xl font-bold text-text-primary flex items-center gap-2 mb-1">
-                  <Sparkles className="w-5 h-5 text-purple-400" />
-                  Recommended for You
+                  <Sparkles className="w-5 h-5 text-cosmic-glow" />
+                  DETECTED SIGNALS
                 </h2>
                 <p className="text-sm text-text-secondary">
                   Papers matching your research interests
@@ -392,7 +396,7 @@ export default function DashboardPage() {
 
             {recsLoading ? (
               <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+                <div className="text-xs font-mono text-cosmic-glow/50 animate-cosmic-pulse uppercase tracking-widest">SCANNING FOR SIGNALS...</div>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -414,8 +418,8 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-xl font-bold text-text-primary flex items-center gap-2 mb-1">
-                <Eye className="w-5 h-5 text-blue-400" />
-                My Watch Queries
+                <Eye className="w-5 h-5 text-cosmic-glow" />
+                SURVEILLANCE PROBES
               </h2>
               <p className="text-sm text-text-secondary">
                 Monitor research areas for new publications
@@ -426,7 +430,7 @@ export default function DashboardPage() {
               <div className="flex items-center gap-4 text-xs text-text-secondary mr-2">
                 <span>{watchQueries.length} watches</span>
                 {totalNewPapers > 0 && (
-                  <span className="flex items-center gap-1 text-blue-400">
+                  <span className="flex items-center gap-1 text-cosmic-glow">
                     <Bell className="w-3 h-3" />
                     {totalNewPapers} new papers
                   </span>
@@ -435,7 +439,7 @@ export default function DashboardPage() {
               <button
                 onClick={handleCheckNow}
                 disabled={isChecking || watchQueries.length === 0}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-800 text-gray-300 hover:bg-gray-700 border border-gray-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono uppercase border border-[#1a2555] bg-[#0a0f1e] hover:bg-[#111833] text-[#7B8CDE] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <RefreshCw
                   className={`w-3.5 h-3.5 ${isChecking ? 'animate-spin' : ''}`}
@@ -444,33 +448,33 @@ export default function DashboardPage() {
               </button>
               <button
                 onClick={() => router.push('/explore')}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono uppercase hud-button transition-colors"
               >
                 <Plus className="w-3.5 h-3.5" />
-                Add Watch
+                DEPLOY PROBE
               </button>
             </div>
           </div>
 
           {watchLoading ? (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+              <div className="text-xs font-mono text-cosmic-glow/50 animate-cosmic-pulse uppercase tracking-widest">SCANNING PROBES...</div>
             </div>
           ) : watchQueries.length === 0 ? (
-            <div className="bg-gray-800/50 rounded-lg border border-gray-700/50 p-8 text-center">
-              <Eye className="w-8 h-8 text-gray-600 mx-auto mb-3" />
-              <p className="text-sm text-gray-400 mb-1">
-                No watch queries yet
+            <div className="hud-panel p-8 text-center">
+              <Eye className="w-8 h-8 text-[#7B8CDE]/30 mx-auto mb-3" />
+              <p className="text-sm text-[#7B8CDE] mb-1 font-mono uppercase tracking-wide">
+                NO ACTIVE PROBES
               </p>
-              <p className="text-xs text-gray-500 mb-4">
-                Set up watches to get notified about new papers in your research areas
+              <p className="text-xs text-[#7B8CDE]/50 mb-4">
+                Deploy surveillance probes to monitor research areas
               </p>
               <button
                 onClick={() => router.push('/explore')}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition-colors"
+                className="inline-flex items-center gap-1.5 px-4 py-2 hud-button text-xs font-mono uppercase tracking-wider"
               >
                 <Plus className="w-3.5 h-3.5" />
-                Create Watch Query
+                DEPLOY PROBE
               </button>
             </div>
           ) : (
@@ -478,17 +482,17 @@ export default function DashboardPage() {
               {watchQueries.map((wq) => (
                 <div
                   key={wq.id}
-                  className="bg-gray-800 rounded-lg p-4 border border-gray-700 hover:border-gray-600 transition-colors"
+                  className="hud-panel p-4 hover:border-cosmic-glow/20 transition-colors"
                 >
                   <div className="flex items-start justify-between gap-2 mb-2">
-                    <p className="text-sm text-gray-100 font-medium leading-tight">
+                    <p className="text-sm text-[#E8EAF6] font-medium leading-tight">
                       {wq.query}
                     </p>
                     <div className="flex items-center gap-1 flex-shrink-0">
                       {wq.notify_email ? (
-                        <Bell className="w-3 h-3 text-blue-400" />
+                        <Bell className="w-3 h-3 text-cosmic-glow" />
                       ) : (
-                        <BellOff className="w-3 h-3 text-gray-500" />
+                        <BellOff className="w-3 h-3 text-[#7B8CDE]/50" />
                       )}
                       {deleteConfirm === wq.id ? (
                         <div className="flex items-center gap-1 ml-1">
@@ -500,7 +504,7 @@ export default function DashboardPage() {
                           </button>
                           <button
                             onClick={() => setDeleteConfirm(null)}
-                            className="text-[10px] text-gray-400 hover:text-gray-300 px-1"
+                            className="text-[10px] text-[#7B8CDE] hover:text-[#E8EAF6] px-1"
                           >
                             Cancel
                           </button>
@@ -508,7 +512,7 @@ export default function DashboardPage() {
                       ) : (
                         <button
                           onClick={() => setDeleteConfirm(wq.id)}
-                          className="p-1 rounded text-gray-500 hover:text-red-400 hover:bg-red-900/20 transition-colors"
+                          className="p-1 rounded text-[#7B8CDE]/50 hover:text-red-400 hover:bg-red-900/20 transition-colors"
                           title="Delete"
                         >
                           <Trash2 className="w-3 h-3" />
@@ -520,7 +524,7 @@ export default function DashboardPage() {
                   {/* Filter badges */}
                   <div className="flex flex-wrap gap-1 mb-2">
                     {wq.filters.year_min && (
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-gray-700 rounded text-[10px] text-gray-300">
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-[#0a0f1e] border border-[#1a2555] rounded text-[10px] text-[#7B8CDE]">
                         <Calendar className="w-2.5 h-2.5" />
                         {wq.filters.year_min}
                         {wq.filters.year_max
@@ -529,7 +533,7 @@ export default function DashboardPage() {
                       </span>
                     )}
                     {wq.filters.field && (
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-gray-700 rounded text-[10px] text-gray-300">
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-[#0a0f1e] border border-[#1a2555] rounded text-[10px] text-[#7B8CDE]">
                         <Filter className="w-2.5 h-2.5" />
                         {wq.filters.field}
                       </span>
@@ -537,7 +541,7 @@ export default function DashboardPage() {
                   </div>
 
                   {/* Footer with new papers action */}
-                  <div className="flex items-center justify-between text-[10px] text-gray-500">
+                  <div className="flex items-center justify-between text-[10px] text-[#7B8CDE]/50 font-mono">
                     <span>Checked: {formatDate(wq.last_checked)}</span>
                     {(wq.new_paper_count ?? 0) > 0 ? (
                       <button
@@ -546,13 +550,13 @@ export default function DashboardPage() {
                             `/explore?q=${encodeURIComponent(wq.query)}`
                           )
                         }
-                        className="flex items-center gap-1 bg-blue-600 text-white px-2 py-0.5 rounded-full font-medium hover:bg-blue-700 transition-colors"
+                        className="flex items-center gap-1 bg-cosmic-glow text-background px-2 py-0.5 rounded-full font-mono font-medium hover:bg-cosmic-glow/80 transition-colors animate-cosmic-pulse"
                       >
                         {wq.new_paper_count} new
                         <ExternalLink className="w-2.5 h-2.5" />
                       </button>
                     ) : (
-                      <span className="text-gray-600">No new papers</span>
+                      <span className="text-[#7B8CDE]/30">No new papers</span>
                     )}
                   </div>
                 </div>
@@ -565,10 +569,10 @@ export default function DashboardPage() {
         <section>
           <div className="mb-6">
             <h1 className="text-2xl font-bold text-text-primary mb-1">
-              Your Saved Graphs
+              MISSION ARCHIVES
             </h1>
             <p className="text-sm text-text-secondary">
-              Access and manage your previously saved paper explorations
+              Access and manage your previous exploration missions
             </p>
           </div>
 

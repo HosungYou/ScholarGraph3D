@@ -15,7 +15,7 @@ Related project: ScholaRAG_Graph at /Users/hosung/ScholaRAG_Graph (concept-level
 
 | Layer | Tech | Notes |
 |-------|------|-------|
-| Frontend | Next.js 14 + TypeScript + Tailwind | App Router, dark theme |
+| Frontend | Next.js 14 + TypeScript + Tailwind | App Router, Cosmic Universe theme |
 | 3D Rendering | react-force-graph-3d + Three.js 0.152.2 | Pin Three.js version (ESM compat) |
 | Backend | FastAPI + Python 3.11 | Async with asyncpg |
 | Database | PostgreSQL + pgvector (Supabase) | 768-dim SPECTER2 vectors |
@@ -105,26 +105,38 @@ backend/
 ```
 frontend/
 ├── app/
-│   ├── page.tsx          # Landing page with search
-│   ├── explore/page.tsx  # Main 3-panel exploration (tabbed sidebar + chat)
-│   ├── explore/seed/page.tsx  # Seed paper exploration mode (resizable panels, expand animation, citation intents)
-│   ├── auth/             # Login/signup
-│   └── dashboard/        # Saved graphs
+│   ├── page.tsx          # Landing page — cosmic starfield + warp transition
+│   ├── explore/page.tsx  # Mission Control — 3-panel exploration (tabbed sidebar + chat)
+│   ├── explore/seed/page.tsx  # Origin Point Mode — seed paper exploration (resizable panels, expand animation, citation intents)
+│   ├── auth/             # Station Access — login/signup
+│   └── dashboard/        # Command Center — saved graphs
 ├── components/
+│   ├── cosmic/                  # v1.0.0: Shared cosmic theme components
+│   │   ├── StarfieldBackground.tsx  # Three.js WebGL starfield (3000 stars + Milky Way, parallax, warp)
+│   │   ├── CosmicStarfield.tsx      # CSS-only starfield for auth/dashboard (lightweight)
+│   │   ├── HudPanel.tsx             # Reusable HUD panel wrapper (scanline, brackets)
+│   │   └── RadarLoader.tsx          # Concentric ring radar loading indicator
 │   ├── graph/
-│   │   ├── ScholarGraph3D.tsx    # Main 3D component (dimming, labels, bridge/OA/bloom layers, ghost edges, gap overlay, animateExpandNodes)
-│   │   ├── PaperDetailPanel.tsx  # Right panel paper details
-│   │   ├── ClusterPanel.tsx      # Left panel: density bar, edge count, visibility toggle, focus, paper list, stats, node highlight
-│   │   ├── SearchBar.tsx         # Search input with filters
-│   │   └── GraphControls.tsx     # Floating toggles: citation/similarity/hulls/labels/bloom/ghost/gap
+│   │   ├── ScholarGraph3D.tsx    # Main 3D component (star nodes, nebula clusters, light stream edges, showCosmicTheme toggle)
+│   │   ├── cosmic/               # v1.0.0: Cosmic rendering system
+│   │   │   ├── cosmicConstants.ts       # Star color map, GLSL shaders, twinkle rates
+│   │   │   ├── cosmicTextures.ts        # Canvas-generated glow/corona/flare textures
+│   │   │   ├── CosmicAnimationManager.ts # Singleton rAF loop for all shader uniforms
+│   │   │   ├── starNodeRenderer.ts      # Star node factory (twinkle, supernova, binary, flare)
+│   │   │   ├── nebulaClusterRenderer.ts # Gaussian particle cloud per cluster
+│   │   │   └── lightStreamEdgeRenderer.ts # TubeGeometry + flow shader edges
+│   │   ├── PaperDetailPanel.tsx  # Object Scanner — right panel paper details
+│   │   ├── ClusterPanel.tsx      # Sector Scanner — density, visibility, paper list, stats, highlight
+│   │   ├── SearchBar.tsx         # Navigation Console — search input with filters
+│   │   └── GraphControls.tsx     # Ship Controls — floating toggles
 │   ├── analysis/                 # Phase 2
 │   │   ├── TrendPanel.tsx        # Emerging/stable/declining with sparklines
 │   │   ├── GapPanel.tsx          # Gap strength, bridge papers, hypotheses
 │   │   └── TimelineView.tsx      # Phase 6: D3-based 2D timeline of papers by year
 │   ├── chat/                     # Phase 2
-│   │   └── ChatPanel.tsx         # GraphRAG streaming chat with [N] citations
+│   │   └── ChatPanel.tsx         # Comm Channel — GraphRAG streaming chat with [N] citations
 │   ├── settings/                 # Phase 2
-│   │   └── LLMSettingsModal.tsx  # 4-provider API key management (localStorage)
+│   │   └── LLMSettingsModal.tsx  # Comm Relay Config — 4-provider API key management
 │   ├── watch/                    # Phase 3
 │   │   └── WatchQueryPanel.tsx   # Watch query CRUD, filters, check-now
 │   ├── litreview/                # Phase 3
@@ -133,7 +145,7 @@ frontend/
 │   │   └── ScaffoldingModal.tsx    # Multi-select research angle exploration modal
 │   └── dashboard/
 │       └── RecommendationCard.tsx   # Phase 5: recommendation card with dismiss + explore
-├── hooks/useGraphStore.ts    # Zustand state (Phase 1–6: bloom/ghostEdges/gapOverlay/hiddenClusters/bridgeNodes/conceptualEdges/timeline/show2DTimeline)
+├── hooks/useGraphStore.ts    # Zustand state (Phase 1–6 + showCosmicTheme toggle)
 ├── lib/
 │   ├── api.ts               # Backend API client (search + analysis + chat)
 │   ├── auth-context.tsx      # Supabase auth context
@@ -146,12 +158,32 @@ frontend/
 ### API Response Format
 Search endpoint returns: `{ nodes: Paper[], edges: GraphEdge[], clusters: Cluster[], meta: {...} }`
 
-### Node Visual Mapping
+### Cosmic Universe Theme (v1.0.0)
+- Background: Deep space #050510, accent cyan #00E5FF, nebula purple #6c5ce7, star lavender #a29bfe
+- Glass: `rgba(5,5,16,0.85)` + blur(16px) + cyan border; HUD panels with scanline overlays
+- Animations: warp-speed, cosmic-pulse, hud-flicker, radar-sweep, border-glow, drift
+- Toggle: `showCosmicTheme` in Zustand (default: true) — fallback to classic renderer when false
+- Landing: Three.js starfield (3000 stars + Milky Way) + warp transition on search
+- See: docs/DESIGN_THEME.md for full design system reference
+
+### Node Visual Mapping (Cosmic Star Nodes)
 - Size: `Math.max(3, Math.log(citation_count + 1) * 3)`
-- Color: OA field → Physical Sciences=#4A90D9, Life Sciences=#2ECC71, Social Sciences=#E67E22, etc.
+- Color: Field → stellar temperature (CS=Blue Giant #7EB8FF, Bio=Green Nebula #5BFF8F, Med=Red Supergiant #FF6B5B, Physics=Purple #B580D9, Social=K-type Orange #FFa040)
+- Twinkle: GLSL shader — rate 1.5Hz (old papers) → 6.0Hz (new papers)
 - Opacity: `0.3 + 0.7 * ((year - minYear) / (maxYear - minYear))` (base); 3-tier dimming on select
 - Label: First author last name + year (e.g., "Vaswani 2017"); shown only for top-20% citation papers
-- Phase 1.5 layers: bridge gold glow (is_bridge), OA ring (is_open_access), citation aura (top 10%), bloom halo (selected + showBloom)
+- Star layers: glow sprite (additive), lens flare (selected), corona (OA), supernova burst (top 10%), binary star (bridge)
+
+### Cluster Visual Mapping (Nebula Clouds)
+- Gaussian-distributed THREE.Points particles per cluster (Box-Muller)
+- Particle count: `min(200, nodeCount * 15)` per cluster
+- AdditiveBlending, shimmer shader, distance-based alpha falloff
+
+### Edge Visual Mapping (Light Streams)
+- Citation: TubeGeometry + UV-offset flow shader (direction = citing → cited)
+- Similarity: TubeGeometry + sinusoidal wave shader
+- Ghost: LineDashedMaterial (dim)
+- LOD: Distance > 2000 → fall back to simple lines
 
 ### Data Fusion Strategy
 1. OpenAlex keyword search (primary, 10 credits/page)
@@ -185,6 +217,8 @@ Search endpoint returns: `{ nodes: Paper[], edges: GraphEdge[], clusters: Cluste
 | SDD/TDD Plan | Test strategy, coverage requirements | docs/SDD_TDD_PLAN.md |
 | PHILOSOPHY | Design philosophy, "why" behind every feature decision | docs/PHILOSOPHY.md |
 | TECH_PROOF | Academic justification for all technical choices (SPECTER2, RRF, UMAP, HDBSCAN) | docs/TECH_PROOF.md |
+| DESIGN_THEME | Cosmic Universe theme design system reference | docs/DESIGN_THEME.md |
+| RELEASE_v1.0.0 | v1.0.0 release notes | docs/RELEASE_v1.0.0.md |
 | CLAUDE.md | This file — Claude Code project context | ./CLAUDE.md |
 
 ## LLM Provider Architecture (Phase 2)
@@ -216,3 +250,4 @@ Patterns: CachedLLMProvider (decorator, in-memory TTL), CircuitBreaker (5 failur
 - v0.8.1 ✅ — hotfix: seed-explore S2 rate limit → 429 (was uncaught 500 + CORS), citation edge diagnostic logging
 - v0.9.0 ✅ — node ID fix (S2 paper IDs, not integers), right panel visibility (AnimatePresence mode="wait"), zoomToFit after data load, Three.js rgba warning fix
 - v0.9.1 ✅ — expand data completeness (StableExpandNode +authors/abstract/tldr/fields), recursive expand fix (s2_paper_id/doi mapping), right panel layout fix (min-w-0), cluster label dedup
+- **v1.0.0 (Cosmic Universe Theme)**: ✅ — full UI redesign: papers=stars (GLSL twinkle shaders), clusters=nebulae (particle clouds), edges=light streams (flow shaders), Three.js starfield landing, HUD panels, warp transition, 10 new files, 27 modified files, showCosmicTheme toggle

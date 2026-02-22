@@ -43,12 +43,12 @@ export default function CitationContextModal({
   const intentColorClass =
     intentLabel === 'contradicts' ? 'text-red-400' :
     intentLabel === 'supports' ? 'text-green-400' :
-    intentLabel === 'extends' ? 'text-blue-400' :
-    intentLabel === 'applies' ? 'text-purple-400' :
-    intentLabel === 'methodology' ? 'text-purple-400' :
-    intentLabel === 'result_comparison' ? 'text-blue-400' :
-    intentLabel === 'background' ? 'text-gray-400' :
-    'text-gray-400';
+    intentLabel === 'extends' ? 'text-cosmic-glow' :
+    intentLabel === 'applies' ? 'text-cosmic-nebula' :
+    intentLabel === 'methodology' ? 'text-cosmic-nebula' :
+    intentLabel === 'result_comparison' ? 'text-cosmic-glow' :
+    intentLabel === 'background' ? 'text-[#7B8CDE]' :
+    'text-[#7B8CDE]';
 
   const sourceTitle = sourceNode?.title ?? sourceId;
   const targetTitle = targetNode?.title ?? targetId;
@@ -59,7 +59,7 @@ export default function CitationContextModal({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 flex items-end justify-center pb-8 px-4"
+        className="fixed inset-0 z-50 flex items-end justify-center pb-8 px-4 bg-[#050510]/80"
         onClick={onClose}
       >
         <motion.div
@@ -67,15 +67,15 @@ export default function CitationContextModal({
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 100, opacity: 0 }}
           transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-          className="w-full max-w-lg bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl overflow-hidden"
+          className="hud-panel hud-scanline w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-5 py-3 border-b border-gray-700/50">
-            <h3 className="text-sm font-semibold text-gray-100">Citation Context</h3>
+          <div className="flex items-center justify-between px-5 py-3 border-b border-[#1a2555]">
+            <h3 className="text-sm font-mono uppercase tracking-wider text-[#E8EAF6]">Citation Context</h3>
             <button
               onClick={onClose}
-              className="p-1 rounded-lg hover:bg-gray-800 text-gray-400 hover:text-gray-200 transition-colors"
+              className="p-1 rounded-lg hover:bg-[#111833] text-[#7B8CDE] hover:text-cosmic-glow transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
@@ -87,30 +87,30 @@ export default function CitationContextModal({
             <div className="flex items-center gap-3">
               <button
                 onClick={() => onViewSourcePaper?.(sourceId)}
-                className="flex-1 text-left bg-gray-800/50 hover:bg-gray-800 rounded-lg p-3 transition-colors"
+                className="flex-1 text-left bg-[#0a0f1e] border border-[#1a2555] hover:border-cosmic-glow/20 rounded-lg p-3 transition-colors"
               >
-                <div className="text-xs text-gray-500 mb-0.5">Citing paper</div>
-                <div className="text-sm text-gray-200 line-clamp-2">{sourceTitle}</div>
+                <div className="text-xs font-mono text-[#7B8CDE]/50 mb-0.5 uppercase tracking-wider">Citing paper</div>
+                <div className="text-sm text-[#E8EAF6]/90 line-clamp-2">{sourceTitle}</div>
               </button>
               <div className="flex-shrink-0 text-center">
-                <div className={`text-sm font-semibold ${intentColorClass} capitalize`}>
+                <div className={`text-sm font-mono font-semibold ${intentColorClass} capitalize`}>
                   {intentLabel ? `→ ${intentLabel.replace(/_/g, ' ')} →` : '→'}
                 </div>
               </div>
               <button
                 onClick={() => onViewTargetPaper?.(targetId)}
-                className="flex-1 text-left bg-gray-800/50 hover:bg-gray-800 rounded-lg p-3 transition-colors"
+                className="flex-1 text-left bg-[#0a0f1e] border border-[#1a2555] hover:border-cosmic-glow/20 rounded-lg p-3 transition-colors"
               >
-                <div className="text-xs text-gray-500 mb-0.5">Cited paper</div>
-                <div className="text-sm text-gray-200 line-clamp-2">{targetTitle}</div>
+                <div className="text-xs font-mono text-[#7B8CDE]/50 mb-0.5 uppercase tracking-wider">Cited paper</div>
+                <div className="text-sm text-[#E8EAF6]/90 line-clamp-2">{targetTitle}</div>
               </button>
             </div>
 
             {/* Context snippet */}
             {intentContext && (
-              <div className="bg-gray-800/30 rounded-lg p-3">
-                <div className="text-xs text-gray-500 mb-1">Citation context</div>
-                <p className="text-sm text-gray-300 italic leading-relaxed">
+              <div className="bg-[#0a0f1e] border border-[#1a2555] rounded-lg p-3">
+                <div className="text-xs font-mono text-[#7B8CDE]/50 mb-1 uppercase tracking-wider">Citation context</div>
+                <p className="text-sm text-[#7B8CDE] italic leading-relaxed">
                   &ldquo;{intentContext.length > 200
                     ? intentContext.substring(0, 200) + '...'
                     : intentContext}&rdquo;
@@ -122,24 +122,24 @@ export default function CitationContextModal({
             <div className="flex items-center gap-3 flex-wrap">
               {intentLabel && (
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-500">Intent:</span>
-                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full bg-gray-800 ${intentColorClass} capitalize`}>
+                  <span className="text-xs font-mono text-[#7B8CDE]/50 uppercase tracking-wider">Intent:</span>
+                  <span className={`text-xs font-mono font-medium px-2 py-0.5 rounded-full bg-[#0a0f1e] border border-[#1a2555] ${intentColorClass} capitalize`}>
                     {intentLabel.replace(/_/g, ' ')}
                   </span>
                 </div>
               )}
               {type && type !== 'citation' && (
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-500">Type:</span>
-                  <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-800 text-gray-300 capitalize">
+                  <span className="text-xs font-mono text-[#7B8CDE]/50 uppercase tracking-wider">Type:</span>
+                  <span className="text-xs font-mono font-medium px-2 py-0.5 rounded-full bg-[#0a0f1e] border border-[#1a2555] text-[#7B8CDE] capitalize">
                     {type}
                   </span>
                 </div>
               )}
               {weight !== undefined && (
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-500">Weight:</span>
-                  <span className="text-xs font-medium text-gray-300">
+                  <span className="text-xs font-mono text-[#7B8CDE]/50 uppercase tracking-wider">Weight:</span>
+                  <span className="text-xs font-mono font-medium text-[#7B8CDE]">
                     {weight.toFixed(2)}
                   </span>
                 </div>

@@ -60,7 +60,7 @@ export default function SavedGraphs() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-6 h-6 text-accent animate-spin" />
+        <Loader2 className="w-6 h-6 text-cosmic-glow animate-spin" />
       </div>
     );
   }
@@ -75,15 +75,15 @@ export default function SavedGraphs() {
 
   if (!graphs || graphs.length === 0) {
     return (
-      <div className="text-center py-12">
-        <Network className="w-12 h-12 text-text-secondary/30 mx-auto mb-4" />
-        <p className="text-text-secondary mb-2">No saved graphs yet</p>
-        <p className="text-sm text-text-secondary/60 mb-4">
+      <div className="hud-panel text-center py-12 px-6">
+        <Network className="w-12 h-12 text-[#7B8CDE]/30 mx-auto mb-4" />
+        <p className="text-[#7B8CDE] mb-2">No saved graphs yet</p>
+        <p className="text-sm text-[#7B8CDE]/50 mb-4">
           Search for papers and save your explorations
         </p>
         <button
           onClick={() => router.push('/')}
-          className="px-4 py-2 bg-accent/10 text-accent rounded-lg text-sm hover:bg-accent/20 transition-colors"
+          className="px-4 py-2 hud-button text-sm uppercase font-mono"
         >
           Start Exploring
         </button>
@@ -99,14 +99,14 @@ export default function SavedGraphs() {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: i * 0.05 }}
-          className="glass rounded-xl p-4 hover:bg-surface-hover/30 transition-colors group"
+          className="hud-panel p-4 hover:border-cosmic-glow/20 transition-colors group"
         >
           <div className="flex items-start justify-between">
             <div className="flex-1">
-              <h3 className="text-sm font-medium text-text-primary mb-1">
+              <h3 className="text-sm font-medium text-[#E8EAF6] mb-1">
                 {graph.name}
               </h3>
-              <div className="flex items-center gap-3 text-xs text-text-secondary">
+              <div className="flex items-center gap-3 text-xs text-[#7B8CDE] font-mono">
                 <span className="flex items-center gap-1">
                   <FileText className="w-3 h-3" />
                   {graph.paper_count} papers
@@ -116,7 +116,7 @@ export default function SavedGraphs() {
                   {new Date(graph.created_at).toLocaleDateString()}
                 </span>
               </div>
-              <div className="mt-1 text-xs text-text-secondary/60">
+              <div className="mt-1 text-xs text-[#7B8CDE]/50 font-mono">
                 Query: &ldquo;{graph.seed_query}&rdquo;
               </div>
             </div>
@@ -124,14 +124,14 @@ export default function SavedGraphs() {
               <button
                 onClick={() => handleLoad(graph)}
                 title="Open graph"
-                className="p-1.5 rounded-lg hover:bg-accent/10 text-text-secondary hover:text-accent transition-colors"
+                className="p-1.5 rounded-lg hover:bg-cosmic-glow/10 text-[#7B8CDE] hover:text-cosmic-glow transition-colors"
               >
                 <ExternalLink className="w-4 h-4" />
               </button>
               <button
                 onClick={() => handleDelete(graph.id)}
                 title="Delete graph"
-                className="p-1.5 rounded-lg hover:bg-accent-red/10 text-text-secondary hover:text-accent-red transition-colors"
+                className="p-1.5 rounded-lg hover:bg-accent-red/10 text-[#7B8CDE] hover:text-accent-red transition-colors"
               >
                 <Trash2 className="w-4 h-4" />
               </button>

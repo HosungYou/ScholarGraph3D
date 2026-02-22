@@ -58,6 +58,7 @@ interface GraphStore {
   showSimilarityEdges: boolean;
   showClusterHulls: boolean;
   showLabels: boolean;
+  showCosmicTheme: boolean;
 
   // Actions
   setGraphData: (data: GraphData) => void;
@@ -75,6 +76,7 @@ interface GraphStore {
   toggleSimilarityEdges: () => void;
   toggleClusterHulls: () => void;
   toggleLabels: () => void;
+  toggleCosmicTheme: () => void;
 
   // Phase 2 actions
   setTrendAnalysis: (trends: TrendAnalysis | null) => void;
@@ -152,6 +154,7 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
   showSimilarityEdges: true,
   showClusterHulls: true,
   showLabels: true,
+  showCosmicTheme: true,
 
   setGraphData: (data) => set({ graphData: data, error: null, conceptualEdges: [] }),
 
@@ -211,6 +214,7 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
   toggleClusterHulls: () =>
     set((s) => ({ showClusterHulls: !s.showClusterHulls })),
   toggleLabels: () => set((s) => ({ showLabels: !s.showLabels })),
+  toggleCosmicTheme: () => set((s) => ({ showCosmicTheme: !s.showCosmicTheme })),
 
   // Phase 2 actions
   setTrendAnalysis: (trends) => set({ trendAnalysis: trends }),

@@ -9,8 +9,9 @@ import ScholarGraph3D, { type ScholarGraph3DRef } from '@/components/graph/Schol
 import PaperDetailPanel from '@/components/graph/PaperDetailPanel';
 import ClusterPanel from '@/components/graph/ClusterPanel';
 import GraphControls from '@/components/graph/GraphControls';
+import RadarLoader from '@/components/cosmic/RadarLoader';
 import type { Paper, CitationIntent } from '@/types';
-import { Search, ArrowLeft, Loader2, Network, GitBranch, Layers, Share2 } from 'lucide-react';
+import { Search, ArrowLeft, Network, GitBranch, Layers, Share2 } from 'lucide-react';
 
 function SeedExploreContent() {
   const searchParams = useSearchParams();
@@ -229,18 +230,18 @@ function SeedExploreContent() {
       {/* Top bar */}
       <div className="flex-shrink-0 border-b border-border/50 glass-strong z-20">
         <div className="flex items-center gap-4 px-4 py-3">
-          <a href="/" className="text-lg font-bold text-accent flex-shrink-0">
+          <a href="/" className="text-lg font-bold text-[#00E5FF] flex-shrink-0 font-mono tracking-wider">
             SG3D
           </a>
-          <span className="text-text-secondary/40">|</span>
-          <div className="flex items-center gap-2 text-sm text-text-secondary">
-            <Network className="w-4 h-4 text-purple-400" />
-            <span className="font-medium text-text-primary">Seed Paper Mode</span>
+          <span className="text-[#7B8CDE]/40">|</span>
+          <div className="flex items-center gap-2 text-sm text-[#7B8CDE]">
+            <Network className="w-4 h-4 text-[#6c5ce7]" />
+            <span className="font-mono uppercase tracking-wider text-[#a29bfe]">ORIGIN POINT MODE</span>
           </div>
 
           {seedMeta?.seed_title && (
             <div className="flex-1 min-w-0">
-              <p className="text-xs text-text-secondary truncate max-w-md">
+              <p className="text-xs text-[#7B8CDE] truncate max-w-md font-mono">
                 {seedMeta.seed_title}
               </p>
             </div>
@@ -249,14 +250,14 @@ function SeedExploreContent() {
           <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
             <button
               onClick={() => router.push('/explore')}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-800 text-gray-400 hover:text-gray-200 hover:bg-gray-700 border border-gray-700"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium font-mono uppercase tracking-wider bg-[#0a0f1e] text-[#7B8CDE] hover:text-[#E8EAF6] hover:bg-[#111833] border border-[#1a2555]"
             >
               <Search className="w-3.5 h-3.5" />
               Keyword Search
             </button>
             <button
               onClick={() => router.push('/')}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-800 text-gray-400 hover:text-gray-200 hover:bg-gray-700 border border-gray-700"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium font-mono uppercase tracking-wider bg-[#0a0f1e] text-[#7B8CDE] hover:text-[#E8EAF6] hover:bg-[#111833] border border-[#1a2555]"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               Home
@@ -266,15 +267,20 @@ function SeedExploreContent() {
       </div>
 
       {/* Main content */}
-      <div className="flex-1 flex overflow-hidden relative">
+      <motion.div
+        className="flex-1 flex overflow-hidden relative"
+        initial={{ scale: 1.02, filter: 'blur(4px)' }}
+        animate={{ scale: 1, filter: 'blur(0px)' }}
+        transition={{ duration: 0.5 }}
+      >
         {/* Left panel: clusters */}
         <div
           style={{ width: leftPanelWidth }}
           className="flex-shrink-0 border-r border-border/30 glass flex flex-col relative"
         >
-          <div className="p-3 border-b border-border/30">
-            <h3 className="text-xs font-medium text-text-secondary uppercase tracking-wide">
-              Clusters
+          <div className="p-3 border-b border-[#1a2555]/30">
+            <h3 className="text-[10px] font-mono uppercase tracking-widest text-[#00E5FF]/60">
+              SECTOR SCANNER
             </h3>
           </div>
           <div className="flex-1 overflow-y-auto">
@@ -282,7 +288,7 @@ function SeedExploreContent() {
           </div>
           {/* Resize handle */}
           <div
-            className="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-blue-500/40 active:bg-blue-500/60 transition-colors z-10"
+            className="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-[#00E5FF]/30 active:bg-[#00E5FF]/50 transition-colors z-10"
             onMouseDown={handleLeftPanelResizeStart}
           />
         </div>
@@ -292,30 +298,30 @@ function SeedExploreContent() {
           {isLoading && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/80">
               <div className="text-center">
-                <Loader2 className="w-10 h-10 animate-spin text-purple-400 mx-auto mb-4" />
-                <p className="text-sm text-text-secondary mb-1">Building citation network...</p>
-                <p className="text-xs text-text-secondary/50">Fetching references & citations from Semantic Scholar</p>
+                <RadarLoader message="BUILDING CITATION NETWORK..." />
+                <p className="text-xs text-[#7B8CDE]/50 mt-3 font-mono">Fetching references &amp; citations from Semantic Scholar</p>
               </div>
             </div>
           )}
 
           {!isLoading && !graphData && paperId && (
             <div className="absolute inset-0 flex items-center justify-center">
-              <p className="text-text-secondary">No results found</p>
+              <p className="text-[#7B8CDE] font-mono">No results found</p>
             </div>
           )}
 
           {!paperId && (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="text-center max-w-md px-4">
-                <Network className="w-12 h-12 text-purple-400 mx-auto mb-4" />
-                <h2 className="text-xl font-semibold text-text-primary mb-2">
-                  Seed Paper Exploration
+                <Network className="w-12 h-12 text-[#6c5ce7] mx-auto mb-4" />
+                <div className="text-[10px] font-mono uppercase tracking-widest text-[#00E5FF]/40 mb-2">[ AWAITING ORIGIN POINT ]</div>
+                <h2 className="text-xl font-semibold text-text-primary mb-2 font-mono">
+                  ORIGIN POINT EXPLORATION
                 </h2>
-                <p className="text-text-secondary/70 text-sm mb-6">
+                <p className="text-[#7B8CDE]/70 text-sm mb-6 font-mono">
                   Start from a single paper and explore its citation network
                 </p>
-                <p className="text-text-secondary/50 text-xs">
+                <p className="text-[#7B8CDE]/50 text-xs font-mono">
                   Enter a DOI or Semantic Scholar ID on the home page to begin
                 </p>
               </div>
@@ -327,21 +333,21 @@ function SeedExploreContent() {
 
           {/* Seed paper info bar */}
           {graphData && seedMeta && (
-            <div className="absolute bottom-4 left-4 glass rounded-lg px-3 py-2 text-xs text-text-secondary space-y-0.5">
+            <div className="absolute bottom-4 left-4 glass rounded-lg px-3 py-2 text-xs text-[#7B8CDE] font-mono space-y-0.5">
               <div className="flex items-center gap-2">
-                <Network className="w-3.5 h-3.5 text-purple-400" />
+                <Network className="w-3.5 h-3.5 text-[#6c5ce7]" />
                 <span>{graphData.nodes.length} papers</span>
-                <span className="text-text-secondary/30">|</span>
+                <span className="text-[#7B8CDE]/30">|</span>
                 <GitBranch className="w-3.5 h-3.5" />
                 <span>{graphData.edges.filter(e => e.type === 'citation').length} citations</span>
-                <span className="text-text-secondary/30">|</span>
-                <Share2 className="w-3.5 h-3.5 text-blue-400" />
+                <span className="text-[#7B8CDE]/30">|</span>
+                <Share2 className="w-3.5 h-3.5 text-[#00E5FF]" />
                 <span>{graphData.edges.filter(e => e.type === 'similarity').length} similar</span>
-                <span className="text-text-secondary/30">|</span>
+                <span className="text-[#7B8CDE]/30">|</span>
                 <Layers className="w-3.5 h-3.5" />
                 <span>{graphData.clusters.length} clusters</span>
               </div>
-              <div className="text-[10px] text-text-secondary/50">
+              <div className="text-[10px] text-[#7B8CDE]/50">
                 Double-click a node to expand its citations
               </div>
             </div>
@@ -361,7 +367,7 @@ function SeedExploreContent() {
               className="flex-shrink-0 border-l border-border/30 glass overflow-y-auto relative z-10"
             >
               <div
-                className="absolute left-0 top-0 h-full w-1 cursor-col-resize hover:bg-blue-500/40 active:bg-blue-500/60 transition-colors z-10"
+                className="absolute left-0 top-0 h-full w-1 cursor-col-resize hover:bg-[#00E5FF]/30 active:bg-[#00E5FF]/50 transition-colors z-10"
                 onMouseDown={handleRightPanelResizeStart}
               />
               <PaperDetailPanel
@@ -373,7 +379,7 @@ function SeedExploreContent() {
             </motion.div>
           )}
         </AnimatePresence>
-      </div>
+      </motion.div>
 
       {/* Toasts */}
       {expandError && (
@@ -395,7 +401,7 @@ export default function SeedExplorePage() {
     <Suspense
       fallback={
         <div className="h-screen flex items-center justify-center bg-background">
-          <div className="w-12 h-12 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+          <div className="w-12 h-12 border-2 border-[#00E5FF] border-t-transparent rounded-full animate-spin" />
         </div>
       }
     >
