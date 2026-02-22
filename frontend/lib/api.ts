@@ -38,23 +38,80 @@ async function request<T>(
   options: RequestInit = {}
 ): Promise<T> {
   const authHeaders = await getAuthHeaders();
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...authHeaders,
-      ...options.headers,
-    },
-  });
+  const method = options.method || 'GET';
+  const startTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(
-      error.detail || error.message || `API Error: ${response.status}`
-    );
-  }
+  const makeRequest = async (retryCount = 0): Promise<T> => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
 
-  return response.json();
+    try {
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders,
+          ...options.headers,
+        },
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.status === 429 && retryCount === 0) {
+        const retryAfter = Math.min(
+          Number(response.headers.get('retry-after') || '3'),
+          10
+        );
+        if (process.env.NODE_ENV === 'development') {
+          console.debug(`[API] 429 rate limited, retrying in ${retryAfter}s...`);
+        }
+        await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000));
+        return makeRequest(1);
+      }
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        const status = response.status;
+        let message = error.detail || error.message || `API Error: ${status}`;
+        if (status === 429) message = `Rate limited. Please wait and try again.`;
+        else if (status === 404) message = `Paper not found in Semantic Scholar. Try a different paper.`;
+        else if (status >= 500) message = `Server error. The external API may be down. Try again later.`;
+        throw new Error(message);
+      }
+
+      const elapsed = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startTime;
+      if (process.env.NODE_ENV === 'development') {
+        console.debug(`[API] ${method} ${url} — ${Math.round(elapsed)}ms`);
+      }
+
+      return response.json();
+    } catch (err) {
+      clearTimeout(timeoutId);
+
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        throw new Error('Request timed out. The server may be busy.');
+      }
+
+      // Network error retry (TypeError from fetch = network failure)
+      if (err instanceof TypeError && retryCount === 0) {
+        if (process.env.NODE_ENV === 'development') {
+          console.debug(`[API] Network error, retrying in 2s...`);
+        }
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        return makeRequest(1);
+      }
+
+      const elapsed = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startTime;
+      if (process.env.NODE_ENV === 'development') {
+        console.debug(`[API] ${method} ${url} — FAILED after ${Math.round(elapsed)}ms:`, err);
+      }
+
+      throw err;
+    }
+  };
+
+  return makeRequest();
 }
 
 export const api = {
@@ -82,7 +139,7 @@ export const api = {
     id: string,
     existingNodes: import('@/types').Paper[],
     existingEdges: import('@/types').GraphEdge[]
-  ): Promise<{ nodes: import('@/types').Paper[]; edges: import('@/types').GraphEdge[] }> =>
+  ): Promise<{ nodes: import('@/types').Paper[]; edges: import('@/types').GraphEdge[]; meta?: { references_ok: boolean; citations_ok: boolean; refs_count: number; cites_count: number; error_detail?: string } }> =>
     request(`${API_BASE}/api/papers/${encodeURIComponent(id)}/expand-stable`, {
       method: 'POST',
       body: JSON.stringify({
@@ -119,6 +176,7 @@ export const api = {
         doi: n.doi || undefined,
       })),
       edges: r.edges || [],
+      meta: r.meta,
     })),
 
   // Saved Graphs (auth required)

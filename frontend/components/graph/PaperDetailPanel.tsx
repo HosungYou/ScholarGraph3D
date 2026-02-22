@@ -33,7 +33,7 @@ export default function PaperDetailPanel({
   isExpanding = false,
 }: PaperDetailPanelProps) {
   const [showFullAbstract, setShowFullAbstract] = useState(false);
-  const { graphData, conceptualEdges } = useGraphStore();
+  const { graphData, conceptualEdges, expandedFromMap } = useGraphStore();
 
   // Compute relationship summary
   const relationshipSummary = React.useMemo(() => {
@@ -53,6 +53,21 @@ export default function PaperDetailPanel({
     ).length;
     return { incomingCitations, outgoingCitations, similarEdges, isBridge, conceptualCount };
   }, [graphData, paper, conceptualEdges]);
+
+  // Find expansion parent paper
+  const parentPaper = React.useMemo(() => {
+    if (!expandedFromMap || !paper) return null;
+    const parentId = expandedFromMap.get(paper.id);
+    if (!parentId || !graphData) return null;
+    return graphData.nodes.find(n => n.id === parentId) || null;
+  }, [expandedFromMap, paper, graphData]);
+
+  const citationPercentile = React.useMemo(() => {
+    if (!graphData || !paper) return 0;
+    const sorted = [...graphData.nodes].sort((a, b) => b.citation_count - a.citation_count);
+    const rank = sorted.findIndex(p => p.id === paper.id);
+    return rank >= 0 ? 1 - rank / sorted.length : 0;
+  }, [graphData, paper]);
 
   const abstractText = paper.abstract || paper.tldr || 'No abstract available.';
   const isLongAbstract = abstractText.length > 300;
@@ -196,6 +211,27 @@ export default function PaperDetailPanel({
         </div>
       )}
 
+      {/* Visual Badges — v1.1.0 */}
+      {(citationPercentile > 0.9 || paper.is_bridge || paper.is_open_access) && (
+        <div className="mb-4 flex flex-wrap gap-1.5">
+          {citationPercentile > 0.9 && (
+            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-[#FFD700]/15 text-[#FFD700] border border-[#FFD700]/30">
+              Top 10% Cited
+            </span>
+          )}
+          {paper.is_bridge && (
+            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-[#a29bfe]/15 text-[#a29bfe] border border-[#a29bfe]/30">
+              Bridge Node
+            </span>
+          )}
+          {paper.is_open_access && (
+            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-[#2ECC71]/15 text-[#2ECC71] border border-[#2ECC71]/30">
+              Open Access
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Topics */}
       {paper.topics.length > 0 && (
         <div className="mb-4">
@@ -255,6 +291,28 @@ export default function PaperDetailPanel({
                 <div className="text-yellow-300/70 text-xs">Connects clusters</div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Expanded from — v1.1.0 */}
+      {parentPaper && (
+        <div className="border-t border-[#1a2555]/20 pt-3 mt-3">
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-[#7B8CDE]/60 mb-1.5 font-mono">
+            Expanded From
+          </h4>
+          <button
+            onClick={() => {
+              const store = useGraphStore.getState();
+              store.selectPaper(parentPaper);
+              window.dispatchEvent(new CustomEvent('focusPaper', { detail: { paperId: parentPaper.id } }));
+            }}
+            className="text-sm text-[#00E5FF] hover:text-[#00E5FF]/80 transition-colors text-left"
+          >
+            {parentPaper.title.length > 80 ? parentPaper.title.substring(0, 80) + '...' : parentPaper.title}
+          </button>
+          <div className="text-xs text-[#7B8CDE]/50 mt-0.5">
+            {parentPaper.authors?.[0]?.name} {parentPaper.year}
           </div>
         </div>
       )}

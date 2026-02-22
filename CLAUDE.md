@@ -189,6 +189,14 @@ Search endpoint returns: `{ nodes: Paper[], edges: GraphEdge[], clusters: Cluste
 - Ghost: LineDashedMaterial (dim)
 - LOD: Distance > 2000 → similarity edges hidden; > 3000 → weak edges hidden
 
+### Expand Visual Effects — v1.1.0
+- Parent pulse: cyan (#00E5FF) RingGeometry on parent node, 3s duration
+- New node glow: cyan SphereGeometry on newly expanded nodes, 3s duration
+- Edge highlight: expanded edges bright cyan, width 3.0, 3s duration
+- expandedFromMap: Zustand store tracks child nodeId → parent nodeId
+- API: AbortController 20s timeout, 429 auto-retry (retry-after header), network error retry (2s)
+- ExpandMeta: references_ok, citations_ok, refs_count, cites_count, error_detail
+
 ### Data Fusion Strategy
 1. OpenAlex keyword search (primary, 10 credits/page)
 2. Semantic Scholar search (supplementary, include_embedding=True)
@@ -224,6 +232,7 @@ Search endpoint returns: `{ nodes: Paper[], edges: GraphEdge[], clusters: Cluste
 | DESIGN_THEME | Cosmic Universe theme design system reference | docs/DESIGN_THEME.md |
 | RELEASE_v1.0.0 | v1.0.0 release notes | docs/RELEASE_v1.0.0.md |
 | RELEASE_v1.0.1 | v1.0.1 visibility fix release notes | docs/RELEASE_v1.0.1.md |
+| RELEASE_v1.1.0 | v1.1.0 release notes | docs/RELEASE_v1.1.0.md |
 | CLAUDE.md | This file — Claude Code project context | ./CLAUDE.md |
 
 ## LLM Provider Architecture (Phase 2)
@@ -257,3 +266,4 @@ Patterns: CachedLLMProvider (decorator, in-memory TTL), CircuitBreaker (5 failur
 - v0.9.1 ✅ — expand data completeness (StableExpandNode +authors/abstract/tldr/fields), recursive expand fix (s2_paper_id/doi mapping), right panel layout fix (min-w-0), cluster label dedup
 - **v1.0.0 (Cosmic Universe Theme)**: ✅ — full UI redesign: papers=stars (GLSL twinkle shaders), clusters=nebulae (particle clouds), edges=light streams (flow shaders), Three.js starfield landing, HUD panels, warp transition, 10 new files, 27 modified files, showCosmicTheme toggle
 - **v1.0.1 (Visibility Enhancement)**: ✅ — dramatic field color differentiation (max hue separation), sqrt node sizing (4-30 range), glow opacity 0.9/scale 6x, nebula opacity 0.3/0.5, linkDirectionalParticles for citation flow, GraphLegend uses STAR_COLOR_MAP, stronger supernova/corona textures
+- **v1.1.0 (Legend · Expand · Error Resilience)**: ✅ — Visual Guide legend (8 features), expansion visual effects (pulse/glow/edge highlight 3s), DOI fallback expand, API timeout+retry (20s AbortController, 429 auto-retry), ExpandMeta partial success reporting, specific error messages, PaperDetailPanel badges (Top 10%/Bridge/OA) + "Expanded from", diagnostic logging (dev mode)

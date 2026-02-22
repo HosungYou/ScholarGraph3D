@@ -146,30 +146,44 @@ function SeedExploreContent() {
     };
   }, []);
 
-  // Double-click expand
-  useEffect(() => {
-    const handle = async (e: Event) => {
-      const { paper } = (e as CustomEvent<{ paper: Paper }>).detail;
-      await handleExpandPaper(paper);
-    };
-    window.addEventListener('expandPaper', handle);
-    return () => window.removeEventListener('expandPaper', handle);
-  }, [graphData]);
-
   const handleExpandPaper = useCallback(
     async (paper: Paper) => {
-      const expandId = paper.s2_paper_id || (paper.doi ? `DOI:${paper.doi}` : '');
-      if (!expandId) {
-        setExpandError('Cannot expand: no Semantic Scholar ID');
+      const s2Id = paper.s2_paper_id;
+      const doiId = paper.doi ? `DOI:${paper.doi}` : '';
+
+      if (!s2Id && !doiId) {
+        setExpandError('This paper cannot be expanded (no identifier available)');
         setTimeout(() => setExpandError(null), 4000);
         return;
       }
+
       setIsExpanding(true);
+      setExpandError(null);
+      setExpandSuccess(null);
+
       try {
-        const result = await api.expandPaperStable(expandId, graphData?.nodes || [], graphData?.edges || []);
+        let result;
+        const expandId = s2Id || doiId;
+
+        try {
+          result = await api.expandPaperStable(expandId, graphData?.nodes || [], graphData?.edges || []);
+        } catch (err) {
+          if (expandId === s2Id && doiId) {
+            result = await api.expandPaperStable(doiId, graphData?.nodes || [], graphData?.edges || []);
+          } else {
+            throw err;
+          }
+        }
+
         const count = result.nodes.length;
 
         if (count > 0) {
+          // Track expansion origin
+          const store = useGraphStore.getState();
+          const newMap = new Map(store.expandedFromMap);
+          result.nodes.forEach((n: Paper) => newMap.set(n.id, paper.id));
+          store.setExpandedFromMap(newMap);
+
           // Get parent node position for expand animation
           const parentNode = graphData?.nodes.find(
             n => n.id === expandId ||
@@ -185,7 +199,7 @@ function SeedExploreContent() {
             result.nodes.map(n => [n.id, { x: n.x, y: n.y, z: n.z }])
           );
 
-          // Add nodes at parent position, then animate via ForceGraph3D internals
+          // Add nodes at parent position, then animate
           const nodesAtOrigin = result.nodes.map(n => ({
             ...n,
             x: ox,
@@ -195,7 +209,6 @@ function SeedExploreContent() {
           const newNodeIds = result.nodes.map(n => n.id);
           useGraphStore.getState().addNodesStable(nodesAtOrigin, result.edges);
 
-          // Wait one tick for ForceGraph3D to ingest new nodes, then animate
           setTimeout(() => {
             graphRef.current?.animateExpandNodes(
               parentNode?.id || paper.id,
@@ -204,20 +217,38 @@ function SeedExploreContent() {
             );
           }, 50);
 
-          setExpandSuccess(`${count} papers added`);
+          // Build success message with meta
+          const meta = result.meta;
+          if (meta && (!meta.references_ok || !meta.citations_ok)) {
+            const detail = meta.error_detail ? ` — ${meta.error_detail}` : '';
+            setExpandSuccess(`${count} papers added (partial${detail})`);
+          } else {
+            setExpandSuccess(`${count} papers added`);
+          }
         } else {
           setExpandSuccess('No new papers found');
         }
         setTimeout(() => setExpandSuccess(null), 3000);
       } catch (err) {
-        setExpandError(err instanceof Error ? err.message : 'Failed to expand');
-        setTimeout(() => setExpandError(null), 4000);
+        const msg = err instanceof Error ? err.message : 'Failed to expand';
+        setExpandError(msg);
+        setTimeout(() => setExpandError(null), 5000);
       } finally {
         setIsExpanding(false);
       }
     },
     [graphData]
   );
+
+  // Double-click expand
+  useEffect(() => {
+    const handle = async (e: Event) => {
+      const { paper } = (e as CustomEvent<{ paper: Paper }>).detail;
+      await handleExpandPaper(paper);
+    };
+    window.addEventListener('expandPaper', handle);
+    return () => window.removeEventListener('expandPaper', handle);
+  }, [graphData, handleExpandPaper]);
 
   const handlePaperSelect = useCallback((paper: Paper | null) => {
     selectPaper(paper);

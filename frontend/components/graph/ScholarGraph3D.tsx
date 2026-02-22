@@ -173,6 +173,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     toggleMultiSelect,
     highlightedPaperIds,
     showCosmicTheme,
+    expandedFromMap,
   } = useGraphStore();
 
   const lastClickRef = useRef<{ nodeId: string; timestamp: number } | null>(
@@ -180,6 +181,14 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
   );
   const newNodeIdsRef = useRef<Set<string>>(new Set());
   const newNodeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const expandedFromRef = useRef<Map<string, string>>(new Map());
+  const expandedEdgeIdsRef = useRef<Set<string>>(new Set());
+  const expandedEdgeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Sync expandedFromMap from store to local ref
+  useEffect(() => {
+    expandedFromRef.current = new Map(expandedFromMap);
+  }, [expandedFromMap]);
 
   // Compute year range for opacity
   const yearRange = useMemo(() => {
@@ -414,6 +423,40 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
           showCitationAura,
         });
         group.userData.nodeId = node.id;
+
+        // Expansion pulse: pulsing ring on parent node that just expanded
+        if (newNodeIdsRef.current.size > 0 && expandedFromRef.current.size > 0) {
+          // Check if this node is a parent that expanded
+          const isExpandParent = Array.from(expandedFromRef.current.values()).includes(node.id);
+          if (isExpandParent) {
+            const pulseRingGeo = new THREE.RingGeometry(node.val * 2.0, node.val * 2.3, 32);
+            const pulseRingMat = new THREE.MeshBasicMaterial({
+              color: 0x00E5FF,
+              transparent: true,
+              opacity: 0.6,
+              side: THREE.DoubleSide,
+              depthWrite: false,
+            });
+            const pulseRing = new THREE.Mesh(pulseRingGeo, pulseRingMat);
+            pulseRing.rotation.x = Math.PI / 2;
+            pulseRing.userData.isExpansionPulse = true;
+            group.add(pulseRing);
+          }
+        }
+
+        // New node glow pulse (newly expanded nodes)
+        if (newNodeIdsRef.current.has(node.id)) {
+          const newGlowGeo = new THREE.SphereGeometry(node.val * 2.0, 8, 8);
+          const newGlowMat = new THREE.MeshBasicMaterial({
+            color: 0x00E5FF,
+            transparent: true,
+            opacity: 0.3,
+            depthWrite: false,
+          });
+          const newGlow = new THREE.Mesh(newGlowGeo, newGlowMat);
+          newGlow.userData.isNewNodeGlow = true;
+          group.add(newGlow);
+        }
 
         // Centrality-based label: show only top 20% OR highlighted/selected
         const showLabel = showLabels && node.name && (
@@ -698,6 +741,15 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
   // Link width
   const linkWidth = useCallback((linkData: unknown) => {
     const link = linkData as ForceGraphLink;
+    // Highlight recently expanded edges with thicker width
+    if (expandedEdgeIdsRef.current.size > 0) {
+      const sourceId = typeof link.source === 'string' ? link.source : (link.source as ForceGraphNode).id;
+      const targetId = typeof link.target === 'string' ? link.target : (link.target as ForceGraphNode).id;
+      if (expandedEdgeIdsRef.current.has(`${sourceId}-${targetId}`) ||
+          expandedEdgeIdsRef.current.has(`${targetId}-${sourceId}`)) {
+        return 3.0;
+      }
+    }
     return Math.max(0.5, link.width || 0.5);
   }, []);
 
@@ -705,6 +757,16 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
   const linkColor = useCallback(
     (linkData: unknown) => {
       const link = linkData as ForceGraphLink;
+
+      // Highlight recently expanded edges
+      if (expandedEdgeIdsRef.current.size > 0) {
+        const sourceId = typeof link.source === 'string' ? link.source : (link.source as ForceGraphNode).id;
+        const targetId = typeof link.target === 'string' ? link.target : (link.target as ForceGraphNode).id;
+        if (expandedEdgeIdsRef.current.has(`${sourceId}-${targetId}`) ||
+            expandedEdgeIdsRef.current.has(`${targetId}-${sourceId}`)) {
+          return '#00E5FF';
+        }
+      }
 
       // Check camera distance for LOD
       const camDist = fgRef.current?.camera()?.position?.length() ?? 0;
@@ -1371,6 +1433,26 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     },
     animateExpandNodes: (parentNodeId: string, newNodeIds: string[], targets: Map<string, {x: number; y: number; z: number}>) => {
       if (!fgRef.current) return;
+
+      // Track new nodes and expanded edges for visual highlighting
+      newNodeIdsRef.current = new Set(newNodeIds);
+
+      // Track parent → child relationship
+      newNodeIds.forEach(id => {
+        expandedFromRef.current.set(id, parentNodeId);
+      });
+
+      // Clear expansion highlights after 3 seconds
+      if (expandedEdgeTimerRef.current) clearTimeout(expandedEdgeTimerRef.current);
+      expandedEdgeTimerRef.current = setTimeout(() => {
+        expandedEdgeIdsRef.current = new Set();
+        expandedFromRef.current = new Map();
+        newNodeIdsRef.current = new Set();
+        if (fgRef.current) {
+          try { fgRef.current.refresh(); } catch {}
+        }
+      }, 3000);
+
       const graphData = fgRef.current.graphData();
       if (!graphData?.nodes) return;
 
@@ -1419,6 +1501,14 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         if (progress < 1) {
           requestAnimationFrame(animate);
         } else {
+          // Mark edges from parent to new nodes for highlighting
+          const edgeIds = new Set<string>();
+          newNodeIds.forEach(id => {
+            edgeIds.add(`${parentNodeId}-${id}`);
+            edgeIds.add(`${id}-${parentNodeId}`);
+          });
+          expandedEdgeIdsRef.current = edgeIds;
+
           // Release fixed positions so force simulation can take over
           nodesToAnimate.forEach(node => {
             node.fx = undefined;
@@ -1456,6 +1546,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
   useEffect(() => {
     return () => {
       if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+      if (expandedEdgeTimerRef.current) clearTimeout(expandedEdgeTimerRef.current);
       if (fgRef.current) {
         try {
           const renderer = fgRef.current.renderer();
@@ -1469,6 +1560,19 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       }
     };
   }, []);
+
+  // Diagnostic logging (development only)
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'development') return;
+    console.log('[ScholarGraph3D] Render stats:', {
+      nodes: forceGraphData.nodes.length,
+      links: forceGraphData.links.length,
+      cosmicTheme: showCosmicTheme,
+      clusters: graphData?.clusters.length ?? 0,
+      yearRange,
+      expandedNodes: newNodeIdsRef.current.size,
+    });
+  }, [forceGraphData, showCosmicTheme, yearRange, graphData?.clusters.length]);
 
   if (!graphData) return null;
 

@@ -139,3 +139,33 @@ Maintain fixtures in `tests/fixtures/` with:
 - sample_s2_paper.json
 - sample_oa_work.json
 - sample_embeddings.npy (small 10×768 array)
+
+## 7. v1.1.0 Test Coverage — Expand Error Resilience
+
+### New Test File: `tests/test_routers/test_papers.py`
+
+| Test | Description | Type |
+|------|-------------|------|
+| `test_expand_stable_returns_200_with_nodes_and_edges` | Valid expand returns 200 with all fields | Integration |
+| `test_expand_stable_meta_all_ok` | Both refs/cites succeed → meta reports ok | Integration |
+| `test_expand_stable_meta_refs_fail` | Refs fail → partial success with meta | Integration |
+| `test_expand_stable_meta_cites_fail` | Cites fail → partial success with meta | Integration |
+| `test_expand_stable_meta_both_fail` | Both fail → 200 with empty nodes, meta errors | Integration |
+| `test_expand_stable_timeout_classified_in_meta` | Timeout exception → "timed out" in error_detail | Integration |
+| `test_expand_stable_edges_connect_to_parent` | Edges correctly source=parent, target=child | Integration |
+| `test_expand_stable_node_has_required_fields` | Nodes contain paper_id, title, initial_x/y/z | Integration |
+| `test_expand_meta_defaults` | ExpandMeta defaults (all ok, zero counts) | Unit |
+| `test_expand_meta_with_error` | ExpandMeta with error state | Unit |
+| `test_expand_meta_serialization` | ExpandMeta serializes to dict | Unit |
+| `test_stable_expand_response_includes_meta` | StableExpandResponse with meta | Unit |
+| `test_stable_expand_response_meta_optional` | StableExpandResponse without meta (backwards compat) | Unit |
+
+### Coverage: expand-stable endpoint
+- Happy path: ✅
+- Partial failure (refs): ✅
+- Partial failure (cites): ✅
+- Total failure: ✅
+- Timeout classification: ✅
+- Edge connectivity: ✅
+- Node structure: ✅
+- Pydantic model validation: ✅

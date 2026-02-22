@@ -7,6 +7,7 @@ import { STAR_COLOR_MAP } from './cosmic/cosmicConstants';
 
 export default function GraphLegend() {
   const [collapsed, setCollapsed] = useState(false);
+  const [guideCollapsed, setGuideCollapsed] = useState(true);
   const { showEnhancedIntents } = useGraphStore();
 
   const LEGEND_FIELDS = [
@@ -148,6 +149,75 @@ export default function GraphLegend() {
       {/* Cluster */}
       <div className="text-[#7B8CDE]/60">
         Nebula cloud = topic cluster
+      </div>
+
+      {/* Visual Guide — collapsible */}
+      <div className="border-t border-[#1a2555]/20 pt-2 mt-2">
+        <button
+          onClick={() => setGuideCollapsed(!guideCollapsed)}
+          className="flex items-center justify-between w-full text-[10px] font-mono uppercase tracking-widest text-[#00E5FF]/60 hover:text-[#00E5FF]/80 transition-colors"
+        >
+          <span>VISUAL GUIDE</span>
+          {guideCollapsed ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+        </button>
+
+        {!guideCollapsed && (
+          <div className="mt-1.5 flex flex-col gap-1 text-[9px]">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-0.5 flex-shrink-0">
+                <div className="w-1.5 h-1.5 rounded-full bg-[#7B8CDE]/40" />
+                <div className="w-3 h-3 rounded-full bg-[#7B8CDE]/40" />
+              </div>
+              <span>Size = citation count</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-[#FFD700]/30 border border-[#FFD700]/50 flex-shrink-0 animate-pulse" />
+              <span>Bright glow = highly cited</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full border-2 border-[#FF6B6B]/60 flex-shrink-0 animate-pulse" style={{ animationDuration: '1.5s' }} />
+              <span>Pulsing ring = top 10% cited</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="relative flex-shrink-0 w-3 h-3">
+                <div className="absolute inset-0 rounded-full bg-[#7B8CDE]/30" />
+                <div className="absolute w-1 h-1 rounded-full bg-[#FFD700] top-0 left-1" />
+              </div>
+              <span>Orbiting dots = bridge node</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full border border-[#2ECC71]/70 flex-shrink-0" />
+              <span>Green ring = Open Access</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-0.5 bg-[#00E5FF] flex-shrink-0 rounded-full relative">
+                <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1 h-1 rounded-full bg-[#00E5FF] animate-pulse" />
+              </div>
+              <span>Flowing particles = citation</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="flex-shrink-0 text-[8px]">
+                <span className="text-[#7B8CDE]/40">slow</span>
+                <span className="mx-0.5">→</span>
+                <span className="text-[#7B8CDE]/80">fast</span>
+              </div>
+              <span>Twinkle = recency</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="flex flex-col items-center flex-shrink-0 text-[7px] text-[#7B8CDE]/50 leading-none">
+                <span>▲ new</span>
+                <span>▼ old</span>
+              </div>
+              <span>Z-axis = publication year</span>
+            </div>
+          </div>
+        )}
+
+        {guideCollapsed && (
+          <div className="text-[9px] text-[#7B8CDE]/40 mt-0.5 italic">
+            Click to learn about visual features
+          </div>
+        )}
       </div>
     </div>
   );

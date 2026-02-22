@@ -157,15 +157,34 @@ function ExploreContent() {
     const handle = async (e: Event) => {
       const { paper } = (e as CustomEvent<{ paper: Paper }>).detail;
       try {
-        // Try s2_paper_id first, then DOI, then title-based lookup
-        const expandId = paper.s2_paper_id || (paper.doi ? `DOI:${paper.doi}` : '');
+        const s2Id = paper.s2_paper_id;
+        const doiId = paper.doi ? `DOI:${paper.doi}` : '';
+        const expandId = s2Id || doiId;
         if (!expandId) {
-          setExpandError('Cannot expand: no Semantic Scholar ID or DOI available');
+          setExpandError('This paper cannot be expanded (no identifier available)');
           setTimeout(() => setExpandError(null), 4000);
           return;
         }
-        const result = await api.expandPaperStable(expandId, graphData?.nodes || [], graphData?.edges || []);
+        let result;
+        try {
+          result = await api.expandPaperStable(expandId, graphData?.nodes || [], graphData?.edges || []);
+        } catch (err) {
+          // If s2 ID failed and we have DOI fallback
+          if (expandId === s2Id && doiId) {
+            result = await api.expandPaperStable(doiId, graphData?.nodes || [], graphData?.edges || []);
+          } else {
+            throw err;
+          }
+        }
         useGraphStore.getState().addNodesStable(result.nodes, result.edges);
+
+        // Track expansion origin
+        if (result.nodes.length > 0) {
+          const store = useGraphStore.getState();
+          const newMap = new Map(store.expandedFromMap);
+          result.nodes.forEach((n: Paper) => newMap.set(n.id, paper.id));
+          store.setExpandedFromMap(newMap);
+        }
       } catch (err) {
         console.error('Failed to expand paper:', err);
         setExpandError(err instanceof Error ? err.message : 'Failed to expand paper');
@@ -280,43 +299,108 @@ function ExploreContent() {
 
   const handleExpandPaper = useCallback(
     async (paper: Paper) => {
-      const expandId = paper.s2_paper_id || (paper.doi ? `DOI:${paper.doi}` : '');
-      if (!expandId) {
-        setExpandError('Cannot expand: no Semantic Scholar ID or DOI available');
+      const s2Id = paper.s2_paper_id;
+      const doiId = paper.doi ? `DOI:${paper.doi}` : '';
+
+      if (!s2Id && !doiId) {
+        setExpandError('This paper cannot be expanded (no identifier available)');
         setTimeout(() => setExpandError(null), 4000);
         return;
       }
+
       setIsExpanding(true);
       setExpandError(null);
       setExpandSuccess(null);
+
+      let result: { nodes: Paper[]; edges: import('@/types').GraphEdge[]; meta?: any } | null = null;
+      let lastError: Error | null = null;
+
+      // Try s2_paper_id first
+      if (s2Id) {
+        try {
+          result = await api.expandPaperStable(s2Id, graphData?.nodes || [], graphData?.edges || []);
+        } catch (err) {
+          lastError = err instanceof Error ? err : new Error('Failed to expand');
+          // If s2 ID failed and we have DOI, try DOI fallback
+          if (doiId) {
+            try {
+              result = await api.expandPaperStable(doiId, graphData?.nodes || [], graphData?.edges || []);
+              lastError = null;
+            } catch (err2) {
+              lastError = err2 instanceof Error ? err2 : new Error('Failed to expand');
+            }
+          }
+        }
+      } else if (doiId) {
+        try {
+          result = await api.expandPaperStable(doiId, graphData?.nodes || [], graphData?.edges || []);
+        } catch (err) {
+          lastError = err instanceof Error ? err : new Error('Failed to expand');
+        }
+      }
+
+      if (lastError || !result) {
+        const msg = lastError?.message || 'Failed to expand paper';
+        setExpandError(msg);
+        setTimeout(() => setExpandError(null), 5000);
+        setIsExpanding(false);
+        return;
+      }
+
       try {
-        const result = await api.expandPaperStable(expandId, graphData?.nodes || [], graphData?.edges || []);
         useGraphStore.getState().addNodesStable(result.nodes, result.edges);
+
+        // Track expansion origin
+        if (result.nodes.length > 0) {
+          const store = useGraphStore.getState();
+          const newMap = new Map(store.expandedFromMap);
+          result.nodes.forEach(n => newMap.set(n.id, paper.id));
+          store.setExpandedFromMap(newMap);
+        }
+
+        // Expand animation
+        if (result.nodes.length > 0) {
+          const parentNode = graphData?.nodes.find(
+            n => n.id === paper.id || n.s2_paper_id === paper.s2_paper_id
+          );
+          if (parentNode) {
+            const targets = new Map(
+              result.nodes.map(n => [n.id, { x: n.x, y: n.y, z: n.z }])
+            );
+            const newNodeIds = result.nodes.map(n => n.id);
+            setTimeout(() => {
+              graphRef.current?.animateExpandNodes(
+                parentNode.id,
+                newNodeIds,
+                targets
+              );
+            }, 50);
+          }
+        }
+
         api.logInteraction({ paper_id: paper.id, action: 'expand_citations' });
         const addedCount = result.nodes.length;
+
+        // Build success message with meta info
         if (addedCount > 0) {
-          setExpandSuccess(`${addedCount} papers added`);
-          setTimeout(() => setExpandSuccess(null), 3000);
+          const meta = result.meta;
+          if (meta && (!meta.references_ok || !meta.citations_ok)) {
+            const detail = meta.error_detail ? ` — ${meta.error_detail}` : '';
+            setExpandSuccess(`${addedCount} papers added (partial${detail})`);
+          } else {
+            setExpandSuccess(`${addedCount} papers added`);
+          }
         } else {
           setExpandSuccess('No new papers found');
-          setTimeout(() => setExpandSuccess(null), 3000);
         }
+        setTimeout(() => setExpandSuccess(null), 3000);
       } catch (err) {
-        console.error('Failed to expand paper:', err);
-        const msg = err instanceof Error ? err.message : 'Failed to expand paper citations';
-        if (msg.includes('No Semantic Scholar')) {
-          setExpandError('Cannot expand: paper not found in Semantic Scholar');
-        } else if (msg.includes('fetch') || msg.includes('network') || msg.includes('Network')) {
-          setExpandError('Network error: please check your connection and try again');
-        } else {
-          setExpandError(msg);
-        }
-        setTimeout(() => setExpandError(null), 5000);
+        console.error('Failed to process expand result:', err);
       } finally {
         setIsExpanding(false);
       }
     },
-    [setExpandError, graphData]
+    [graphData]
   );
 
   const handlePaperSelect = useCallback((paper: Paper | null) => {

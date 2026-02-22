@@ -53,6 +53,9 @@ interface GraphStore {
   hiddenClusterIds: Set<number>;
   bridgeNodeIds: Set<string>;
 
+  // v1.1.0: Expansion tracking
+  expandedFromMap: Map<string, string>;
+
   // Visibility toggles
   showCitationEdges: boolean;
   showSimilarityEdges: boolean;
@@ -103,6 +106,7 @@ interface GraphStore {
   toggleClusterVisibility: (clusterId: number) => void;
   setBridgeNodeIds: (ids: Set<string>) => void;
   addNodesStable: (nodes: Paper[], edges: GraphEdge[]) => void;
+  setExpandedFromMap: (map: Map<string, string>) => void;
 
   // Phase 4 actions
   addConceptualEdges: (edges: ConceptualEdge[]) => void;
@@ -142,6 +146,7 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
   showGapOverlay: true,
   hiddenClusterIds: new Set<number>(),
   bridgeNodeIds: new Set<string>(),
+  expandedFromMap: new Map<string, string>(),
 
   // Phase 4
   conceptualEdges: [],
@@ -257,6 +262,7 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
     });
   },
   setBridgeNodeIds: (ids: Set<string>) => set({ bridgeNodeIds: ids }),
+  setExpandedFromMap: (map: Map<string, string>) => set({ expandedFromMap: map }),
 
   // Phase 4 actions
   addConceptualEdges: (edges) =>

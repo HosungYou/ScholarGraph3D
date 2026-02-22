@@ -89,10 +89,19 @@ class StableExpandRequest(BaseModel):
     limit: int = Field(default=20, ge=1, le=100)
 
 
+class ExpandMeta(BaseModel):
+    references_ok: bool = True
+    citations_ok: bool = True
+    refs_count: int = 0
+    cites_count: int = 0
+    error_detail: Optional[str] = None
+
+
 class StableExpandResponse(BaseModel):
     nodes: List[StableExpandNode] = []
     edges: List[Dict[str, Any]] = []
     total: int = 0
+    meta: Optional[ExpandMeta] = None
 
 
 # ==================== Helpers ====================
@@ -367,19 +376,46 @@ async def expand_paper_stable(
     refs: list = []
     cites: list = []
 
+    refs_ok = True
+    cites_ok = True
+    refs_error = None
+    cites_error = None
+
     try:
         refs = await client.get_references(paper_id, limit=request.limit // 2, include_embedding=True)
     except Exception as e:
+        refs_ok = False
+        if "TimeoutException" in type(e).__name__ or "timeout" in str(e).lower():
+            refs_error = "References fetch timed out"
+        else:
+            refs_error = f"References fetch failed: {type(e).__name__}"
         logger.warning(f"get_references failed for {paper_id}: {e}")
 
     try:
         cites = await client.get_citations(paper_id, limit=request.limit // 2, include_embedding=True)
     except Exception as e:
+        cites_ok = False
+        if "TimeoutException" in type(e).__name__ or "timeout" in str(e).lower():
+            cites_error = "Citations fetch timed out"
+        else:
+            cites_error = f"Citations fetch failed: {type(e).__name__}"
         logger.warning(f"get_citations failed for {paper_id}: {e}")
 
     all_papers = refs + cites
     if not all_papers:
-        return StableExpandResponse()
+        error_parts = []
+        if refs_error:
+            error_parts.append(refs_error)
+        if cites_error:
+            error_parts.append(cites_error)
+        meta = ExpandMeta(
+            references_ok=refs_ok,
+            citations_ok=cites_ok,
+            refs_count=0,
+            cites_count=0,
+            error_detail="; ".join(error_parts) if error_parts else None,
+        )
+        return StableExpandResponse(meta=meta)
 
     # Compute cluster centroids from existing nodes (if they have embeddings)
     existing_nodes_dicts = [n.model_dump() for n in request.existing_nodes]
@@ -445,10 +481,25 @@ async def expand_paper_stable(
                 "type": "citation",
             })
 
+    error_parts = []
+    if refs_error:
+        error_parts.append(refs_error)
+    if cites_error:
+        error_parts.append(cites_error)
+
+    meta = ExpandMeta(
+        references_ok=refs_ok,
+        citations_ok=cites_ok,
+        refs_count=len(refs),
+        cites_count=len(cites),
+        error_detail="; ".join(error_parts) if error_parts else None,
+    )
+
     return StableExpandResponse(
         nodes=stable_nodes,
         edges=edges,
         total=len(stable_nodes),
+        meta=meta,
     )
 
 
