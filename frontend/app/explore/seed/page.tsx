@@ -129,7 +129,7 @@ function SeedExploreContent() {
         setError(err instanceof Error ? err.message : 'Failed to build seed graph');
       })
       .finally(() => setLoading(false));
-  }, [paperId, depth, setGraphData, setLoading, setError]);
+  }, [paperId, depth, setGraphData, setLoading, setError, setCitationIntents]);
 
   // Camera control events
   useEffect(() => {

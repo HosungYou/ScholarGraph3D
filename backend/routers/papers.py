@@ -10,7 +10,7 @@ import random
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 from config import settings
 from database import Database, get_db
@@ -38,6 +38,11 @@ class PaperDetail(BaseModel):
     is_open_access: bool = False
     oa_url: Optional[str] = None
     authors: List[Dict[str, Any]] = []
+
+    @computed_field
+    @property
+    def fields(self) -> List[str]:
+        return self.fields_of_study
 
 
 class CitationPaper(BaseModel):

@@ -14,9 +14,6 @@ from pydantic import BaseModel, Field
 
 from config import settings
 from database import Database, get_db
-from integrations.data_fusion import DataFusionService
-from integrations.openalex import OpenAlexClient
-from integrations.semantic_scholar import SemanticScholarClient
 from routers.search import (
     GraphResponse,
     SearchRequest,

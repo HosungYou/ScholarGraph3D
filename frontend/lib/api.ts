@@ -119,7 +119,13 @@ export const api = {
   search: (query: string, options?: SearchOptions): Promise<GraphData> =>
     request<GraphData>(`${API_BASE}/api/search`, {
       method: 'POST',
-      body: JSON.stringify({ query, ...options }),
+      body: JSON.stringify({
+        query,
+        ...(options?.year_min !== undefined && { year_start: options.year_min }),
+        ...(options?.year_max !== undefined && { year_end: options.year_max }),
+        ...(options?.field !== undefined && { fields_of_study: [options.field] }),
+        ...(options?.limit !== undefined && { limit: options.limit }),
+      }),
     }),
 
   // Papers
@@ -367,8 +373,8 @@ export const api = {
     }
   },
 
-  triggerWatchCheck: (): Promise<{ total_queries: number; new_papers: number }> =>
-    request<{ total_queries: number; new_papers: number }>(
+  triggerWatchCheck: (): Promise<{ total_queries: number; new_papers_found: number }> =>
+    request<{ total_queries: number; new_papers_found: number }>(
       `${API_BASE}/api/watch/check`,
       { method: 'POST' }
     ),
@@ -379,14 +385,16 @@ export const api = {
     paperId: string,
     enhanced?: boolean,
     llm?: LLMSettings
-  ): Promise<CitationIntent[]> =>
-    request<CitationIntent[]>(
-      `${API_BASE}/api/papers/${paperId}/citation-intents`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ enhanced: enhanced ?? false, llm }),
-      }
-    ),
+  ): Promise<CitationIntent[]> => {
+    const params = new URLSearchParams();
+    if (enhanced) params.set('enhanced', 'true');
+    if (llm?.provider) params.set('provider', llm.provider);
+    if (llm?.api_key) params.set('api_key', llm.api_key);
+    const qs = params.toString();
+    return request<CitationIntent[]>(
+      `${API_BASE}/api/papers/${encodeURIComponent(paperId)}/intents${qs ? '?' + qs : ''}`
+    );
+  },
 
   // ─── Phase 3: Literature Review ──────────────────────────────────
 
@@ -456,7 +464,8 @@ export const api = {
     graphData: GraphData,
     llm: LLMSettings,
     history?: ChatMessage[],
-    onChunk?: (text: string) => void
+    onChunk?: (text: string) => void,
+    onDone?: (meta: { citations?: string[]; highlighted_papers?: string[] }) => void
   ): Promise<void> => {
     const authHeaders = await getAuthHeaders();
     const response = await fetch(`${API_BASE}/api/chat/stream`, {
@@ -517,7 +526,11 @@ export const api = {
           if (data === '[DONE]') return;
           try {
             const parsed = JSON.parse(data);
-            if (parsed.content && onChunk) {
+            if (parsed.type === 'done') {
+              if (onDone) {
+                onDone({ citations: parsed.citations, highlighted_papers: parsed.highlighted_papers });
+              }
+            } else if (parsed.content && onChunk) {
               onChunk(parsed.content);
             } else if (parsed.text && onChunk) {
               onChunk(parsed.text);
@@ -590,7 +603,7 @@ export const api = {
     paper_id: string;
     title: string;
     doi: string;
-    redirect_query: string;
+    source?: string;
   }> =>
     request(`${API_BASE}/api/papers/by-doi?doi=${encodeURIComponent(doi)}`),
 

@@ -56,6 +56,7 @@ class WatchQueryResponse(BaseModel):
     notify_email: bool = True
     last_checked: Optional[str] = None
     created_at: str
+    new_paper_count: int = 0
 
 
 class WatchCheckResult(BaseModel):
@@ -63,6 +64,7 @@ class WatchCheckResult(BaseModel):
 
     total_queries: int
     new_papers_found: int
+    new_papers: int = 0  # alias for new_papers_found for frontend compatibility
     emails_sent: int
 
 
@@ -221,6 +223,7 @@ async def trigger_watch_check(
     return WatchCheckResult(
         total_queries=len(queries),
         new_papers_found=total_new,
+        new_papers=total_new,
         emails_sent=0,  # Manual check does not send emails
     )
 

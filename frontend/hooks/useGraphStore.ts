@@ -70,7 +70,6 @@ interface GraphStore {
   setHoveredPaper: (paper: Paper | null) => void;
   toggleMultiSelect: (paper: Paper) => void;
   clearMultiSelect: () => void;
-  addNodes: (nodes: Paper[], edges: GraphEdge[]) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
 
@@ -180,33 +179,6 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
   },
 
   clearMultiSelect: () => set({ multiSelected: [] }),
-
-  addNodes: (nodes, edges) => {
-    const { graphData } = get();
-    if (!graphData) return;
-
-    const existingNodeIds = new Set(graphData.nodes.map((n) => n.id));
-    const newNodes = nodes.filter((n) => !existingNodeIds.has(n.id));
-
-    const existingEdgeKeys = new Set(
-      graphData.edges.map((e) => `${e.source}-${e.target}`)
-    );
-    const newEdges = edges.filter(
-      (e) => !existingEdgeKeys.has(`${e.source}-${e.target}`)
-    );
-
-    set({
-      graphData: {
-        ...graphData,
-        nodes: [...graphData.nodes, ...newNodes],
-        edges: [...graphData.edges, ...newEdges],
-        meta: {
-          ...graphData.meta,
-          total: graphData.meta.total + newNodes.length,
-        },
-      },
-    });
-  },
 
   setLoading: (loading) => set({ isLoading: loading }),
 

@@ -295,7 +295,7 @@ function ExploreContent() {
       setError('Could not find paper for this DOI');
       setTimeout(() => setError(null), 4000);
     });
-  }, [doi]);
+  }, [doi, setError]);
 
   const handleExpandPaper = useCallback(
     async (paper: Paper) => {

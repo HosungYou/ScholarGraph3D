@@ -58,7 +58,11 @@ backend/
 ├── main.py              # FastAPI app with lifespan
 ├── config.py            # Pydantic Settings (env vars)
 ├── database.py          # asyncpg pool (global db singleton)
+├── cache.py             # Redis cache helpers (Upstash) — graceful no-op if unavailable
 ├── auth/                # Supabase JWT auth
+├── middleware/
+│   ├── analytics.py         # Request analytics middleware
+│   └── rate_limiter.py      # Rate limiting middleware
 ├── integrations/
 │   ├── semantic_scholar.py  # S2 API client (1 RPS, rate limiting)
 │   ├── openalex.py          # OA API client (credit tracking)
@@ -81,13 +85,17 @@ backend/
 │   ├── user_provider.py     # Factory for user-provided API keys
 │   ├── cached_provider.py   # Transparent caching decorator
 │   └── circuit_breaker.py   # Fault tolerance (CLOSED→OPEN→HALF_OPEN)
-├── services/                    # Phase 3
+├── services/                    # Phase 3+
 │   ├── watch_service.py         # Watch query execution + OA search + similarity filter
 │   ├── email_service.py         # Resend API email digests
 │   ├── citation_intent.py       # S2 basic + LLM-enhanced 5-class intents
-│   └── lit_review.py            # LLM lit review generation + weasyprint PDF
+│   ├── lit_review.py            # LLM lit review generation + weasyprint PDF
+│   ├── query_normalizer.py      # Query normalization for cache hit rates (Groq llama-3.1-8b)
+│   └── query_parser.py          # NL→structured search params (Groq llama-3.3-70b)
 ├── routers/
 │   ├── search.py        # POST /api/search → full graph pipeline (+ is_bridge flag)
+│   ├── natural_search.py  # POST /api/search/natural → NL query → Groq parse → parallel search
+│   ├── search_stream.py   # GET /api/search/stream → SSE progress feedback
 │   ├── papers.py        # Paper detail, citations, references, expand, expand-stable, intents, by-doi
 │   ├── graphs.py        # CRUD saved graphs (auth required)
 │   ├── analysis.py      # Phase 2+4: trends, gaps, hypotheses, conceptual-edges/stream (SSE), scaffold-angles
@@ -106,9 +114,13 @@ backend/
 frontend/
 ├── app/
 │   ├── page.tsx          # Landing page — cosmic starfield + warp transition
+│   ├── providers.tsx     # Client providers wrapper (Supabase auth, etc.)
+│   ├── sitemap.ts        # Next.js sitemap generation
 │   ├── explore/page.tsx  # Mission Control — 3-panel exploration (tabbed sidebar + chat)
 │   ├── explore/seed/page.tsx  # Origin Point Mode — seed paper exploration (resizable panels, expand animation, citation intents)
-│   ├── auth/             # Station Access — login/signup
+│   ├── auth/
+│   │   ├── page.tsx           # Station Access — login/signup
+│   │   └── callback/page.tsx  # OAuth callback handler
 │   └── dashboard/        # Command Center — saved graphs
 ├── components/
 │   ├── cosmic/                  # v1.0.0: Shared cosmic theme components
@@ -119,14 +131,15 @@ frontend/
 │   ├── graph/
 │   │   ├── ScholarGraph3D.tsx    # Main 3D component (star nodes, nebula clusters, light stream edges, showCosmicTheme toggle)
 │   │   ├── cosmic/               # v1.0.0: Cosmic rendering system
-│   │   │   ├── cosmicConstants.ts       # Star color map, GLSL shaders, twinkle rates
+│   │   │   ├── cosmicConstants.ts       # Star color map (26 fields), GLSL shaders, twinkle rates
 │   │   │   ├── cosmicTextures.ts        # Canvas-generated glow/corona/flare textures
 │   │   │   ├── CosmicAnimationManager.ts # Singleton rAF loop for all shader uniforms
 │   │   │   ├── starNodeRenderer.ts      # Star node factory (twinkle, supernova, binary, flare)
-│   │   │   ├── nebulaClusterRenderer.ts # Gaussian particle cloud per cluster
-│   │   │   └── lightStreamEdgeRenderer.ts # TubeGeometry + flow shader edges
+│   │   │   └── nebulaClusterRenderer.ts # Gaussian particle cloud per cluster
 │   │   ├── PaperDetailPanel.tsx  # Object Scanner — right panel paper details
 │   │   ├── ClusterPanel.tsx      # Sector Scanner — density, visibility, paper list, stats, highlight
+│   │   ├── GraphLegend.tsx       # Star Chart — field colors (top 10), size/edge/cluster visual guide
+│   │   ├── CitationContextModal.tsx  # Citation context detail modal
 │   │   ├── SearchBar.tsx         # Navigation Console — search input with filters
 │   │   └── GraphControls.tsx     # Ship Controls — floating toggles
 │   ├── analysis/                 # Phase 2
@@ -144,12 +157,14 @@ frontend/
 │   ├── scaffolding/                # Phase 4
 │   │   └── ScaffoldingModal.tsx    # Multi-select research angle exploration modal
 │   └── dashboard/
-│       └── RecommendationCard.tsx   # Phase 5: recommendation card with dismiss + explore
+│       ├── RecommendationCard.tsx   # Phase 5: recommendation card with dismiss + explore
+│       └── SavedGraphs.tsx          # Saved graphs list/management
 ├── hooks/useGraphStore.ts    # Zustand state (Phase 1–6 + showCosmicTheme toggle)
 ├── lib/
 │   ├── api.ts               # Backend API client (search + analysis + chat)
 │   ├── auth-context.tsx      # Supabase auth context
-│   └── supabase.ts           # Supabase client init
+│   ├── supabase.ts           # Supabase client init
+│   └── utils.ts              # Shared utility functions
 └── types/index.ts            # All types (Paper, Trend, Gap, Chat, LLMSettings)
 ```
 
@@ -168,7 +183,7 @@ Search endpoint returns: `{ nodes: Paper[], edges: GraphEdge[], clusters: Cluste
 
 ### Node Visual Mapping (Cosmic Star Nodes) — v1.0.1
 - Size: `Math.min(30, Math.max(4, Math.sqrt(citation_count + 1) * 1.5))` — sqrt scale for dramatic size differences
-- Color: Maximum hue separation (CS=Blue #4DA6FF, Bio=Green #69F0AE, Med=Red #FF5252, Physics=Magenta #EA80FC, Engineering=Purple #B388FF, Business=Orange #FF9100, Economics=Gold #FFD740)
+- Color: STAR_COLOR_MAP has 26 fields with maximum hue separation. Top 10 in GraphLegend: CS=Blue #4DA6FF, Med=Red #FF5252, Bio=Green #69F0AE, Physics=Magenta #EA80FC, Economics=Gold #FFD740, Engineering=Purple #B388FF, Business=Orange #FF9100, Chemistry=Pink #FF80AB, Psychology=Seafoam #A7FFEB, EnvSci=Lime #76FF03. Fallback: Other=Grey #B0BEC5
 - Twinkle: GLSL shader — rate 1.5Hz (old papers) → 6.0Hz (new papers)
 - Opacity: `0.3 + 0.7 * ((year - minYear) / (maxYear - minYear))` (base); 3-tier dimming on select
 - Glow: Sprite with opacity `displayOpacity * 0.9`, scale `size * 6`, additive blending
@@ -208,7 +223,7 @@ Search endpoint returns: `{ nodes: Paper[], edges: GraphEdge[], clusters: Cluste
 - S2 API: 1 RPS authenticated, non-commercial license
 - OA API: 100K credits/day with API key, semantic search = 1000 credits
 - pgvector: 768-dim vectors, ivfflat index with 100 lists
-- HDBSCAN min_cluster_size=5, UMAP n_neighbors=15
+- HDBSCAN min_cluster_size=5 (search router default) / 8 (clusterer default); UMAP n_neighbors=15 (50D intermediate) / 10 (3D visualization)
 - Backend: 1 uvicorn worker (async handles concurrency; CPU ops via asyncio.to_thread)
 - DB pool: min=1, max=3 connections
 - LLM cache: max 200 entries with oldest-25% eviction
@@ -218,6 +233,7 @@ Search endpoint returns: `{ nodes: Paper[], edges: GraphEdge[], clusters: Cluste
 - expand endpoints: refs/cites fetched independently — partial S2 failures return available data (not 404); HTTP 400/404 from S2 → [] (non-fatal)
 - Landing page: Seed Paper (doi) mode is default; DOI pattern auto-detected in any mode → routes to /explore/seed
 - get_references/get_citations: (data.get("data") or []) — S2 may return {"data": null} for unindexed papers
+- API health endpoint reports version 0.1.0 (not updated with releases)
 
 ## Documentation Map
 
@@ -230,9 +246,14 @@ Search endpoint returns: `{ nodes: Paper[], edges: GraphEdge[], clusters: Cluste
 | PHILOSOPHY | Design philosophy, "why" behind every feature decision | docs/PHILOSOPHY.md |
 | TECH_PROOF | Academic justification for all technical choices (SPECTER2, RRF, UMAP, HDBSCAN) | docs/TECH_PROOF.md |
 | DESIGN_THEME | Cosmic Universe theme design system reference | docs/DESIGN_THEME.md |
+| RELEASE_v0.6.0 | v0.6.0 release notes | docs/RELEASE_v0.6.0.md |
+| RELEASE_v0.7.1 | v0.7.1 hotfix release notes | docs/RELEASE_v0.7.1.md |
 | RELEASE_v1.0.0 | v1.0.0 release notes | docs/RELEASE_v1.0.0.md |
 | RELEASE_v1.0.1 | v1.0.1 visibility fix release notes | docs/RELEASE_v1.0.1.md |
 | RELEASE_v1.1.0 | v1.1.0 release notes | docs/RELEASE_v1.1.0.md |
+| release-notes/ | Additional release notes (v0.4.0, v0.5.0, v0.5.1, v0.5.2, v0.7.2) | release-notes/ |
+| DEVELOPMENT.md | Development guide | ./DEVELOPMENT.md |
+| AGENTS.md | Agent configuration | ./AGENTS.md |
 | CLAUDE.md | This file — Claude Code project context | ./CLAUDE.md |
 
 ## LLM Provider Architecture (Phase 2)

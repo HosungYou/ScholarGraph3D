@@ -80,26 +80,3 @@ export const STAR_FRAGMENT_SHADER = `
   }
 `;
 
-// Edge flow fragment shader
-export const EDGE_FLOW_FRAGMENT_SHADER = `
-  uniform vec3 uColor;
-  uniform float uTime;
-  uniform float uSpeed;
-  uniform float uOpacity;
-  varying vec2 vUv;
-
-  void main() {
-    float flow = fract(vUv.x - uTime * uSpeed);
-    float brightness = smoothstep(0.0, 0.3, flow) * smoothstep(1.0, 0.7, flow);
-    float alpha = brightness * uOpacity;
-    gl_FragColor = vec4(uColor, alpha);
-  }
-`;
-
-export const EDGE_VERTEX_SHADER = `
-  varying vec2 vUv;
-  void main() {
-    vUv = uv;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-  }
-`;

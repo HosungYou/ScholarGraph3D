@@ -70,16 +70,16 @@ Core search, visualization, and exploration. Free for all users.
 
 | ID | User Story | Acceptance Criteria | Priority | Status |
 |----|-----------|-------------------|----------|--------|
-| US-01 | As a researcher, I want to search papers by keyword | Search returns 200+ papers in <5s; OA+S2 fusion with DOI dedup; year and field filters work | P0 | Scaffolded |
-| US-02 | As a researcher, I want to see papers in 3D space | SPECTER2 embeddings reduced to 3D via UMAP; nodes colored by field, sized by log(citations); smooth 30+ FPS | P0 | Scaffolded |
-| US-03 | As a researcher, I want to see auto-detected clusters | HDBSCAN clusters with OA Topics labels; convex hull overlays with semi-transparent fills; cluster panel lists all clusters | P0 | Scaffolded |
-| US-04 | As a researcher, I want to click a paper for details | Detail panel shows: title, abstract/TLDR, authors, venue, year, citation count, OA link, fields, topics | P0 | Scaffolded |
-| US-05 | As a researcher, I want to expand citation networks | Double-click a node -> load references + citations from S2 -> new nodes appear in graph with citation edges | P0 | Scaffolded |
-| US-06 | As a researcher, I want to save my exploration | Supabase Auth (email/password); save/load graph state including papers, layout positions, camera angle | P0 | Scaffolded |
-| US-07 | As a researcher, I want citation edges visible | Solid directional arrows from citing paper to cited paper; arrow size proportional to edge weight | P1 | Scaffolded |
-| US-08 | As a researcher, I want similarity edges | Dashed lines connecting papers with cosine similarity > threshold (default 0.7); configurable threshold | P1 | Scaffolded |
-| US-09 | As a researcher, I want to filter by year/field | Year range slider in search bar; field-of-study dropdown; filters apply to both OA and S2 queries | P1 | Scaffolded |
-| US-10 | As a researcher, I want graph controls | Toggle buttons: citation edges, similarity edges, cluster hulls, node labels; reset camera button | P2 | Scaffolded |
+| US-01 | As a researcher, I want to search papers by keyword | Search returns 200+ papers in <5s; OA+S2 fusion with DOI dedup; year and field filters work | P0 | Complete ✅ |
+| US-02 | As a researcher, I want to see papers in 3D space | SPECTER2 embeddings reduced to 3D via UMAP; nodes colored by field, sized by sqrt(citations); smooth 30+ FPS | P0 | Complete ✅ |
+| US-03 | As a researcher, I want to see auto-detected clusters | HDBSCAN clusters with OA Topics labels; nebula particle clouds per cluster (since v1.0.0); cluster panel lists all clusters | P0 | Complete ✅ |
+| US-04 | As a researcher, I want to click a paper for details | Detail panel shows: title, abstract/TLDR, authors, venue, year, citation count, OA link, fields, topics | P0 | Complete ✅ |
+| US-05 | As a researcher, I want to expand citation networks | Double-click a node -> load references + citations from S2 -> new nodes appear in graph with citation edges | P0 | Complete ✅ |
+| US-06 | As a researcher, I want to save my exploration | Supabase Auth (email/password); save/load graph state including papers, layout positions, camera angle | P0 | Complete ✅ |
+| US-07 | As a researcher, I want citation edges visible | Solid directional arrows from citing paper to cited paper; arrow size proportional to edge weight | P1 | Complete ✅ |
+| US-08 | As a researcher, I want similarity edges | Dashed lines connecting papers with cosine similarity > threshold (default 0.7); configurable threshold | P1 | Complete ✅ |
+| US-09 | As a researcher, I want to filter by year/field | Year range slider in search bar; field-of-study dropdown; filters apply to both OA and S2 queries | P1 | Complete ✅ |
+| US-10 | As a researcher, I want graph controls | Toggle buttons: citation edges, similarity edges, cluster hulls, node labels; reset camera button | P2 | Complete ✅ |
 
 > **Implementation detail:** See [SPEC.md SS4 API Specification](./SPEC.md#4-api-specification) for endpoint contracts and [ARCHITECTURE.md SS4 Frontend Architecture](./ARCHITECTURE.md#4-frontend-architecture) for component design.
 
@@ -89,11 +89,11 @@ AI-powered analysis features. Requires user's own LLM API key.
 
 | ID | User Story | Acceptance Criteria | Priority | Status |
 |----|-----------|-------------------|----------|--------|
-| US-11 | As a researcher, I want AI chat about my graph | GraphRAG pipeline: question -> retrieve relevant papers from graph -> LLM generates cited answer -> citations link to nodes | P0 | Planned |
-| US-12 | As a researcher, I want trend analysis | Year-by-year cluster growth visualization; classify clusters as Emerging (>50% growth), Stable, or Declining | P1 | Planned |
-| US-13 | As a researcher, I want gap analysis | Inter-cluster citation density matrix; identify low-density pairs as research opportunities; visual overlay on graph | P1 | Planned |
-| US-14 | As a researcher, I want to use my own LLM key | Settings panel: select provider (Groq/OpenAI/Anthropic/Google); enter API key; key stored client-side only (never sent to our backend) | P0 | Planned |
-| US-15 | As a researcher, I want literature review drafts | Select clusters + trends + gaps -> generate structured Markdown with APA citations; export as .md or .docx | P2 | Planned |
+| US-11 | As a researcher, I want AI chat about my graph | GraphRAG pipeline: question -> retrieve relevant papers from graph -> LLM generates cited answer -> citations link to nodes | P0 | Complete ✅ |
+| US-12 | As a researcher, I want trend analysis | Year-by-year cluster growth visualization; classify clusters as Emerging (>50% growth), Stable, or Declining | P1 | Complete ✅ |
+| US-13 | As a researcher, I want gap analysis | Inter-cluster citation density matrix; identify low-density pairs as research opportunities; visual overlay on graph | P1 | Complete ✅ |
+| US-14 | As a researcher, I want to use my own LLM key | Settings panel: select provider (Groq/OpenAI/Anthropic/Google); enter API key; key stored client-side only (never sent to our backend) | P0 | Complete ✅ |
+| US-15 | As a researcher, I want literature review drafts | Select clusters + trends + gaps -> generate structured Markdown with APA citations; export as .md or .docx | P2 | Complete ✅ |
 
 > **Architecture:** See [ARCHITECTURE.md SS10 Phase 2 Architecture Extensions](./ARCHITECTURE.md#10-phase-2-architecture-extensions) for LLM integration design and [SPEC.md SS7 Search Pipeline Spec](./SPEC.md#7-search-pipeline-spec) for GraphRAG pipeline details.
 
@@ -103,9 +103,9 @@ Real-time monitoring and advanced analytics.
 
 | ID | User Story | Acceptance Criteria | Priority | Status |
 |----|-----------|-------------------|----------|--------|
-| US-16 | As a researcher, I want watch query alerts | Weekly cron checks for new papers matching saved queries; email + in-app notification with count and top papers | P1 | Planned |
-| US-17 | As a researcher, I want citation intent visualization | Edge colors encode intent: supports=green, contradicts=red, methodology=purple, background=gray, result_comparison=blue | P2 | Planned |
-| US-18 | As a researcher, I want ScholaRAG_Graph export | Select papers -> export to ScholaRAG for deep RAG-based analysis; share format compatible with ScholaRAG_Graph import | P2 | Planned |
+| US-16 | As a researcher, I want watch query alerts | Weekly cron checks for new papers matching saved queries; email + in-app notification with count and top papers | P1 | Complete ✅ |
+| US-17 | As a researcher, I want citation intent visualization | Edge colors encode intent: supports=green, contradicts=red, methodology=purple, background=gray, result_comparison=blue | P2 | Complete ✅ |
+| US-18 | As a researcher, I want ScholaRAG_Graph export | Select papers -> export to ScholaRAG for deep RAG-based analysis; share format compatible with ScholaRAG_Graph import | P2 | Complete ✅ |
 
 ---
 
@@ -180,16 +180,19 @@ ScholarGraph3D fills **8 market gaps** not addressed by existing tools:
 
 | Version | Scope | User Stories | Target | Status |
 |---------|-------|-------------|--------|--------|
-| **v0.1.0** | Scaffold: project structure, search endpoint, 3D viz, data fusion | US-01, US-02 | 2026-02-19 | Scaffolded |
-| **v0.2.0** | Clustering + detail panel + cluster panel | US-03, US-04 | Week 2 | Planned |
-| **v0.3.0** | Citation expansion + graph growth + citation edges | US-05, US-07 | Week 3 | Planned |
-| **v0.4.0** | Auth + graph saving/loading + dashboard | US-06 | Week 4 | Planned |
-| **v0.5.0** | Polish: filters, controls, similarity edges, testing, Phase 1 complete | US-08, US-09, US-10 | Week 5-6 | Planned |
-| **v0.6.0** | AI chat (GraphRAG) + LLM key settings | US-11, US-14 | Week 7-8 | Planned |
-| **v0.7.0** | Trend analysis | US-12 | Week 9 | Planned |
-| **v0.8.0** | Gap analysis | US-13 | Week 10 | Planned |
-| **v0.9.0** | Literature review drafts + Phase 2 polish | US-15 | Week 11-12 | Planned |
-| **v0.10.0+** | Watch queries, citation intent viz, ScholaRAG export | US-16, US-17, US-18 | Ongoing | Planned |
+| **v0.1.0** | Scaffold: project structure, search endpoint, 3D viz, data fusion | US-01, US-02 | 2026-02-19 | Complete ✅ |
+| **v0.2.0** | Clustering + detail panel + cluster panel | US-03, US-04 | — | Complete ✅ |
+| **v0.3.0** | Citation expansion + graph growth + citation edges | US-05, US-07 | — | Complete ✅ |
+| **v0.4.0** | Auth + graph saving/loading + dashboard | US-06 | — | Complete ✅ |
+| **v0.5.0** | Polish: filters, controls, similarity edges, testing, Phase 1 complete | US-08, US-09, US-10 | — | Complete ✅ |
+| **v0.6.0** | AI chat (GraphRAG) + LLM key settings + seed paper mode + viz enhancements | US-11, US-14 | — | Complete ✅ |
+| **v0.7.0** | Trend analysis + search redesign (RRF, SPECTER2 ANN, temporal Z-axis) | US-12 | — | Complete ✅ |
+| **v0.8.0** | Gap analysis + expand animation + citation intents | US-13 | — | Complete ✅ |
+| **v0.9.0** | Literature review drafts + node ID fix + UX polish | US-15 | — | Complete ✅ |
+| **v0.10.0 / v0.3.0** | Watch queries, citation intent viz, SSE progress, rate limiting, SEO | US-16, US-17, US-18 | — | Complete ✅ |
+| **v1.0.0** | Cosmic Universe Theme: stars, nebulae, light streams, HUD panels, warp transition | — | — | Complete ✅ |
+| **v1.0.1** | Visibility Enhancement: STAR_COLOR_MAP, sqrt node sizing, glow/nebula opacity boost | — | — | Complete ✅ |
+| **v1.1.0** | Legend, expand visual effects, error resilience, DOI fallback expand, API retry | — | — | Complete ✅ |
 
 > **Testing strategy for each version:** See [SDD/TDD Plan](./SDD_TDD_PLAN.md) for test-driven development cycles aligned with this release plan.
 

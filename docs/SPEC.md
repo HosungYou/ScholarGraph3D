@@ -601,7 +601,7 @@ SSE endpoint for streaming conceptual relationship edges.
 
 ---
 
-### 4.4 Paper Endpoints
+### 4.5 Paper Endpoints
 
 > Implements [PRD.md US-04](./PRD.md#phase-1-mvp--v010--v050) (detail), [US-05](./PRD.md#phase-1-mvp--v010--v050) (expansion).
 
@@ -684,7 +684,7 @@ Expand graph around a paper by loading both citations and references.
 }
 ```
 
-### 4.5 Graph Endpoints (Auth Required)
+### 4.6 Graph Endpoints (Auth Required)
 
 > Implements [PRD.md US-06](./PRD.md#phase-1-mvp--v010--v050) (save/load).
 
@@ -926,22 +926,23 @@ Each paper becomes a 3D sphere node in the force graph.
 |----------------|-------------|---------------|
 | **Position (x, y, z)** | UMAP 3D coordinates | `EmbeddingReducer.reduce_to_3d()` output |
 | **Color** | Primary field of study | `FIELD_COLOR_MAP` lookup (6 categories + "Other") |
-| **Size** | Citation count | `max(3, log(citation_count + 1) * 3)` |
+| **Size** | Citation count | `Math.min(30, Math.max(4, Math.sqrt(citation_count + 1) * 1.5))` (sqrt-based since v1.0.1) |
 | **Opacity** | Publication year | `0.3 + 0.7 * ((year - min_year) / year_span)` — newer = more opaque |
 | **Selected highlight** | User selection | Gold (#FFD700) color + ring geometry + emissive intensity 0.6 |
 | **Connected highlight** | Edge adjacency | Teal (#4ECDC4) + emissive intensity 0.4 |
 | **Dimmed** | Not connected to selection | Opacity reduced to 0.15 |
 | **Label** | Author surname + year | Canvas texture sprite above node; truncated at 18 chars |
 
-**Field Color Map:**
+**Field Color Map (v1.0.1 STAR_COLOR_MAP):**
 | Field | Color |
 |-------|-------|
-| Physical Sciences | `#4A90D9` (blue) |
-| Life Sciences | `#2ECC71` (green) |
-| Social Sciences | `#E67E22` (orange) |
-| Health Sciences | `#E74C3C` (red) |
-| Engineering | `#9B59B6` (purple) |
-| Arts & Humanities | `#F39C12` (yellow) |
+| Computer Science | `#4DA6FF` (blue) |
+| Biology / Life Sciences | `#69F0AE` (green) |
+| Medicine / Health | `#FF5252` (red) |
+| Physics | `#EA80FC` (magenta) |
+| Engineering | `#B388FF` (purple) |
+| Business | `#FF9100` (orange) |
+| Economics | `#FFD740` (gold) |
 | Other | `#95A5A6` (gray) |
 
 ### 6.2 Edge Mapping
@@ -1259,7 +1260,7 @@ PostgreSQL RLS policies on `user_graphs` table ensure users can only access thei
 | Papers per search | 500 (API limit) | Pagination in future; LOD rendering |
 | Similarity edges | ~2500 (500 papers x max 10 edges) | Threshold filtering; toggle off |
 | Concurrent users | ~50 (Render free tier) | Scale to Render paid; horizontal scaling |
-| DB connections | 5 (pool max) | Increase pool; read replicas |
+| DB connections | 3 (pool max) | Increase pool; read replicas |
 | S2 API calls/sec | 1 (authenticated) | Request queuing; aggressive caching |
 
 ### 10.4 Memory Budgets
@@ -1283,6 +1284,14 @@ PostgreSQL RLS policies on `user_graphs` table ensure users can only access thei
 | **Phase 2 (AI)** | v0.2.0 | ✅ Complete | LLM multi-provider (OpenAI/Anthropic/Google/Groq), GraphRAG chat, trend analysis, gap detection |
 | **Phase 3 (Real-time)** | v0.3.0 | ✅ Complete | Natural language search (Groq), SSE progress stream, citation context modal, rate limiting (60/hr search, 20/hr AI, 2× auth), analytics logging, SEO |
 | **Phase 4 (Relationships)** | v0.4.0 | ✅ Complete | Critical node-click bug fix, panel resize, conceptual edges SSE, 3-mode home page, timeline view |
+| **Phase 5 (Personalization)** | v0.5.0 | ✅ Complete | OAuth callback fix, user profiles, interaction logging, pgvector recommendations, dashboard recommendations, home page "Continue Exploring" |
+| **Phase 6 (Viz + Exploration)** | v0.6.0 | ✅ Complete | Field color fix, LOD/opacity fix, panel highlight, seed paper mode, citation enrichment, 2D timeline, intent toggle, research settings |
+| **Phase 7 (Stability + Philosophy)** | v0.7.x | ✅ Complete | HDBSCAN 768-dim fix, temporal Z-axis, RRF hybrid search, SPECTER2 adhoc_query ANN, PHILOSOPHY.md, TECH_PROOF.md, expand null-safety, landing page seed-paper redesign, DOI auto-detection |
+| **v0.8.x (Viz & Interaction)** | v0.8.x | ✅ Complete | Expand animation fix, intent legend, responsive seed panels, cluster panel redesign, real S2 citation intents in seed mode, 429 hotfix |
+| **v0.9.x (Node ID + UX)** | v0.9.x | ✅ Complete | Node ID fix (S2 paper IDs), right panel visibility, zoomToFit, Three.js rgba warning fix, expand data completeness, recursive expand fix |
+| **v1.0.0 (Cosmic Universe Theme)** | v1.0.0 | ✅ Complete | Full UI redesign: papers=stars (GLSL twinkle), clusters=nebulae (particle clouds), edges=light streams, Three.js starfield landing, HUD panels, warp transition |
+| **v1.0.1 (Visibility Enhancement)** | v1.0.1 | ✅ Complete | Dramatic field color differentiation (STAR_COLOR_MAP), sqrt node sizing (4–30 range), glow opacity/scale, nebula opacity, linkDirectionalParticles, GraphLegend update |
+| **v1.1.0 (Legend · Expand · Error Resilience)** | v1.1.0 | ✅ Complete | Visual Guide legend, expansion visual effects (pulse/glow/edge highlight), DOI fallback expand, API timeout+retry, ExpandMeta partial success, specific error messages |
 
 ---
 

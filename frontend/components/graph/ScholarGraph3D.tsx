@@ -5,14 +5,13 @@ import {
   useRef,
   useMemo,
   useEffect,
-  useState,
   forwardRef,
   useImperativeHandle,
 } from 'react';
 import dynamic from 'next/dynamic';
 import * as THREE from 'three';
 import { useGraphStore } from '@/hooks/useGraphStore';
-import type { Paper, GraphEdge, CitationIntent } from '@/types';
+import type { Paper, CitationIntent } from '@/types';
 import { ENHANCED_INTENT_COLORS } from '@/types';
 import { createStarNode } from './cosmic/starNodeRenderer';
 import { createNebulaCluster } from './cosmic/nebulaClusterRenderer';
@@ -32,41 +31,6 @@ const ForceGraph3D = dynamic(() => import('react-force-graph-3d'), {
     </div>
   ),
 });
-
-// Field color mapping
-const FIELD_COLOR_MAP: Record<string, string> = {
-  // Computer & Engineering
-  'Computer Science': '#4A90D9',
-  'Engineering': '#5B9BD5',
-  'Mathematics': '#6CA6E0',
-  // Life & Medical Sciences
-  'Medicine': '#E74C3C',
-  'Biology': '#2ECC71',
-  'Biochemistry': '#27AE60',
-  'Neuroscience': '#1ABC9C',
-  'Psychology': '#16A085',
-  'Agricultural and Food Sciences': '#A3D977',
-  'Environmental Science': '#82C341',
-  // Physical Sciences
-  'Physics': '#9B59B6',
-  'Chemistry': '#8E44AD',
-  'Materials Science': '#7D3C98',
-  'Geology': '#6C3483',
-  // Social Sciences & Humanities
-  'Economics': '#E67E22',
-  'Sociology': '#D35400',
-  'Political Science': '#CA6F1E',
-  'Philosophy': '#BA4A00',
-  'History': '#A04000',
-  'Geography': '#C0392B',
-  'Linguistics': '#F39C12',
-  'Art': '#F1C40F',
-  'Education': '#E59866',
-  // Business & Law
-  'Business': '#5DADE2',
-  'Law': '#48C9B0',
-  Other: '#95A5A6',
-};
 
 const INTENT_COLOR_MAP: Record<string, string> = {
   methodology: '#9B59B6',
@@ -143,8 +107,36 @@ function computeConvexHull2D(
 const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
   const fgRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const hoveredNodeRef = useRef<string | null>(null);
+
+  // Dispose all geometries, materials, and textures in a Three.js group
+  const disposeGroup = useCallback((group: THREE.Group | THREE.Object3D) => {
+    group.traverse((child: THREE.Object3D) => {
+      if (child instanceof THREE.Mesh || child instanceof THREE.Points) {
+        child.geometry?.dispose();
+        if (child.material) {
+          const materials = Array.isArray(child.material) ? child.material : [child.material];
+          materials.forEach((mat: THREE.Material) => {
+            if ('map' in mat && (mat as any).map) (mat as any).map.dispose();
+            if ('uniforms' in mat) {
+              const uniforms = (mat as any).uniforms;
+              if (uniforms) {
+                Object.values(uniforms).forEach((u: any) => {
+                  if (u?.value?.dispose) u.value.dispose();
+                });
+              }
+            }
+            mat.dispose();
+          });
+        }
+      }
+      if (child instanceof THREE.Sprite) {
+        child.material?.map?.dispose();
+        child.material?.dispose();
+      }
+    });
+  }, []);
+
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectedPaperIdRef = useRef<string | null>(null);
   const justClickedNodeRef = useRef(false);
@@ -391,6 +383,12 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
   const nodeThreeObject = useCallback(
     (nodeData: unknown) => {
       const node = nodeData as ForceGraphNode;
+
+      // Dispose previous Three.js object to prevent memory leaks
+      const existingObj = (node as any).__threeObj;
+      if (existingObj) {
+        disposeGroup(existingObj);
+      }
 
       const isHighlighted = highlightSet.has(node.id);
       const isSelected = selectedPaperIdRef.current === node.id;
@@ -735,7 +733,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
 
       return group;
     },
-    [highlightSet, showLabels, showBloom, bridgeNodeIds, showOARings, showCitationAura, highlightedPaperIds, showCosmicTheme, yearRange]
+    [highlightSet, showLabels, showBloom, bridgeNodeIds, showOARings, showCitationAura, highlightedPaperIds, showCosmicTheme, yearRange, disposeGroup]
   );
 
   // Link width
@@ -978,6 +976,10 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     const updateHulls = () => {
       while (overlayGroup.children.length > 0) {
         const child = overlayGroup.children[0];
+        // Deregister shader materials from CosmicAnimationManager before disposal
+        if (child instanceof THREE.Points && child.material instanceof THREE.ShaderMaterial) {
+          CosmicAnimationManager.getInstance().deregisterShaderMaterial(child.material);
+        }
         overlayGroup.remove(child);
         if ((child as any).geometry) (child as any).geometry.dispose();
         if ((child as any).material) (child as any).material.dispose();
@@ -1547,6 +1549,36 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     return () => {
       if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
       if (expandedEdgeTimerRef.current) clearTimeout(expandedEdgeTimerRef.current);
+      if (newNodeTimerRef.current) clearTimeout(newNodeTimerRef.current);
+
+      // Dispose all scene objects to prevent Three.js memory leaks
+      if (fgRef.current) {
+        try {
+          const scene = fgRef.current.scene();
+          if (scene) {
+            scene.traverse((obj: THREE.Object3D) => {
+              if (obj instanceof THREE.Mesh || obj instanceof THREE.Points) {
+                obj.geometry?.dispose();
+                const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+                mats.forEach((m: THREE.Material) => {
+                  if ((m as any).map) (m as any).map.dispose();
+                  m.dispose();
+                });
+              }
+              if (obj instanceof THREE.Sprite) {
+                obj.material?.map?.dispose();
+                obj.material?.dispose();
+              }
+            });
+          }
+        } catch {
+          /* scene unavailable */
+        }
+      }
+
+      // Clear animation manager
+      CosmicAnimationManager.reset();
+
       if (fgRef.current) {
         try {
           const renderer = fgRef.current.renderer();

@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 import numpy as np
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from config import settings
 from database import Database, get_db
@@ -45,6 +45,22 @@ class SearchRequest(BaseModel):
     fields_of_study: Optional[List[str]] = None
     similarity_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
     min_cluster_size: int = Field(default=5, ge=2, le=50)
+
+    @model_validator(mode='before')
+    @classmethod
+    def accept_legacy_params(cls, data):
+        if isinstance(data, dict):
+            if 'year_min' in data and 'year_start' not in data:
+                data['year_start'] = data.pop('year_min')
+            if 'year_max' in data and 'year_end' not in data:
+                data['year_end'] = data.pop('year_max')
+            if 'field' in data and 'fields_of_study' not in data:
+                field_val = data.pop('field')
+                if isinstance(field_val, str):
+                    data['fields_of_study'] = [field_val]
+                else:
+                    data['fields_of_study'] = field_val
+        return data
 
 
 class GraphNode(BaseModel):
@@ -393,34 +409,6 @@ async def search_papers(request: SearchRequest, db: Database = Depends(get_db)):
 
         s2_paper_ids = list(s2_to_node_id.keys())
 
-        if len(s2_paper_ids) >= 2:
-            # 6. Citation enrichment: detached from response critical path (v0.8.0).
-            # The background task fetches citation edges and updates the DB cache.
-            # The NEXT identical search will return citation edges from cache (instant).
-            asyncio.create_task(
-                _enrich_citations_background(
-                    s2_client=s2_client,
-                    s2_paper_ids=s2_paper_ids,
-                    s2_to_node_id=s2_to_node_id,
-                    nodes=nodes,
-                    edges=edges,
-                    cache_hash=cache_hash,
-                    db=db,
-                    clusters_info=clusters_info,
-                    meta_base={
-                        "query": request.query,
-                        "total": len(nodes),
-                        "with_embeddings": len(papers_with_embeddings),
-                        "clusters": len([c for c in clusters_info if c.id != -1]),
-                        "similarity_edges": len([e for e in edges if e.type == "similarity"]),
-                        "bridge_nodes": len(bridge_ids),
-                    },
-                )
-            )
-            pass  # s2_client is a shared singleton — never close it
-        else:
-            pass  # no citation enrichment needed
-
         # Build cluster info
         for cid, info in cluster_meta.items():
             hull_verts = hulls.get(cid, [])
@@ -432,6 +420,34 @@ async def search_papers(request: SearchRequest, db: Database = Depends(get_db)):
                 color=info["color"],
                 hull_points=hull_verts,
             ))
+
+        if len(s2_paper_ids) >= 2:
+            # 6. Citation enrichment: detached from response critical path (v0.8.0).
+            # The background task fetches citation edges and updates the DB cache.
+            # The NEXT identical search will return citation edges from cache (instant).
+            # NOTE: Task created AFTER clusters are built, with list copies to avoid
+            # shared-reference mutation bugs (race condition fix).
+            asyncio.create_task(
+                _enrich_citations_background(
+                    s2_client=s2_client,
+                    s2_paper_ids=s2_paper_ids,
+                    s2_to_node_id=s2_to_node_id,
+                    nodes=list(nodes),
+                    edges=list(edges),
+                    cache_hash=cache_hash,
+                    db=db,
+                    clusters_info=list(clusters_info),
+                    meta_base={
+                        "query": request.query,
+                        "total": len(nodes),
+                        "with_embeddings": len(papers_with_embeddings),
+                        "clusters": len([c for c in clusters_info if c.id != -1]),
+                        "similarity_edges": len([e for e in edges if e.type == "similarity"]),
+                        "bridge_nodes": len(bridge_ids),
+                    },
+                )
+            )
+            # s2_client is a shared singleton — never close it
 
         # Also include papers without embeddings at the periphery
         offset = len(papers_with_embeddings)

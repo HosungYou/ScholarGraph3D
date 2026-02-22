@@ -98,6 +98,8 @@
 | `nebulaClusterRenderer.ts` | `createNebulaCluster()` → THREE.Points with Gaussian distribution, shimmer shader |
 | `lightStreamEdgeRenderer.ts` | `createLightStreamEdge()` → TubeGeometry + flow shader, `createSimpleEdge()` LOD fallback |
 
+> **Note:** TubeGeometry light stream edges (`lightStreamEdgeRenderer.ts`) are not currently active. Citation flow is rendered via `linkDirectionalParticles` (4 cyan particles per edge). The file has been removed as dead code in v1.1.1.
+
 ### Star Node Layers
 
 | Layer | Condition | Visual |

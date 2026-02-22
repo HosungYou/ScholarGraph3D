@@ -51,6 +51,16 @@ class CosmicAnimationManager {
     this.animatedObjects = this.animatedObjects.filter(o => o.mesh !== mesh);
   }
 
+  deregisterShaderMaterial(material: THREE.ShaderMaterial): void {
+    const idx = this.shaderMaterials.indexOf(material);
+    if (idx !== -1) this.shaderMaterials.splice(idx, 1);
+  }
+
+  deregisterAnimatedObject(obj: THREE.Object3D): void {
+    const idx = this.animatedObjects.findIndex(o => o.mesh === obj);
+    if (idx !== -1) this.animatedObjects.splice(idx, 1);
+  }
+
   clear() {
     this.animatedObjects = [];
     this.shaderMaterials = [];

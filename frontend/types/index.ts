@@ -90,14 +90,6 @@ export const FIELD_COLORS: Record<string, string> = {
   'Other': '#95A5A6',
 };
 
-export const INTENT_COLORS: Record<string, string> = {
-  methodology: '#9B59B6',
-  background: '#95A5A6',
-  result_comparison: '#4A90D9',
-  supports: '#2ECC71',
-  contradicts: '#E74C3C',
-};
-
 // ─── Phase 2: Trend Analysis ────────────────────────────────────────
 
 export interface ClusterTrend {
@@ -228,17 +220,6 @@ export interface LitReview {
   };
 }
 
-// ─── Phase 1.5: Visualization State ─────────────────────────────────
-
-export interface GapOverlayLine {
-  from: { x: number; y: number; z: number };
-  to: { x: number; y: number; z: number };
-  color: number; // THREE.js hex color: 0xFF4444 | 0xFFD700 | 0x44FF44
-  gapStrength: number;
-  clusterALabel: string;
-  clusterBLabel: string;
-}
-
 // ─── Phase 4: Conceptual Edges ──────────────────────────────────────
 
 export type ConceptualEdgeType =
@@ -257,24 +238,6 @@ export interface ConceptualEdge {
   explanation: string;
   color: string;
 }
-
-export const CONCEPTUAL_EDGE_COLORS: Record<ConceptualEdgeType, string> = {
-  methodology_shared: '#9B59B6',
-  theory_shared: '#4A90D9',
-  claim_supports: '#2ECC71',
-  claim_contradicts: '#E74C3C',
-  context_shared: '#F39C12',
-  similarity_shared: '#95A5A6',
-};
-
-export const CONCEPTUAL_EDGE_LABELS: Record<ConceptualEdgeType, string> = {
-  methodology_shared: 'Shared Methodology',
-  theory_shared: 'Shared Theory',
-  claim_supports: 'Supporting Claims',
-  claim_contradicts: 'Contradicting Claims',
-  context_shared: 'Shared Context',
-  similarity_shared: 'Semantic Similarity',
-};
 
 // ─── Phase 5: Personalization ────────────────────────────────────────
 

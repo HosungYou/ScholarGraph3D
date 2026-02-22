@@ -140,7 +140,7 @@ Maintain fixtures in `tests/fixtures/` with:
 - sample_oa_work.json
 - sample_embeddings.npy (small 10×768 array)
 
-## 7. v1.1.0 Test Coverage — Expand Error Resilience
+## 8. v1.1.0 Test Coverage — Expand Error Resilience
 
 ### New Test File: `tests/test_routers/test_papers.py`
 

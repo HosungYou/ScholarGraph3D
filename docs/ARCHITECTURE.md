@@ -201,12 +201,16 @@ backend/
 ├── main.py                    # FastAPI app, lifespan, middleware registration
 ├── config.py                  # pydantic-settings: all env vars in Settings class
 ├── database.py                # asyncpg pool singleton (Database class + get_db())
+├── cache.py                   # Redis cache helpers (Upstash) — graceful no-op if unavailable
 ├── auth/
 │   ├── supabase_client.py     # Supabase GoTrue JWT verification
 │   ├── middleware.py          # AuthMiddleware: per-route policy enforcement
 │   ├── policies.py            # Route policy map (NONE / OPTIONAL / REQUIRED)
 │   ├── dependencies.py        # get_current_user() FastAPI dependency
 │   └── models.py              # User, UserCreate, UserLogin, TokenResponse
+├── middleware/
+│   ├── analytics.py           # Request analytics middleware
+│   └── rate_limiter.py        # Rate limiting middleware
 ├── integrations/
 │   ├── openalex.py            # OpenAlexClient: search, abstract reconstruction, credit tracking
 │   ├── semantic_scholar.py    # SemanticScholarClient: search, batch embeddings, 1 RPS limiter
@@ -214,13 +218,43 @@ backend/
 ├── graph/
 │   ├── embedding_reducer.py   # EmbeddingReducer: UMAP 768D -> 3D
 │   ├── clusterer.py           # PaperClusterer: HDBSCAN + OA Topic labels + ConvexHull
-│   └── similarity.py          # SimilarityComputer: cosine similarity edges
+│   ├── similarity.py          # SimilarityComputer: cosine similarity edges
+│   ├── bridge_detector.py     # Phase 1.5: cross-cluster bridge node detection (top-5%)
+│   ├── incremental_layout.py  # Phase 1.5: k-NN position interpolation for stable expand
+│   ├── trend_analyzer.py      # Phase 2: emerging/stable/declining classification
+│   ├── gap_detector.py        # Phase 2: inter-cluster gap detection + bridge papers
+│   └── graph_rag.py           # Phase 2: RAG context builder for LLM chat
+├── llm/
+│   ├── base.py                # Abstract BaseLLMProvider + LLMResponse
+│   ├── openai_provider.py     # GPT-4o-mini / GPT-4o / GPT-4-turbo
+│   ├── claude_provider.py     # Claude Haiku 4.5 / Sonnet 4.6 / Opus 4.6
+│   ├── gemini_provider.py     # Gemini 2.5 Flash / Pro
+│   ├── groq_provider.py       # LLaMA 3.3-70b (rate limiter + retry)
+│   ├── user_provider.py       # Factory for user-provided API keys
+│   ├── cached_provider.py     # Transparent caching decorator
+│   └── circuit_breaker.py     # Fault tolerance (CLOSED→OPEN→HALF_OPEN)
+├── services/
+│   ├── watch_service.py       # Watch query execution + OA search + similarity filter
+│   ├── email_service.py       # Resend API email digests
+│   ├── citation_intent.py     # S2 basic + LLM-enhanced 5-class intents
+│   ├── lit_review.py          # LLM lit review generation + weasyprint PDF
+│   ├── query_normalizer.py    # Query normalization for cache hit rates (Groq llama-3.1-8b)
+│   └── query_parser.py        # NL→structured search params (Groq llama-3.3-70b)
 ├── routers/
 │   ├── search.py              # POST /api/search — full graph pipeline (8 steps)
-│   ├── papers.py              # GET /papers/{id}, citations, references, expand
-│   └── graphs.py              # GET/POST/PUT/DELETE /api/graphs (auth required)
+│   ├── natural_search.py      # POST /api/search/natural — NL query → Groq parse → parallel search
+│   ├── search_stream.py       # GET /api/search/stream — SSE progress feedback
+│   ├── papers.py              # GET /papers/{id}, citations, references, expand, intents, by-doi
+│   ├── graphs.py              # GET/POST/PUT/DELETE /api/graphs (auth required)
+│   ├── analysis.py            # Phase 2+4: trends, gaps, hypotheses, conceptual-edges/stream, scaffold-angles
+│   ├── chat.py                # Phase 2: POST /api/chat + /api/chat/stream (SSE)
+│   ├── watch.py               # Phase 3: /api/watch CRUD + /api/watch/cron
+│   ├── lit_review.py          # Phase 3: /api/lit-review/generate + export-pdf
+│   ├── personalization.py     # Phase 5: /api/user profile, events, search-history, recommendations
+│   └── seed_explore.py        # Phase 6: POST /api/seed-explore (seed paper graph expansion)
 └── database/
-    └── 001_initial_schema.sql # papers, search_cache, user_graphs, watch_queries DDL
+    ├── 001_initial_schema.sql # papers, search_cache, user_graphs, watch_queries DDL
+    └── 002_personalization.sql # Phase 5: user_profiles, search_history, interactions, recommendations
 ```
 
 ### 3.2 Application Startup (Lifespan)
@@ -355,7 +389,8 @@ SearchRequest {query, limit, year_start, year_end,
     |
     v
 [Step 4] PaperClusterer.cluster()
-    Input:  numpy array shape (N, 3) — UMAP 3D coordinates
+    Input:  numpy array shape (N, 768) — SPECTER2 embeddings.
+            Internally reduces to 50D via UMAP before clustering.
     HDBSCAN(min_cluster_size=request.min_cluster_size,
             metric='euclidean', cluster_selection_method='eom')
     Output: (N,) array of cluster labels  (-1 = noise)
@@ -483,8 +518,8 @@ frontend/
 │   ├── layout.tsx                 # Root layout: AuthProvider, global styles
 │   ├── page.tsx                   # Landing page with SearchBar
 │   ├── explore/page.tsx           # Main 3-panel exploration view
-│   ├── auth/login/page.tsx
-│   ├── auth/signup/page.tsx
+│   ├── auth/page.tsx              # Station Access — login/signup (combined)
+│   ├── auth/callback/page.tsx     # OAuth callback handler
 │   └── dashboard/page.tsx         # Saved graphs list
 ├── components/graph/
 │   ├── ScholarGraph3D.tsx         # 3D canvas component (706 lines, forwardRef)
@@ -584,7 +619,7 @@ ForceGraph3D renders:
 
   Per Node (nodeThreeObject callback):
     THREE.Group
-      └── THREE.Mesh (SphereGeometry, radius = max(3, log(citation_count+1)*3))
+      └── THREE.Mesh (SphereGeometry, radius = Math.min(30, Math.max(4, Math.sqrt(citation_count+1)*1.5)))
             MeshPhongMaterial {
               color:             FIELD_COLOR_MAP[primaryField]
                                  '#FFD700' if selected
@@ -648,7 +683,7 @@ Force Simulation config:
 ┌──────────────────────────────┐        ┌───────────────────────────────┐
 │           papers             │        │          user_graphs           │
 ├──────────────────────────────┤        ├───────────────────────────────┤
-│ id             BIGSERIAL PK  │        │ id          UUID PK            │
+│ id             UUID PRIMARY KEY DEFAULT gen_random_uuid() │        │ id          UUID PK            │
 │ s2_paper_id    TEXT UNIQUE   │        │ user_id     UUID FK→auth.users │
 │ oa_work_id     TEXT UNIQUE   │        │ name        TEXT (1-200 chars) │
 │ doi            TEXT          │        │ seed_query  TEXT               │
