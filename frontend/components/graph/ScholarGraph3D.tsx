@@ -112,30 +112,34 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
 
   // Dispose all geometries, materials, and textures in a Three.js group
   const disposeGroup = useCallback((group: THREE.Group | THREE.Object3D) => {
-    group.traverse((child: THREE.Object3D) => {
-      if (child instanceof THREE.Mesh || child instanceof THREE.Points) {
-        child.geometry?.dispose();
-        if (child.material) {
-          const materials = Array.isArray(child.material) ? child.material : [child.material];
-          materials.forEach((mat: THREE.Material) => {
-            if ('map' in mat && (mat as any).map) (mat as any).map.dispose();
-            if ('uniforms' in mat) {
-              const uniforms = (mat as any).uniforms;
-              if (uniforms) {
-                Object.values(uniforms).forEach((u: any) => {
-                  if (u?.value?.dispose) u.value.dispose();
-                });
+    try {
+      group.traverse((child: THREE.Object3D) => {
+        if (child instanceof THREE.Mesh || child instanceof THREE.Points) {
+          child.geometry?.dispose();
+          if (child.material) {
+            const materials = Array.isArray(child.material) ? child.material : [child.material];
+            materials.forEach((mat: THREE.Material) => {
+              if ('map' in mat && (mat as any).map) (mat as any).map.dispose();
+              if ('uniforms' in mat) {
+                const uniforms = (mat as any).uniforms;
+                if (uniforms) {
+                  Object.values(uniforms).forEach((u: any) => {
+                    if (u?.value?.dispose) u.value.dispose();
+                  });
+                }
               }
-            }
-            mat.dispose();
-          });
+              mat.dispose();
+            });
+          }
         }
-      }
-      if (child instanceof THREE.Sprite) {
-        child.material?.map?.dispose();
-        child.material?.dispose();
-      }
-    });
+        if (child instanceof THREE.Sprite) {
+          child.material?.map?.dispose();
+          child.material?.dispose();
+        }
+      });
+    } catch {
+      /* Three.js object already disposed or partially cleaned up */
+    }
   }, []);
 
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -358,7 +362,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       // Dispose previous Three.js object to prevent memory leaks
       const existingObj = (node as any).__threeObj;
       if (existingObj) {
-        disposeGroup(existingObj);
+        try { disposeGroup(existingObj); } catch { /* already disposed */ }
       }
 
       const isHighlighted = highlightSet.has(node.id);
@@ -468,7 +472,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
             ctx.shadowOffsetX = 1;
             ctx.shadowOffsetY = 2;
             ctx.fillStyle = isSelected
-              ? '#FFD700'
+              ? '#D4AF37'
               : isHighlighted
                 ? '#FFFFFF'
                 : '#FFFFFF';
@@ -538,7 +542,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       group.userData.nodeId = node.id;
 
       let displayColor = node.color;
-      if (isSelected) displayColor = '#FFD700';
+      if (isSelected) displayColor = '#D4AF37';
       else if (isHighlightedByPanel) displayColor = '#D4AF37';
       else if (isHighlighted) displayColor = '#FFFFFF';
 
@@ -568,7 +572,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
           32
         );
         const ringMaterial = new THREE.MeshBasicMaterial({
-          color: '#FFD700',
+          color: '#D4AF37',
           transparent: true,
           opacity: 0.6,
           side: THREE.DoubleSide,
@@ -582,7 +586,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       if (node.paper?.is_bridge) {
         const glowGeo = new THREE.SphereGeometry(node.val * 1.5, 8, 8);
         const glowMat = new THREE.MeshBasicMaterial({
-          color: 0xFFD700,
+          color: 0xD4AF37,
           transparent: true,
           opacity: 0.15,
           depthWrite: false,
@@ -609,7 +613,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       if (showCitationAura && node.citationPercentile > 0.9 && !isSelected) {
         const auraGeo = new THREE.SphereGeometry(node.val * 1.5, 8, 8);
         const auraMat = new THREE.MeshBasicMaterial({
-          color: 0xFFD700,
+          color: 0xD4AF37,
           transparent: true,
           opacity: 0.12,
           depthWrite: false,
@@ -656,7 +660,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
           ctx.shadowOffsetX = 1;
           ctx.shadowOffsetY = 2;
           ctx.fillStyle = isSelected
-            ? '#FFD700'
+            ? '#D4AF37'
             : isHighlighted
               ? '#FFFFFF'
               : '#FFFFFF';
@@ -766,7 +770,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       // Active path highlighting: gold path edges, dim everything else
       if (activePathEdgeSet) {
         if (activePathEdgeSet.has(`${sourceId}-${targetId}`)) {
-          return '#FFD700';
+          return '#D4AF37';
         }
         return '#050510'; // dim non-path edges
       }
@@ -1157,7 +1161,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
           if (density >= 0.15) continue;
 
           // Color by gap strength
-          const gapColor = density < 0.05 ? 0xFF4444 : density < 0.10 ? 0xFFD700 : 0x44BB44;
+          const gapColor = density < 0.05 ? 0xFF4444 : density < 0.10 ? 0xD4AF37 : 0x44BB44;
 
           // Dashed line
           const points = [centA, centB];
@@ -1640,11 +1644,11 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
           return `
             <div style="background: rgba(10,10,10,0.95); padding: 12px 14px; border-radius: 10px; font-family: system-ui; font-size: 12px; max-width: 320px; border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 4px 24px rgba(0,0,0,0.4);">
               <div style="font-weight: 600; color: ${node.color}; margin-bottom: 5px; line-height: 1.4;">${p.title.length > 80 ? p.title.substring(0, 80) + '...' : p.title}</div>
-              <div style="color: #8890a5; font-size: 11px; margin-bottom: 3px;">${p.authors.slice(0, 3).map((a) => a.name).join(', ')}${p.authors.length > 3 ? ' et al.' : ''}</div>
-              <div style="color: #6870a0; font-size: 11px; margin-bottom: 5px;">${p.venue || ''} ${p.year || ''} | ${p.citation_count.toLocaleString()} citations</div>
-              ${p.cluster_label ? `<div style="color: #5a7a9a; font-size: 10px; margin-bottom: 4px;">📍 ${p.cluster_label}</div>` : ''}
-              ${tldrSnippet ? `<div style="color: #a0a8c0; font-size: 11px; line-height: 1.4; border-top: 1px solid rgba(42,48,80,0.5); padding-top: 5px; margin-top: 5px;">${tldrSnippet}</div>` : ''}
-              ${badges.length > 0 ? `<div style="margin-top: 5px; font-size: 10px; color: #8890a5;">${badges.join('  ')}</div>` : ''}
+              <div style="color: #999999; font-size: 11px; margin-bottom: 3px;">${p.authors?.slice(0, 3).map((a) => a.name).join(', ') || 'Unknown'}${(p.authors?.length || 0) > 3 ? ' et al.' : ''}</div>
+              <div style="color: #777777; font-size: 11px; margin-bottom: 5px;">${p.venue || ''} ${p.year || ''} | ${p.citation_count.toLocaleString()} citations</div>
+              ${p.cluster_label ? `<div style="color: #888888; font-size: 10px; margin-bottom: 4px;">📍 ${p.cluster_label}</div>` : ''}
+              ${tldrSnippet ? `<div style="color: #aaaaaa; font-size: 11px; line-height: 1.4; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 5px; margin-top: 5px;">${tldrSnippet}</div>` : ''}
+              ${badges.length > 0 ? `<div style="margin-top: 5px; font-size: 10px; color: #999999;">${badges.join('  ')}</div>` : ''}
             </div>
           `;
         }}
@@ -1657,14 +1661,14 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
           const link = linkData as ForceGraphLink;
           if (!link.intentLabel) return '';
           const contextSnippet = link.intentContext
-            ? `<div style="color: #8890a5; font-size: 10px; margin-top: 4px; max-width: 250px;">${
+            ? `<div style="color: #999999; font-size: 10px; margin-top: 4px; max-width: 250px;">${
                 link.intentContext.length > 120
                   ? link.intentContext.substring(0, 120) + '...'
                   : link.intentContext
               }</div>`
             : '';
           return `
-            <div style="background: rgba(10,14,26,0.92); padding: 8px 12px; border-radius: 6px; font-family: system-ui; font-size: 11px; border: 1px solid rgba(42,48,80,0.6);">
+            <div style="background: rgba(10,10,10,0.92); padding: 8px 12px; border-radius: 6px; font-family: system-ui; font-size: 11px; border: 1px solid rgba(255,255,255,0.08);">
               <div style="color: ${link.color}; font-weight: bold; text-transform: capitalize;">${link.intentLabel.replace('_', ' ')}</div>
               ${contextSnippet}
             </div>
@@ -1689,7 +1693,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
           const link = linkData as ForceGraphLink;
           return link.dashed ? '#555555' : '#D4AF37';
         }}
-        backgroundColor="#050510"
+        backgroundColor="#000000"
         onNodeClick={handleNodeClick}
         onNodeHover={handleNodeHover}
         onLinkClick={handleLinkClick}

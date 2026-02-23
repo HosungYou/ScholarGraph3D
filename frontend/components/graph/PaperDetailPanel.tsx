@@ -109,7 +109,7 @@ export default function PaperDetailPanel({
       {(citationPercentile > 0.9 || paper.is_bridge || paper.is_open_access) && (
         <div className="mt-3 mb-4 flex flex-wrap gap-1.5">
           {citationPercentile > 0.9 && (
-            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-[#FFD700]/10 text-[#FFD700] border border-[#FFD700]/25">
+            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-[#D4AF37]/10 text-[#D4AF37] border border-[#D4AF37]/25">
               TOP 10% CITED
             </span>
           )}
@@ -279,9 +279,9 @@ export default function PaperDetailPanel({
                 <div className="hud-value text-sm">{relationshipSummary.conceptualCount}</div>
               </div>
               {relationshipSummary.isBridge && (
-                <div className="col-span-2 rounded-lg p-2.5 bg-[#FFD700]/05 border border-[#FFD700]/15">
-                  <div className="text-[#FFD700]/80 text-[10px] font-mono uppercase tracking-wider">Bridge Node</div>
-                  <div className="text-[#FFD700]/50 text-[10px] font-mono mt-0.5">Connects distinct clusters</div>
+                <div className="col-span-2 rounded-lg p-2.5 bg-[#D4AF37]/05 border border-[#D4AF37]/15">
+                  <div className="text-[#D4AF37]/80 text-[10px] font-mono uppercase tracking-wider">Bridge Node</div>
+                  <div className="text-[#D4AF37]/50 text-[10px] font-mono mt-0.5">Connects distinct clusters</div>
                 </div>
               )}
             </div>
@@ -368,7 +368,7 @@ export default function PaperDetailPanel({
               }}
               className={`flex items-center justify-center gap-2 w-full px-3 py-2 rounded-lg text-[10px] font-mono uppercase tracking-wider transition-all border ${
                 pathEnd === paper.id
-                  ? 'bg-[#FFD700]/15 text-[#FFD700] border-[#FFD700]/30 shadow-[0_0_8px_rgba(255,215,0,0.1)]'
+                  ? 'bg-[#D4AF37]/15 text-[#D4AF37] border-[#D4AF37]/30 shadow-[0_0_8px_rgba(212,175,55,0.1)]'
                   : 'bg-[rgba(255,255,255,0.02)] hover:bg-[rgba(255,255,255,0.03)] text-[#999999] border-[rgba(255,255,255,0.04)] hover:border-[rgba(255,255,255,0.08)]'
               }`}
             >
@@ -386,7 +386,7 @@ export default function PaperDetailPanel({
                   const path = findCitationPath(pathStart!, pathEnd!, graphData.edges);
                   setActivePath(path);
                 }}
-                className="flex items-center justify-center gap-2 w-full px-3 py-2 bg-[#FFD700]/10 hover:bg-[#FFD700]/18 text-[#FFD700] rounded-lg text-[10px] font-mono uppercase tracking-wider transition-all border border-[#FFD700]/20 hover:shadow-[0_0_12px_rgba(255,215,0,0.08)]"
+                className="flex items-center justify-center gap-2 w-full px-3 py-2 bg-[#D4AF37]/10 hover:bg-[#D4AF37]/18 text-[#D4AF37] rounded-lg text-[10px] font-mono uppercase tracking-wider transition-all border border-[#D4AF37]/20 hover:shadow-[0_0_12px_rgba(212,175,55,0.08)]"
               >
                 <RouteIcon className="w-3 h-3" />
                 FIND PATH
@@ -395,7 +395,7 @@ export default function PaperDetailPanel({
             {activePath && (
               <div className="text-[10px] font-mono text-center py-1">
                 {activePath.length > 0 ? (
-                  <span className="text-[#FFD700]">Path: {activePath.length} nodes</span>
+                  <span className="text-[#D4AF37]">Path: {activePath.length} nodes</span>
                 ) : (
                   <span className="text-red-400">No path found</span>
                 )}

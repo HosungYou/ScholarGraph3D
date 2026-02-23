@@ -171,17 +171,17 @@ export default function GraphLegend() {
               <span>Size = citation count</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-[#FFD700]/30 border border-[#FFD700]/50 flex-shrink-0 animate-pulse" />
+              <div className="w-3 h-3 rounded-full bg-[#D4AF37]/30 border border-[#D4AF37]/50 flex-shrink-0 animate-pulse" />
               <span>Bright glow = highly cited</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full border-2 border-[#FF6B6B]/60 flex-shrink-0 animate-pulse" style={{ animationDuration: '1.5s' }} />
+              <div className="w-3 h-3 rounded-full border-2 border-[#D4AF37]/60 flex-shrink-0 animate-pulse" style={{ animationDuration: '1.5s' }} />
               <span>Pulsing ring = top 10% cited</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="relative flex-shrink-0 w-3 h-3">
                 <div className="absolute inset-0 rounded-full bg-[#999999]/30" />
-                <div className="absolute w-1 h-1 rounded-full bg-[#FFD700] top-0 left-1" />
+                <div className="absolute w-1 h-1 rounded-full bg-[#D4AF37] top-0 left-1" />
               </div>
               <span>Orbiting dots = bridge node</span>
             </div>
@@ -215,7 +215,7 @@ export default function GraphLegend() {
               <span>Red ring = frontier node</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-4 h-0.5 bg-[#FFD700] flex-shrink-0 rounded-full" />
+              <div className="w-4 h-0.5 bg-[#D4AF37] flex-shrink-0 rounded-full" />
               <span>Gold = citation path</span>
             </div>
           </div>

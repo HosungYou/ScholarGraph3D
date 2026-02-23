@@ -4,6 +4,7 @@ import { useEffect, useCallback, useState, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
+import { getSession } from '@/lib/supabase';
 import { useGraphStore } from '@/hooks/useGraphStore';
 import ScholarGraph3D, { type ScholarGraph3DRef } from '@/components/graph/ScholarGraph3D';
 import PaperDetailPanel from '@/components/graph/PaperDetailPanel';
@@ -98,6 +99,8 @@ function SeedExploreContent() {
 
   const autoSave = useCallback(async (data: GraphData, seedTitle?: string) => {
     try {
+      const session = await getSession();
+      if (!session?.access_token) return; // Skip auto-save when not authenticated
       const name = seedTitle
         ? `Seed: ${seedTitle.slice(0, 80)}`
         : `Seed: ${paperId}`;

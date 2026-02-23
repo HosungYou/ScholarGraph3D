@@ -35,7 +35,7 @@ export function createStarNode(options: StarNodeOptions): THREE.Group {
 
   // Determine display color
   let displayColor = starColors.core;
-  if (isSelected) displayColor = '#FFD700';
+  if (isSelected) displayColor = '#D4AF37';
   else if (isHighlightedByPanel) displayColor = '#D4AF37';
   else if (isHighlighted) displayColor = '#FFFFFF';
 
@@ -87,7 +87,7 @@ export function createStarNode(options: StarNodeOptions): THREE.Group {
     const flareSprite = new THREE.Sprite(
       new THREE.SpriteMaterial({
         map: getFlareTexture(),
-        color: new THREE.Color('#FFD700'),
+        color: new THREE.Color('#D4AF37'),
         transparent: true,
         opacity: 0.7,
         blending: THREE.AdditiveBlending,
@@ -124,7 +124,7 @@ export function createStarNode(options: StarNodeOptions): THREE.Group {
   if (showCitationAura && isTopCited && !isSelected) {
     const ringGeo = new THREE.RingGeometry(size * 1.5, size * 1.65, 32);
     const ringMat = new THREE.MeshBasicMaterial({
-      color: new THREE.Color('#FFD700'),
+      color: new THREE.Color('#D4AF37'),
       transparent: true,
       opacity: 0.2,
       side: THREE.DoubleSide,
@@ -157,7 +157,7 @@ export function createStarNode(options: StarNodeOptions): THREE.Group {
     }
     particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     const particleMat = new THREE.PointsMaterial({
-      color: 0xFFD700,
+      color: 0xD4AF37,
       size: 1.2,
       transparent: true,
       opacity: 0.4,
@@ -173,7 +173,7 @@ export function createStarNode(options: StarNodeOptions): THREE.Group {
     const companion1Geo = new THREE.SphereGeometry(size * 0.2, 8, 8);
     const companion2Geo = new THREE.SphereGeometry(size * 0.15, 8, 8);
     const compMat = new THREE.MeshBasicMaterial({
-      color: new THREE.Color('#FFD700'),
+      color: new THREE.Color('#D4AF37'),
       transparent: true,
       opacity: 0.6,
     });
