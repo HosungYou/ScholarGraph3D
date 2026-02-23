@@ -72,16 +72,27 @@ class CosmicAnimationManager {
 
     const time = (performance.now() - this.startTime) * 0.001; // seconds
 
-    // Update all shader uniforms
-    for (const mat of this.shaderMaterials) {
-      if (mat.uniforms.uTime) {
-        mat.uniforms.uTime.value = time;
+    // Update all shader uniforms — guard against disposed materials
+    for (let i = this.shaderMaterials.length - 1; i >= 0; i--) {
+      const mat = this.shaderMaterials[i];
+      try {
+        if (mat && mat.uniforms?.uTime) {
+          mat.uniforms.uTime.value = time;
+        }
+      } catch {
+        // Material disposed — remove stale reference
+        this.shaderMaterials.splice(i, 1);
       }
     }
 
-    // Update animated objects
-    for (const obj of this.animatedObjects) {
-      obj.update(time);
+    // Update animated objects — guard against disposed meshes
+    for (let i = this.animatedObjects.length - 1; i >= 0; i--) {
+      try {
+        this.animatedObjects[i].update(time);
+      } catch {
+        // Object disposed — remove stale reference
+        this.animatedObjects.splice(i, 1);
+      }
     }
   };
 

@@ -1,9 +1,17 @@
 import * as THREE from 'three';
 
-// Cache textures
+// Cache textures — singletons shared across ALL star nodes.
+// CRITICAL: These must NOT be disposed by three-forcegraph's auto-disposal
+// (deallocate/emptyObject). We override dispose() to be a no-op so the
+// library's recursive cleanup can't corrupt them.
 let glowTexture: THREE.Texture | null = null;
 let coronaTexture: THREE.Texture | null = null;
 let flareTexture: THREE.Texture | null = null;
+
+function protectTexture(tex: THREE.Texture): THREE.Texture {
+  tex.dispose = () => {}; // no-op — singleton must survive node disposal
+  return tex;
+}
 
 export function getGlowTexture(): THREE.Texture {
   if (glowTexture) return glowTexture;
@@ -19,7 +27,7 @@ export function getGlowTexture(): THREE.Texture {
   gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, 128, 128);
-  glowTexture = new THREE.CanvasTexture(canvas);
+  glowTexture = protectTexture(new THREE.CanvasTexture(canvas));
   return glowTexture;
 }
 
@@ -36,7 +44,7 @@ export function getCoronaTexture(): THREE.Texture {
   gradient.addColorStop(1, 'rgba(46, 204, 113, 0)');
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, 128, 128);
-  coronaTexture = new THREE.CanvasTexture(canvas);
+  coronaTexture = protectTexture(new THREE.CanvasTexture(canvas));
   return coronaTexture;
 }
 
@@ -59,6 +67,6 @@ export function getFlareTexture(): THREE.Texture {
     ctx.fillStyle = gradient;
     ctx.fillRect(-2, -64, 4, 128);
   }
-  flareTexture = new THREE.CanvasTexture(canvas);
+  flareTexture = protectTexture(new THREE.CanvasTexture(canvas));
   return flareTexture;
 }

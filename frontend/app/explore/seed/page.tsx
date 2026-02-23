@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useCallback, useState, useRef, Suspense } from 'react';
+import React, { useEffect, useCallback, useState, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
@@ -15,6 +15,49 @@ import RadarLoader from '@/components/cosmic/RadarLoader';
 import SeedChatPanel from '@/components/graph/SeedChatPanel';
 import GapSpotterPanel from '@/components/graph/GapSpotterPanel';
 import type { Paper, CitationIntent, GraphData, StructuralGap } from '@/types';
+
+/* ──────────────────────────────────────────────
+   Error Boundary — catches Three.js dispose crashes
+   without killing the entire page
+   ────────────────────────────────────────────── */
+class Graph3DErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error: Error) {
+    console.warn('[ScholarGraph3D] Recovered from render error:', error.message);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex items-center justify-center h-full bg-black">
+          <div className="text-center max-w-md px-6">
+            <div className="text-[#D4AF37] text-lg font-semibold mb-2">
+              Visualization Error
+            </div>
+            <p className="text-[#999999] text-sm mb-4">
+              The 3D engine encountered an error. This usually resolves on reload.
+            </p>
+            <button
+              onClick={() => this.setState({ hasError: false })}
+              className="px-4 py-2 bg-[#D4AF37]/10 border border-[#D4AF37]/30 rounded text-[#D4AF37] text-sm hover:bg-[#D4AF37]/20 transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 import {
   Search,
   ArrowLeft,
@@ -509,7 +552,11 @@ function SeedExploreContent() {
             </div>
           )}
 
-          {graphData && <ScholarGraph3D ref={graphRef} />}
+          {graphData && (
+            <Graph3DErrorBoundary>
+              <ScholarGraph3D ref={graphRef} />
+            </Graph3DErrorBoundary>
+          )}
           <GraphControls />
           <GraphLegend />
 

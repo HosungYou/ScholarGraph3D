@@ -110,33 +110,6 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const hoveredNodeRef = useRef<string | null>(null);
 
-  // Dispose all geometries, materials, and textures in a Three.js group
-  const disposeGroup = useCallback((group: THREE.Group | THREE.Object3D) => {
-    try {
-      group.traverse((child: THREE.Object3D) => {
-        if (child instanceof THREE.Mesh || child instanceof THREE.Points) {
-          child.geometry?.dispose();
-          if (child.material) {
-            const materials = Array.isArray(child.material) ? child.material : [child.material];
-            materials.forEach((mat: THREE.Material) => {
-              if ('map' in mat && (mat as any).map) (mat as any).map.dispose();
-              // Note: Do NOT dispose uniform values — they may reference shared
-              // singleton textures (glow, corona, flare from cosmicTextures.ts).
-              // Disposing them corrupts all star nodes sharing the same texture.
-              mat.dispose();
-            });
-          }
-        }
-        if (child instanceof THREE.Sprite) {
-          child.material?.map?.dispose();
-          child.material?.dispose();
-        }
-      });
-    } catch {
-      /* Three.js object already disposed or partially cleaned up */
-    }
-  }, []);
-
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectedPaperIdRef = useRef<string | null>(null);
   const justClickedNodeRef = useRef(false);
@@ -1548,35 +1521,14 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       if (expandedEdgeTimerRef.current) clearTimeout(expandedEdgeTimerRef.current);
       if (newNodeTimerRef.current) clearTimeout(newNodeTimerRef.current);
 
-      // Dispose all scene objects to prevent Three.js memory leaks
-      if (fgRef.current) {
-        try {
-          const scene = fgRef.current.scene();
-          if (scene) {
-            scene.traverse((obj: THREE.Object3D) => {
-              if (obj instanceof THREE.Mesh || obj instanceof THREE.Points) {
-                obj.geometry?.dispose();
-                const mats = Array.isArray(obj.material) ? obj.material : (obj.material ? [obj.material] : []);
-                mats.forEach((m: THREE.Material) => {
-                  if (!m) return;
-                  if ((m as any).map) (m as any).map.dispose();
-                  m.dispose();
-                });
-              }
-              if (obj instanceof THREE.Sprite) {
-                obj.material?.map?.dispose();
-                obj.material?.dispose();
-              }
-            });
-          }
-        } catch {
-          /* scene unavailable */
-        }
-      }
+      // NOTE: Do NOT manually traverse/dispose scene objects here.
+      // three-forcegraph handles its own object lifecycle via emptyObject/deallocate.
+      // Manual disposal causes double-free crashes (children[0] undefined TypeError).
 
-      // Clear animation manager
+      // Clear animation manager (releases refs to shader materials & animated objects)
       CosmicAnimationManager.reset();
 
+      // Dispose the WebGL renderer only — this is safe and prevents GPU memory leaks
       if (fgRef.current) {
         try {
           const renderer = fgRef.current.renderer();
