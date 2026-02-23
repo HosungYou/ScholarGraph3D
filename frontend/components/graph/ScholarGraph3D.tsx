@@ -120,14 +120,9 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
             const materials = Array.isArray(child.material) ? child.material : [child.material];
             materials.forEach((mat: THREE.Material) => {
               if ('map' in mat && (mat as any).map) (mat as any).map.dispose();
-              if ('uniforms' in mat) {
-                const uniforms = (mat as any).uniforms;
-                if (uniforms) {
-                  Object.values(uniforms).forEach((u: any) => {
-                    if (u?.value?.dispose) u.value.dispose();
-                  });
-                }
-              }
+              // Note: Do NOT dispose uniform values — they may reference shared
+              // singleton textures (glow, corona, flare from cosmicTextures.ts).
+              // Disposing them corrupts all star nodes sharing the same texture.
               mat.dispose();
             });
           }
@@ -359,11 +354,9 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     (nodeData: unknown) => {
       const node = nodeData as ForceGraphNode;
 
-      // Dispose previous Three.js object to prevent memory leaks
-      const existingObj = (node as any).__threeObj;
-      if (existingObj) {
-        try { disposeGroup(existingObj); } catch { /* already disposed */ }
-      }
+      // Note: Do NOT dispose __threeObj here — the three-forcegraph library
+      // handles its own object disposal via emptyObject/deallocate internally.
+      // Proactive disposal causes double-free crashes (children[0] undefined).
 
       const isHighlighted = highlightSet.has(node.id);
       const isSelected = selectedPaperIdRef.current === node.id;
@@ -724,7 +717,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
 
       return group;
     },
-    [highlightSet, showLabels, showBloom, bridgeNodeIds, showOARings, showCitationAura, highlightedPaperIds, showCosmicTheme, yearRange, disposeGroup]
+    [highlightSet, showLabels, showBloom, bridgeNodeIds, showOARings, showCitationAura, highlightedPaperIds, showCosmicTheme, yearRange]
   );
 
   // Link width
@@ -1563,8 +1556,9 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
             scene.traverse((obj: THREE.Object3D) => {
               if (obj instanceof THREE.Mesh || obj instanceof THREE.Points) {
                 obj.geometry?.dispose();
-                const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+                const mats = Array.isArray(obj.material) ? obj.material : (obj.material ? [obj.material] : []);
                 mats.forEach((m: THREE.Material) => {
+                  if (!m) return;
                   if ((m as any).map) (m as any).map.dispose();
                   m.dispose();
                 });
