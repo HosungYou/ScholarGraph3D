@@ -324,31 +324,31 @@ function SeedExploreContent() {
       {/* ═══════════════════════════════════════════
           TOP BAR — Mission Control HUD
           ═══════════════════════════════════════════ */}
-      <div className="flex-shrink-0 z-20 hud-panel-clean border-b border-[rgba(0,229,255,0.12)]">
+      <div className="flex-shrink-0 z-20 hud-panel-clean border-b border-[rgba(255,255,255,0.06)]">
         <div className="flex items-center gap-4 px-4 py-2.5">
           {/* Logo */}
           <a
             href="/"
-            className="text-sm font-bold text-[#00E5FF] flex-shrink-0 font-mono tracking-[0.2em] hover:text-[#00E5FF]/80 transition-colors"
+            className="text-sm font-bold text-[#D4AF37] flex-shrink-0 font-mono tracking-[0.2em] hover:text-[#D4AF37]/80 transition-colors"
           >
             SG3D
           </a>
 
-          <div className="w-px h-5 bg-[rgba(0,229,255,0.12)]" />
+          <div className="w-px h-5 bg-[rgba(255,255,255,0.06)]" />
 
           {/* Mode badge */}
           <div className="flex items-center gap-2">
             <div className="relative">
-              <Network className="w-3.5 h-3.5 text-[#6c5ce7]" />
-              <div className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-[#00E5FF] animate-pulse" />
+              <Network className="w-3.5 h-3.5 text-[#D4AF37]" />
+              <div className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-[#D4AF37] animate-pulse" />
             </div>
-            <span className="hud-label text-[#a29bfe]">ORIGIN POINT</span>
+            <span className="hud-label text-[#D4AF37]">ORIGIN POINT</span>
           </div>
 
           {/* Seed title */}
           {seedMeta?.seed_title && (
             <div className="flex-1 min-w-0">
-              <p className="text-[10px] text-[#7B8CDE]/60 truncate max-w-md font-mono">
+              <p className="text-[10px] text-[#999999]/60 truncate max-w-md font-mono">
                 {seedMeta.seed_title}
               </p>
             </div>
@@ -397,7 +397,7 @@ function SeedExploreContent() {
         <motion.div
           animate={{ width: leftCollapsed ? SIDEBAR_COLLAPSED : SIDEBAR_EXPANDED }}
           transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-          className="flex-shrink-0 border-r border-[rgba(0,229,255,0.08)] bg-[rgba(4,8,18,0.92)] flex flex-col relative z-10"
+          className="flex-shrink-0 border-r border-[rgba(255,255,255,0.04)] bg-[rgba(10,10,10,0.95)] flex flex-col relative z-10"
         >
           {leftCollapsed ? (
             /* ── Collapsed: icon-only vertical tabs ── */
@@ -413,8 +413,8 @@ function SeedExploreContent() {
                   title={tab.label}
                   className={`w-9 h-9 flex items-center justify-center rounded-lg transition-all ${
                     activeTab === tab.id
-                      ? 'bg-[#00E5FF]/10 text-[#00E5FF] shadow-[0_0_8px_rgba(0,229,255,0.12)]'
-                      : 'text-[#7B8CDE]/40 hover:text-[#7B8CDE] hover:bg-[#111833]/50'
+                      ? 'bg-[#D4AF37]/10 text-[#D4AF37] shadow-[0_0_8px_rgba(212,175,55,0.15)]'
+                      : 'text-[#999999]/40 hover:text-[#999999] hover:bg-[#111111]/50'
                   }`}
                 >
                   <tab.icon className="w-4 h-4" />
@@ -423,7 +423,7 @@ function SeedExploreContent() {
               <div className="flex-1" />
               <button
                 onClick={toggleLeftCollapsed}
-                className="w-9 h-9 flex items-center justify-center text-[#7B8CDE]/30 hover:text-[#7B8CDE] transition-colors mb-2"
+                className="w-9 h-9 flex items-center justify-center text-[#999999]/30 hover:text-[#999999] transition-colors mb-2"
                 title="Expand sidebar"
               >
                 <ChevronRight className="w-4 h-4" />
@@ -433,7 +433,7 @@ function SeedExploreContent() {
             /* ── Expanded: full tabs + content ── */
             <>
               {/* Tab header */}
-              <div className="flex-shrink-0 border-b border-[rgba(0,229,255,0.08)]">
+              <div className="flex-shrink-0 border-b border-[rgba(255,255,255,0.04)]">
                 <div className="flex">
                   {tabs.map(tab => (
                     <button
@@ -441,8 +441,8 @@ function SeedExploreContent() {
                       onClick={() => setActiveTab(tab.id)}
                       className={`flex items-center gap-1.5 px-3 py-2.5 text-[10px] font-mono uppercase tracking-widest transition-colors ${
                         activeTab === tab.id
-                          ? 'text-[#00E5FF] border-b-2 border-[#00E5FF]'
-                          : 'text-[#7B8CDE]/40 hover:text-[#7B8CDE]'
+                          ? 'text-[#D4AF37] border-b-2 border-[#D4AF37]'
+                          : 'text-[#999999]/40 hover:text-[#999999]'
                       }`}
                     >
                       <tab.icon className="w-3 h-3" />
@@ -452,7 +452,7 @@ function SeedExploreContent() {
                   <div className="flex-1" />
                   <button
                     onClick={toggleLeftCollapsed}
-                    className="px-2 flex items-center text-[#7B8CDE]/30 hover:text-[#7B8CDE] transition-colors"
+                    className="px-2 flex items-center text-[#999999]/30 hover:text-[#999999] transition-colors"
                     title="Collapse sidebar"
                   >
                     <ChevronLeft className="w-4 h-4" />
@@ -474,8 +474,8 @@ function SeedExploreContent() {
           {isLoading && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/80">
               <div className="text-center">
-                <RadarLoader message="BUILDING CITATION NETWORK..." />
-                <p className="text-[10px] text-[#7B8CDE]/40 mt-3 font-mono">
+                <RadarLoader message="Building citation network..." />
+                <p className="text-[10px] text-[#999999]/40 mt-3 font-mono">
                   Fetching references &amp; citations from Semantic Scholar
                 </p>
               </div>
@@ -484,22 +484,22 @@ function SeedExploreContent() {
 
           {!isLoading && !graphData && paperId && (
             <div className="absolute inset-0 flex items-center justify-center">
-              <p className="text-[#7B8CDE] font-mono text-sm">No results found</p>
+              <p className="text-[#999999] font-mono text-sm">No results found</p>
             </div>
           )}
 
           {!paperId && (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="text-center max-w-md px-4">
-                <Network className="w-12 h-12 text-[#6c5ce7] mx-auto mb-4 opacity-60" />
-                <div className="hud-label text-[#00E5FF]/30 mb-2">[ AWAITING ORIGIN POINT ]</div>
+                <Network className="w-12 h-12 text-[#D4AF37] mx-auto mb-4 opacity-60" />
+                <div className="hud-label text-[#D4AF37]/30 mb-2">[ AWAITING ORIGIN POINT ]</div>
                 <h2 className="text-xl font-semibold text-text-primary mb-2 font-mono">
                   ORIGIN POINT EXPLORATION
                 </h2>
-                <p className="text-[#7B8CDE]/60 text-sm mb-6 font-mono">
+                <p className="text-[#999999]/60 text-sm mb-6 font-mono">
                   Start from a single paper and explore its citation network
                 </p>
-                <p className="text-[#7B8CDE]/40 text-xs font-mono">
+                <p className="text-[#999999]/40 text-xs font-mono">
                   Enter a DOI or Semantic Scholar ID on the home page to begin
                 </p>
               </div>
@@ -532,7 +532,7 @@ function SeedExploreContent() {
                   exit={{ x: DRAWER_WIDTH }}
                   transition={{ type: 'spring', damping: 30, stiffness: 300 }}
                   style={{ width: DRAWER_WIDTH }}
-                  className="absolute top-0 right-0 bottom-0 z-30 border-l border-[rgba(0,229,255,0.12)] bg-[rgba(4,8,18,0.95)] backdrop-blur-xl overflow-y-auto"
+                  className="absolute top-0 right-0 bottom-0 z-30 border-l border-[rgba(255,255,255,0.06)] bg-[rgba(10,10,10,0.95)] backdrop-blur-xl overflow-y-auto"
                 >
                   <PaperDetailPanel
                     paper={selectedPaper}
@@ -548,36 +548,36 @@ function SeedExploreContent() {
           {/* ─── Bottom Status Bar ─── */}
           {graphData && seedMeta && (
             <div className="absolute bottom-4 left-4 right-4 z-10 pointer-events-none">
-              <div className="inline-flex items-center gap-3 px-3 py-2 hud-panel-clean rounded-lg text-[10px] font-mono text-[#7B8CDE] pointer-events-auto">
+              <div className="inline-flex items-center gap-3 px-3 py-2 hud-panel-clean rounded-lg text-[10px] font-mono text-[#999999] pointer-events-auto">
                 <div className="flex items-center gap-1.5">
-                  <Network className="w-3 h-3 text-[#6c5ce7]" />
+                  <Network className="w-3 h-3 text-[#D4AF37]" />
                   <span className="text-text-primary font-medium">{graphData.nodes.length}</span>
-                  <span className="text-[#7B8CDE]/50">papers</span>
+                  <span className="text-[#999999]/50">papers</span>
                 </div>
-                <div className="w-px h-3 bg-[rgba(0,229,255,0.1)]" />
+                <div className="w-px h-3 bg-[rgba(255,255,255,0.06)]" />
                 <div className="flex items-center gap-1.5">
                   <GitBranch className="w-3 h-3" />
                   <span className="text-text-primary font-medium">
                     {graphData.edges.filter(e => e.type === 'citation').length}
                   </span>
-                  <span className="text-[#7B8CDE]/50">citations</span>
+                  <span className="text-[#999999]/50">citations</span>
                 </div>
-                <div className="w-px h-3 bg-[rgba(0,229,255,0.1)]" />
+                <div className="w-px h-3 bg-[rgba(255,255,255,0.06)]" />
                 <div className="flex items-center gap-1.5">
-                  <Share2 className="w-3 h-3 text-[#00E5FF]/60" />
+                  <Share2 className="w-3 h-3 text-[#D4AF37]/60" />
                   <span className="text-text-primary font-medium">
                     {graphData.edges.filter(e => e.type === 'similarity').length}
                   </span>
-                  <span className="text-[#7B8CDE]/50">similar</span>
+                  <span className="text-[#999999]/50">similar</span>
                 </div>
-                <div className="w-px h-3 bg-[rgba(0,229,255,0.1)]" />
+                <div className="w-px h-3 bg-[rgba(255,255,255,0.06)]" />
                 <div className="flex items-center gap-1.5">
                   <Layers className="w-3 h-3" />
                   <span className="text-text-primary font-medium">{graphData.clusters.length}</span>
-                  <span className="text-[#7B8CDE]/50">clusters</span>
+                  <span className="text-[#999999]/50">clusters</span>
                 </div>
-                <div className="w-px h-3 bg-[rgba(0,229,255,0.1)]" />
-                <span className="text-[#7B8CDE]/30 italic">dbl-click to expand</span>
+                <div className="w-px h-3 bg-[rgba(255,255,255,0.06)]" />
+                <span className="text-[#999999]/30 italic">dbl-click to expand</span>
               </div>
             </div>
           )}
@@ -620,7 +620,7 @@ export default function SeedExplorePage() {
     <Suspense
       fallback={
         <div className="h-screen flex items-center justify-center bg-black">
-          <div className="w-12 h-12 border-2 border-[#00E5FF] border-t-transparent rounded-full animate-spin" />
+          <div className="w-12 h-12 border-2 border-[#D4AF37] border-t-transparent rounded-full animate-spin" />
         </div>
       }
     >

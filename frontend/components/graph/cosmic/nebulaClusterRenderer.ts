@@ -13,7 +13,7 @@ export function createNebulaCluster(options: NebulaClusterOptions): THREE.Points
   const { color, centroid, nodeCount, spread, isEmerging } = options;
   const manager = CosmicAnimationManager.getInstance();
 
-  const particleCount = Math.min(250, Math.max(50, nodeCount * 20));
+  const particleCount = Math.min(120, Math.max(30, nodeCount * 8));
   const geometry = new THREE.BufferGeometry();
   const positions = new Float32Array(particleCount * 3);
   const alphas = new Float32Array(particleCount);
@@ -25,8 +25,8 @@ export function createNebulaCluster(options: NebulaClusterOptions): THREE.Points
     const r = Math.sqrt(-2 * Math.log(u1));
     const theta = 2 * Math.PI * u2;
 
-    positions[i * 3] = centroid.x + r * Math.cos(theta) * spread * 0.8;
-    positions[i * 3 + 1] = centroid.y + r * Math.sin(theta) * spread * 0.8;
+    positions[i * 3] = centroid.x + r * Math.cos(theta) * spread * 0.6;
+    positions[i * 3 + 1] = centroid.y + r * Math.sin(theta) * spread * 0.6;
     // Second Gaussian for Z
     const u3 = Math.random();
     const u4 = Math.random();
@@ -44,7 +44,7 @@ export function createNebulaCluster(options: NebulaClusterOptions): THREE.Points
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   geometry.setAttribute('alpha', new THREE.BufferAttribute(alphas, 1));
 
-  const baseOpacity = isEmerging ? 0.5 : 0.3;
+  const baseOpacity = isEmerging ? 0.25 : 0.12;
 
   const material = new THREE.ShaderMaterial({
     vertexShader: `
@@ -54,7 +54,7 @@ export function createNebulaCluster(options: NebulaClusterOptions): THREE.Points
       void main() {
         vAlpha = alpha;
         vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-        gl_PointSize = 5.0 * (300.0 / -mvPosition.z);
+        gl_PointSize = 3.0 * (300.0 / -mvPosition.z);
         gl_Position = projectionMatrix * mvPosition;
       }
     `,

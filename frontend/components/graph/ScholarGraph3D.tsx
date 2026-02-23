@@ -249,7 +249,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         const opacity =
           0.3 + 0.7 * ((paperYear - yearRange.min) / yearSpan);
         const rawCitations = paper.citation_count || 0;
-        const size = Math.min(30, Math.max(4, Math.sqrt(rawCitations + 1) * 1.5));
+        const size = Math.min(12, Math.max(2, Math.sqrt(rawCitations + 1) * 0.8));
         const authorName = paper.authors?.[0]?.name?.split(' ').pop() || 'Unknown';
         const citationPercentile = citationRankMap.get(paper.id) || 0;
 
@@ -309,7 +309,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       return {
         source: edge.source,
         target: edge.target,
-        color: intentColor || (isSimilarity ? '#4A90D9' : '#8890a5'),
+        color: intentColor || (isSimilarity ? '#555555' : '#444444'),
         width: isSimilarity ? 1.0 : isInfluential ? 2 + edge.weight * 2 : 1 + edge.weight * 2,
         edgeType: edge.type,
         dashed: isSimilarity,
@@ -400,7 +400,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
           if (isExpandParent) {
             const pulseRingGeo = new THREE.RingGeometry(node.val * 2.0, node.val * 2.3, 32);
             const pulseRingMat = new THREE.MeshBasicMaterial({
-              color: 0x00E5FF,
+              color: 0xD4AF37,
               transparent: true,
               opacity: 0.6,
               side: THREE.DoubleSide,
@@ -415,11 +415,11 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
 
         // New node glow pulse (newly expanded nodes)
         if (newNodeIdsRef.current.has(node.id)) {
-          const newGlowGeo = new THREE.SphereGeometry(node.val * 2.0, 8, 8);
+          const newGlowGeo = new THREE.SphereGeometry(node.val * 1.5, 8, 8);
           const newGlowMat = new THREE.MeshBasicMaterial({
-            color: 0x00E5FF,
+            color: 0xD4AF37,
             transparent: true,
-            opacity: 0.3,
+            opacity: 0.15,
             depthWrite: false,
           });
           const newGlow = new THREE.Mesh(newGlowGeo, newGlowMat);
@@ -433,7 +433,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
           const frontierRingMat = new THREE.MeshBasicMaterial({
             color: 0xFF4444,
             transparent: true,
-            opacity: 0.5,
+            opacity: 0.3,
             side: THREE.DoubleSide,
             depthWrite: false,
           });
@@ -462,7 +462,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
               isHighlighted ? 0.9 :
               0.3 + 0.7 * node.citationPercentile;
 
-            ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+            ctx.font = `bold ${fontSize}px 'JetBrains Mono', monospace`;
             ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
             ctx.shadowBlur = 6;
             ctx.shadowOffsetX = 1;
@@ -470,7 +470,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
             ctx.fillStyle = isSelected
               ? '#FFD700'
               : isHighlighted
-                ? '#4ECDC4'
+                ? '#FFFFFF'
                 : '#FFFFFF';
             ctx.globalAlpha = labelOpacity;
             ctx.textAlign = 'center';
@@ -539,8 +539,8 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
 
       let displayColor = node.color;
       if (isSelected) displayColor = '#FFD700';
-      else if (isHighlightedByPanel) displayColor = '#FF6B6B';
-      else if (isHighlighted) displayColor = '#4ECDC4';
+      else if (isHighlightedByPanel) displayColor = '#D4AF37';
+      else if (isHighlighted) displayColor = '#FFFFFF';
 
       let displayOpacity = node.opacity;
       if (isSelected) displayOpacity = 1;
@@ -650,7 +650,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
             isHighlighted ? 0.9 :
             0.3 + 0.7 * node.citationPercentile;
 
-          ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+          ctx.font = `bold ${fontSize}px 'JetBrains Mono', monospace`;
           ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
           ctx.shadowBlur = 6;
           ctx.shadowOffsetX = 1;
@@ -658,7 +658,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
           ctx.fillStyle = isSelected
             ? '#FFD700'
             : isHighlighted
-              ? '#4ECDC4'
+              ? '#FFFFFF'
               : '#FFFFFF';
           ctx.globalAlpha = labelOpacity;
           ctx.textAlign = 'center';
@@ -775,7 +775,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       if (expandedEdgeIdsRef.current.size > 0) {
         if (expandedEdgeIdsRef.current.has(`${sourceId}-${targetId}`) ||
             expandedEdgeIdsRef.current.has(`${targetId}-${sourceId}`)) {
-          return '#00E5FF';
+          return '#D4AF37';
         }
       }
 
@@ -792,14 +792,14 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       }
 
       if (!selectedPaper) {
-        // Stronger default colors for better visibility
+        // Subtle default colors for constellation map aesthetic
         return link.dashed
-          ? '#4a90d9'   // similarity = blue dashed
-          : link.color || '#00E5FF80';  // citation = cyan (semi-transparent)
+          ? '#555555'   // similarity = dim gray dashed
+          : link.color || '#44444480';  // citation = dark gray (semi-transparent)
       }
 
       if (highlightSet.has(sourceId) && highlightSet.has(targetId)) {
-        return link.color || '#00E5FF';
+        return link.color || '#D4AF37';
       }
       return '#050510'; // near-invisible on dark background
     },
@@ -813,7 +813,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
 
     const geometry = new THREE.BufferGeometry();
     const material = new THREE.LineDashedMaterial({
-      color: 0x4a90d9,
+      color: 0x555555,
       dashSize: 2,
       gapSize: 1.5,
       opacity: 0.6,
@@ -1638,7 +1638,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
           if (p.is_open_access) badges.push('🔓 OA');
           if (p.year && p.year >= 2024) badges.push('◆ New');
           return `
-            <div style="background: rgba(5,5,16,0.95); padding: 12px 14px; border-radius: 10px; font-family: system-ui; font-size: 12px; max-width: 320px; border: 1px solid rgba(0,229,255,0.15); box-shadow: 0 4px 24px rgba(0,0,0,0.4);">
+            <div style="background: rgba(10,10,10,0.95); padding: 12px 14px; border-radius: 10px; font-family: system-ui; font-size: 12px; max-width: 320px; border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 4px 24px rgba(0,0,0,0.4);">
               <div style="font-weight: 600; color: ${node.color}; margin-bottom: 5px; line-height: 1.4;">${p.title.length > 80 ? p.title.substring(0, 80) + '...' : p.title}</div>
               <div style="color: #8890a5; font-size: 11px; margin-bottom: 3px;">${p.authors.slice(0, 3).map((a) => a.name).join(', ')}${p.authors.length > 3 ? ' et al.' : ''}</div>
               <div style="color: #6870a0; font-size: 11px; margin-bottom: 5px;">${p.venue || ''} ${p.year || ''} | ${p.citation_count.toLocaleString()} citations</div>
@@ -1687,7 +1687,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         }}
         linkDirectionalParticleColor={(linkData: unknown) => {
           const link = linkData as ForceGraphLink;
-          return link.dashed ? '#4a90d9' : '#00E5FF';
+          return link.dashed ? '#555555' : '#D4AF37';
         }}
         backgroundColor="#050510"
         onNodeClick={handleNodeClick}

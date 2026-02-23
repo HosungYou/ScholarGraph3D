@@ -3,27 +3,22 @@
 @tailwind utilities;
 
 :root {
-  --void: #000000;
   --background: #000000;
-  --surface: #060a14;
-  --surface-hover: #0c1220;
-  --border: #141e38;
-  --text-primary: #E8EAF6;
-  --text-secondary: #7B8CDE;
-  --text-muted: #4a5580;
-  --accent: #00E5FF;
-  --accent-nebula: #6c5ce7;
-  --accent-star: #a29bfe;
-  --accent-warm: #fd79a8;
-  --accent-gold: #FFD700;
+  --surface: #0A0A0A;
+  --surface-hover: #111111;
+  --surface-elevated: #161616;
+  --border: #1A1A1A;
+  --border-hover: #2A2A2A;
+  --border-active: #3A3A3A;
+  --text-primary: #FFFFFF;
+  --text-secondary: #999999;
+  --text-muted: #555555;
+  --text-dim: #333333;
+  --accent: #D4AF37;
+  --accent-hover: #E5C04B;
+  --accent-muted: #B8963A;
 
-  /* HUD system */
-  --hud-border: rgba(0, 229, 255, 0.12);
-  --hud-border-active: rgba(0, 229, 255, 0.35);
-  --hud-bg: rgba(4, 8, 18, 0.88);
-  --hud-glow: rgba(0, 229, 255, 0.06);
-
-  /* Field of Study spectrum */
+  /* Field colors (kept for 3D rendering) */
   --field-cs: #4FC3F7;
   --field-medicine: #66BB6A;
   --field-physics: #AB47BC;
@@ -40,195 +35,109 @@
   padding: 0;
 }
 
-html,
-body {
+html, body {
   height: 100%;
-  background: var(--void);
+  background: var(--background);
   color: var(--text-primary);
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Scrollbar - minimal */
-::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
-}
+/* Scrollbar */
+::-webkit-scrollbar { width: 3px; height: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-hover); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-active); }
 
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: rgba(0, 229, 255, 0.15);
-  border-radius: 2px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 229, 255, 0.3);
-}
-
-/* ============================================
-   HUD DESIGN SYSTEM — Mission Control
-   ============================================ */
+/* ========== STELLAR OBSERVATORY DESIGN SYSTEM ========== */
 
 @layer utilities {
-
-  /* --- Glass layers --- */
-  .glass {
-    background: rgba(4, 8, 18, 0.85);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid var(--hud-border);
+  /* --- Panels --- */
+  .stellar-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    transition: border-color 0.2s ease;
+  }
+  .stellar-panel:hover {
+    border-color: var(--border-hover);
   }
 
-  .glass-strong {
-    background: rgba(4, 8, 18, 0.92);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
-    border: 1px solid rgba(0, 229, 255, 0.15);
+  .stellar-panel-elevated {
+    background: var(--surface-elevated);
+    border: 1px solid var(--border);
   }
 
-  /* --- HUD Panel --- angular frame with corner accents */
-  .hud-panel {
-    position: relative;
-    background: var(--hud-bg);
+  .stellar-panel-glass {
+    background: rgba(10, 10, 10, 0.85);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
-    border: 1px solid var(--hud-border);
-    box-shadow:
-      inset 0 1px 0 rgba(0, 229, 255, 0.04),
-      0 0 40px rgba(0, 229, 255, 0.02);
+    border: 1px solid var(--border);
   }
 
-  /* Top edge glow line */
-  .hud-panel::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 12%;
-    right: 12%;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(0, 229, 255, 0.3), transparent);
-    pointer-events: none;
-  }
-
-  /* Corner brackets */
-  .hud-panel::after {
-    content: '';
-    position: absolute;
-    inset: -1px;
-    pointer-events: none;
-    border: 1px solid transparent;
-    /* Top-left corner */
-    background:
-      linear-gradient(to right, rgba(0,229,255,0.3) 12px, transparent 12px) no-repeat top left,
-      linear-gradient(to bottom, rgba(0,229,255,0.3) 12px, transparent 12px) no-repeat top left,
-      /* Top-right corner */
-      linear-gradient(to left, rgba(0,229,255,0.3) 12px, transparent 12px) no-repeat top right,
-      linear-gradient(to bottom, rgba(0,229,255,0.3) 12px, transparent 12px) no-repeat top right,
-      /* Bottom-left corner */
-      linear-gradient(to right, rgba(0,229,255,0.3) 12px, transparent 12px) no-repeat bottom left,
-      linear-gradient(to top, rgba(0,229,255,0.3) 12px, transparent 12px) no-repeat bottom left,
-      /* Bottom-right corner */
-      linear-gradient(to left, rgba(0,229,255,0.3) 12px, transparent 12px) no-repeat bottom right,
-      linear-gradient(to top, rgba(0,229,255,0.3) 12px, transparent 12px) no-repeat bottom right;
-    background-size: 13px 13px;
-    border-radius: inherit;
-  }
-
-  /* --- HUD Panel (no corners variant) --- */
-  .hud-panel-clean {
-    position: relative;
-    background: var(--hud-bg);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid var(--hud-border);
-  }
-
-  /* --- HUD Button --- */
-  .hud-button {
-    background: rgba(0, 229, 255, 0.06);
-    border: 1px solid rgba(0, 229, 255, 0.2);
-    color: #00E5FF;
-    font-weight: 500;
+  /* --- Buttons --- */
+  .stellar-btn {
+    background: var(--accent);
+    color: #000000;
     font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    font-size: 11px;
     letter-spacing: 0.08em;
+    text-transform: uppercase;
     transition: all 0.2s ease;
+    cursor: pointer;
   }
-
-  .hud-button:hover {
-    background: rgba(0, 229, 255, 0.12);
-    box-shadow:
-      0 0 20px rgba(0, 229, 255, 0.12),
-      inset 0 0 20px rgba(0, 229, 255, 0.04);
-    border-color: rgba(0, 229, 255, 0.4);
+  .stellar-btn:hover {
+    background: var(--accent-hover);
   }
-
-  .hud-button:active {
-    background: rgba(0, 229, 255, 0.18);
+  .stellar-btn:active {
     transform: scale(0.98);
   }
-
-  .hud-button:disabled {
+  .stellar-btn:disabled {
     opacity: 0.3;
     cursor: not-allowed;
   }
 
-  /* --- HUD Button Ghost --- */
-  .hud-button-ghost {
+  .stellar-btn-outline {
     background: transparent;
-    border: 1px solid rgba(0, 229, 255, 0.1);
+    border: 1px solid var(--border-hover);
     color: var(--text-secondary);
     font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
     letter-spacing: 0.06em;
     transition: all 0.2s ease;
+    cursor: pointer;
+  }
+  .stellar-btn-outline:hover {
+    border-color: var(--text-secondary);
+    color: var(--text-primary);
   }
 
-  .hud-button-ghost:hover {
-    background: rgba(0, 229, 255, 0.05);
-    border-color: rgba(0, 229, 255, 0.25);
-    color: #00E5FF;
+  .stellar-btn-ghost {
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    transition: all 0.2s ease;
+    cursor: pointer;
+  }
+  .stellar-btn-ghost:hover {
+    border-color: var(--border);
+    color: var(--text-secondary);
   }
 
-  /* --- Cosmic glow text --- */
-  .cosmic-glow {
-    text-shadow:
-      0 0 10px rgba(0, 229, 255, 0.4),
-      0 0 30px rgba(0, 229, 255, 0.2),
-      0 0 60px rgba(108, 92, 231, 0.15);
+  /* --- Typography --- */
+  .stellar-heading {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-weight: 400;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+    line-height: 1.1;
   }
 
-  /* --- Scanline overlay --- */
-  .hud-scanline {
-    position: relative;
-  }
-
-  .hud-scanline::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: repeating-linear-gradient(
-      0deg,
-      transparent,
-      transparent 2px,
-      rgba(0, 229, 255, 0.015) 2px,
-      rgba(0, 229, 255, 0.015) 4px
-    );
-    pointer-events: none;
-    opacity: 0.4;
-    border-radius: inherit;
-  }
-
-  /* --- HUD section divider --- */
-  .hud-divider {
-    height: 1px;
-    background: linear-gradient(90deg, transparent, var(--hud-border), transparent);
-  }
-
-  /* --- HUD data label --- */
-  .hud-label {
+  .stellar-label {
     font-family: 'JetBrains Mono', monospace;
     font-size: 10px;
     font-weight: 500;
@@ -237,102 +146,152 @@ body {
     color: var(--text-muted);
   }
 
-  /* --- HUD data value --- */
-  .hud-value {
+  .stellar-value {
     font-family: 'JetBrains Mono', monospace;
     font-size: 13px;
     font-weight: 600;
     color: var(--text-primary);
   }
 
-  /* --- Status indicator dot --- */
+  .stellar-number {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-weight: 400;
+    color: var(--text-primary);
+  }
+
+  /* --- Dividers --- */
+  .stellar-divider {
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* --- Status dots --- */
+  .stellar-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+  .stellar-dot-success { background: #66BB6A; }
+  .stellar-dot-warning { background: #FFA726; }
+  .stellar-dot-error { background: #EF5350; }
+
+  /* --- Legacy compatibility (hud-* mapped to stellar-*) --- */
+  .hud-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+  }
+  .hud-panel::before, .hud-panel::after { display: none; }
+  .hud-panel-clean {
+    background: var(--surface);
+    border: 1px solid var(--border);
+  }
+  .hud-button {
+    background: var(--accent);
+    color: #000000;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    transition: all 0.2s ease;
+    border: none;
+  }
+  .hud-button:hover {
+    background: var(--accent-hover);
+  }
+  .hud-button:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+  .hud-button-ghost {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.06em;
+    transition: all 0.2s ease;
+  }
+  .hud-button-ghost:hover {
+    border-color: var(--border-hover);
+    color: var(--text-primary);
+  }
+  .hud-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .hud-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  .hud-divider {
+    height: 1px;
+    background: var(--border);
+  }
   .hud-status {
     display: inline-block;
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: #00E5FF;
-    box-shadow: 0 0 6px rgba(0, 229, 255, 0.5);
+    background: var(--accent);
   }
 
-  .hud-status-warn {
-    background: #FFA726;
-    box-shadow: 0 0 6px rgba(255, 167, 38, 0.5);
+  /* Remove old glow/scanline effects */
+  .cosmic-glow { text-shadow: none; }
+  .hud-scanline::after { display: none; }
+  .glass {
+    background: rgba(10, 10, 10, 0.85);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--border);
   }
-
-  .hud-status-error {
-    background: #EF5350;
-    box-shadow: 0 0 6px rgba(239, 83, 80, 0.5);
+  .glass-strong {
+    background: rgba(10, 10, 10, 0.92);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid var(--border-hover);
   }
 }
 
 /* Force graph canvas */
-.force-graph-container canvas {
-  outline: none;
-}
+.force-graph-container canvas { outline: none; }
 
-/* ============================================
-   ANIMATIONS
-   ============================================ */
-
+/* ========== ANIMATIONS ========== */
 @keyframes fade-in {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
-
 @keyframes slide-in-right {
   from { opacity: 0; transform: translateX(20px); }
   to { opacity: 1; transform: translateX(0); }
 }
-
 @keyframes slide-in-left {
   from { opacity: 0; transform: translateX(-20px); }
   to { opacity: 1; transform: translateX(0); }
 }
-
 @keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 20px rgba(0, 229, 255, 0.15); }
-  50% { box-shadow: 0 0 40px rgba(0, 229, 255, 0.3); }
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
 }
-
 @keyframes warp-speed {
   0% { transform: scale(1); filter: blur(0px); opacity: 1; }
   100% { transform: scale(3); filter: blur(20px); opacity: 0; }
 }
-
-@keyframes cosmic-pulse {
-  0%, 100% { opacity: 0.5; }
-  50% { opacity: 1; }
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-12px); }
 }
-
-@keyframes hud-flicker {
-  0%, 100% { opacity: 1; }
-  25%, 75% { opacity: 0.99; }
-  50% { opacity: 0.97; }
-}
-
-@keyframes scanline-sweep {
-  0% { transform: translateY(-100%); }
-  100% { transform: translateY(100%); }
-}
-
-@keyframes radar-sweep {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-@keyframes border-glow {
-  0%, 100% { border-color: rgba(0, 229, 255, 0.1); }
-  50% { border-color: rgba(0, 229, 255, 0.3); }
-}
-
 @keyframes drift {
   0%, 100% { transform: translateY(0) translateX(0); }
   25% { transform: translateY(-20px) translateX(10px); }
   50% { transform: translateY(-10px) translateX(-5px); }
   75% { transform: translateY(-30px) translateX(15px); }
 }
-
 @keyframes typing-cursor {
   0%, 100% { opacity: 1; }
   50% { opacity: 0; }
@@ -341,10 +300,7 @@ body {
 .animate-fade-in { animation: fade-in 0.4s ease-out; }
 .animate-slide-in-right { animation: slide-in-right 0.3s ease-out; }
 .animate-slide-in-left { animation: slide-in-left 0.3s ease-out; }
-.animate-pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
+.animate-pulse-glow { animation: pulse-glow 3s ease-in-out infinite; }
 .animate-warp { animation: warp-speed 0.8s ease-in forwards; }
-.animate-cosmic-pulse { animation: cosmic-pulse 3s ease-in-out infinite; }
-.animate-hud-flicker { animation: hud-flicker 4s ease-in-out infinite; }
-.animate-radar-sweep { animation: radar-sweep 2s linear infinite; }
-.animate-border-glow { animation: border-glow 2s ease-in-out infinite; }
+.animate-float { animation: float 6s ease-in-out infinite; }
 .animate-typing-cursor { animation: typing-cursor 1s step-end infinite; }

@@ -90,8 +90,8 @@ export default function PaperDetailPanel({
       <div className="flex items-start justify-between mb-1">
         <div className="flex-1 mr-3">
           <div className="flex items-center gap-2 mb-1.5">
-            <span className="hud-label text-[#00E5FF]/50">OBJECT SCAN</span>
-            <div className="flex-1 h-px bg-gradient-to-r from-[rgba(0,229,255,0.2)] to-transparent" />
+            <span className="hud-label text-[#D4AF37]/50">OBJECT SCAN</span>
+            <div className="flex-1 h-px bg-gradient-to-r from-[rgba(255,255,255,0.1)] to-transparent" />
           </div>
           <h2 className="text-base font-semibold leading-snug text-text-primary">
             {paper.title}
@@ -99,9 +99,9 @@ export default function PaperDetailPanel({
         </div>
         <button
           onClick={onClose}
-          className="p-1.5 rounded-lg hover:bg-[rgba(0,229,255,0.06)] border border-transparent hover:border-[rgba(0,229,255,0.15)] transition-all flex-shrink-0"
+          className="p-1.5 rounded-lg hover:bg-[rgba(255,255,255,0.03)] border border-transparent hover:border-[rgba(255,255,255,0.08)] transition-all flex-shrink-0"
         >
-          <X className="w-4 h-4 text-[#7B8CDE] hover:text-[#00E5FF]" />
+          <X className="w-4 h-4 text-[#999999] hover:text-[#D4AF37]" />
         </button>
       </div>
 
@@ -114,7 +114,7 @@ export default function PaperDetailPanel({
             </span>
           )}
           {paper.is_bridge && (
-            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-[#a29bfe]/10 text-[#a29bfe] border border-[#a29bfe]/25">
+            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-[#D4AF37]/10 text-[#D4AF37] border border-[#D4AF37]/25">
               BRIDGE NODE
             </span>
           )}
@@ -131,7 +131,7 @@ export default function PaperDetailPanel({
       {/* ── Authors ── */}
       <div className="mb-4">
         <div className="flex items-center gap-1.5 mb-2">
-          <Users className="w-3.5 h-3.5 text-[#7B8CDE]/60" />
+          <Users className="w-3.5 h-3.5 text-[#999999]/60" />
           <span className="hud-label">Authors</span>
         </div>
         <div className="space-y-1">
@@ -139,14 +139,14 @@ export default function PaperDetailPanel({
             <div key={i} className="text-sm text-text-primary">
               {author.name}
               {author.affiliations?.[0] && (
-                <span className="text-[10px] text-[#7B8CDE]/60 ml-1.5">
+                <span className="text-[10px] text-[#999999]/60 ml-1.5">
                   ({author.affiliations[0]})
                 </span>
               )}
             </div>
           ))}
           {paper.authors.length > 5 && (
-            <div className="text-[10px] font-mono text-[#7B8CDE]/50">
+            <div className="text-[10px] font-mono text-[#999999]/50">
               +{paper.authors.length - 5} more authors
             </div>
           )}
@@ -157,14 +157,14 @@ export default function PaperDetailPanel({
       <div className="grid grid-cols-2 gap-2 mb-4">
         <div className="hud-panel-clean rounded-lg p-2.5">
           <div className="flex items-center gap-1.5 mb-1">
-            <Calendar className="w-3 h-3 text-[#7B8CDE]/50" />
+            <Calendar className="w-3 h-3 text-[#999999]/50" />
             <span className="hud-label">Year</span>
           </div>
           <div className="hud-value">{paper.year}</div>
         </div>
         <div className="hud-panel-clean rounded-lg p-2.5">
           <div className="flex items-center gap-1.5 mb-1">
-            <Hash className="w-3 h-3 text-[#7B8CDE]/50" />
+            <Hash className="w-3 h-3 text-[#999999]/50" />
             <span className="hud-label">Citations</span>
           </div>
           <div className="hud-value">{paper.citation_count.toLocaleString()}</div>
@@ -175,7 +175,7 @@ export default function PaperDetailPanel({
       {paper.venue && (
         <div className="mb-4">
           <div className="flex items-center gap-1.5 mb-1">
-            <BookOpen className="w-3.5 h-3.5 text-[#7B8CDE]/50" />
+            <BookOpen className="w-3.5 h-3.5 text-[#999999]/50" />
             <span className="hud-label">Venue</span>
           </div>
           <div className="text-sm text-text-primary">{paper.venue}</div>
@@ -189,13 +189,13 @@ export default function PaperDetailPanel({
             {paper.abstract ? 'Abstract' : 'TLDR'}
           </span>
         </div>
-        <p className="text-sm text-[#7B8CDE]/80 leading-relaxed border-l-2 border-[rgba(0,229,255,0.1)] pl-3">
+        <p className="text-sm text-[#999999]/80 leading-relaxed border-l-2 border-[rgba(255,255,255,0.06)] pl-3">
           {displayAbstract}
         </p>
         {isLongAbstract && (
           <button
             onClick={() => setShowFullAbstract(!showFullAbstract)}
-            className="flex items-center gap-1 mt-1.5 text-[10px] font-mono text-[#00E5FF]/70 hover:text-[#00E5FF] transition-colors uppercase tracking-wider"
+            className="flex items-center gap-1 mt-1.5 text-[10px] font-mono text-[#D4AF37]/70 hover:text-[#D4AF37] transition-colors uppercase tracking-wider"
           >
             {showFullAbstract ? (
               <>
@@ -240,7 +240,7 @@ export default function PaperDetailPanel({
             {paper.topics.slice(0, 8).map((topic) => (
               <span
                 key={topic.id}
-                className="px-2 py-0.5 rounded text-[10px] font-mono text-[#7B8CDE]/70 bg-[rgba(0,229,255,0.03)] border border-[rgba(0,229,255,0.08)]"
+                className="px-2 py-0.5 rounded text-[10px] font-mono text-[#999999]/70 bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.04)]"
               >
                 {topic.display_name}
               </span>
@@ -255,8 +255,8 @@ export default function PaperDetailPanel({
           <div className="hud-divider my-4" />
           <div>
             <div className="flex items-center gap-2 mb-3">
-              <span className="hud-label text-[#00E5FF]/50">Graph Relationships</span>
-              <div className="flex-1 h-px bg-gradient-to-r from-[rgba(0,229,255,0.15)] to-transparent" />
+              <span className="hud-label text-[#D4AF37]/50">Graph Relationships</span>
+              <div className="flex-1 h-px bg-gradient-to-r from-[rgba(255,255,255,0.08)] to-transparent" />
             </div>
             <div className="grid grid-cols-2 gap-2 text-xs font-mono">
               <div className="hud-panel-clean rounded-lg p-2.5">
@@ -273,7 +273,7 @@ export default function PaperDetailPanel({
               </div>
               <div className="hud-panel-clean rounded-lg p-2.5">
                 <div className="flex items-center gap-1 mb-0.5">
-                  <Cpu className="w-2.5 h-2.5 text-[#7B8CDE]/40" />
+                  <Cpu className="w-2.5 h-2.5 text-[#999999]/40" />
                   <span className="hud-label">AI</span>
                 </div>
                 <div className="hud-value text-sm">{relationshipSummary.conceptualCount}</div>
@@ -294,18 +294,18 @@ export default function PaperDetailPanel({
         <>
           <div className="hud-divider my-4" />
           <div>
-            <span className="hud-label text-[#7B8CDE]/50">Expanded From</span>
+            <span className="hud-label text-[#999999]/50">Expanded From</span>
             <button
               onClick={() => {
                 const store = useGraphStore.getState();
                 store.selectPaper(parentPaper);
                 window.dispatchEvent(new CustomEvent('focusPaper', { detail: { paperId: parentPaper.id } }));
               }}
-              className="block mt-1.5 text-sm text-[#00E5FF]/80 hover:text-[#00E5FF] transition-colors text-left leading-snug"
+              className="block mt-1.5 text-sm text-[#D4AF37]/80 hover:text-[#D4AF37] transition-colors text-left leading-snug"
             >
               {parentPaper.title.length > 80 ? parentPaper.title.substring(0, 80) + '...' : parentPaper.title}
             </button>
-            <div className="text-[10px] text-[#7B8CDE]/40 mt-0.5 font-mono">
+            <div className="text-[10px] text-[#999999]/40 mt-0.5 font-mono">
               {parentPaper.authors?.[0]?.name} {parentPaper.year}
             </div>
           </div>
@@ -336,7 +336,7 @@ export default function PaperDetailPanel({
         {/* Citation Path Finder */}
         <div className="hud-panel-clean rounded-lg p-3">
           <div className="flex items-center gap-1.5 mb-2">
-            <RouteIcon className="w-3 h-3 text-[#7B8CDE]/50" />
+            <RouteIcon className="w-3 h-3 text-[#999999]/50" />
             <span className="hud-label">Citation Path Finder</span>
           </div>
           <div className="flex flex-col gap-1.5">
@@ -351,8 +351,8 @@ export default function PaperDetailPanel({
               }}
               className={`flex items-center justify-center gap-2 w-full px-3 py-2 rounded-lg text-[10px] font-mono uppercase tracking-wider transition-all border ${
                 pathStart === paper.id
-                  ? 'bg-[#00E5FF]/15 text-[#00E5FF] border-[#00E5FF]/30 shadow-[0_0_8px_rgba(0,229,255,0.1)]'
-                  : 'bg-[rgba(0,229,255,0.03)] hover:bg-[rgba(0,229,255,0.06)] text-[#7B8CDE] border-[rgba(0,229,255,0.08)] hover:border-[rgba(0,229,255,0.15)]'
+                  ? 'bg-[#D4AF37]/15 text-[#D4AF37] border-[#D4AF37]/30 shadow-[0_0_8px_rgba(212,175,55,0.12)]'
+                  : 'bg-[rgba(255,255,255,0.02)] hover:bg-[rgba(255,255,255,0.03)] text-[#999999] border-[rgba(255,255,255,0.04)] hover:border-[rgba(255,255,255,0.08)]'
               }`}
             >
               {pathStart === paper.id ? 'PATH START SET' : 'SET AS PATH START'}
@@ -369,13 +369,13 @@ export default function PaperDetailPanel({
               className={`flex items-center justify-center gap-2 w-full px-3 py-2 rounded-lg text-[10px] font-mono uppercase tracking-wider transition-all border ${
                 pathEnd === paper.id
                   ? 'bg-[#FFD700]/15 text-[#FFD700] border-[#FFD700]/30 shadow-[0_0_8px_rgba(255,215,0,0.1)]'
-                  : 'bg-[rgba(0,229,255,0.03)] hover:bg-[rgba(0,229,255,0.06)] text-[#7B8CDE] border-[rgba(0,229,255,0.08)] hover:border-[rgba(0,229,255,0.15)]'
+                  : 'bg-[rgba(255,255,255,0.02)] hover:bg-[rgba(255,255,255,0.03)] text-[#999999] border-[rgba(255,255,255,0.04)] hover:border-[rgba(255,255,255,0.08)]'
               }`}
             >
               {pathEnd === paper.id ? 'PATH END SET' : 'SET AS PATH END'}
             </button>
             {pathStart && pathEnd && pathStart !== paper.id && pathEnd !== paper.id && (
-              <div className="text-[10px] text-[#7B8CDE]/40 text-center font-mono py-1">
+              <div className="text-[10px] text-[#999999]/40 text-center font-mono py-1">
                 Start + End selected — open either paper to find path
               </div>
             )}
@@ -401,7 +401,7 @@ export default function PaperDetailPanel({
                 )}
                 <button
                   onClick={() => { setActivePath(null); setPathStart(null); setPathEnd(null); }}
-                  className="ml-2 text-[#7B8CDE]/40 hover:text-[#7B8CDE] transition-colors"
+                  className="ml-2 text-[#999999]/40 hover:text-[#999999] transition-colors"
                 >
                   clear
                 </button>
@@ -427,7 +427,7 @@ export default function PaperDetailPanel({
             href={`https://doi.org/${paper.doi}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg text-[10px] font-mono text-[#7B8CDE] transition-all border border-[rgba(0,229,255,0.08)] hover:border-[rgba(0,229,255,0.15)] hover:bg-[rgba(0,229,255,0.03)]"
+            className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg text-[10px] font-mono text-[#999999] transition-all border border-[rgba(255,255,255,0.04)] hover:border-[rgba(255,255,255,0.08)] hover:bg-[rgba(255,255,255,0.02)]"
           >
             <ExternalLink className="w-3.5 h-3.5" />
             DOI: {paper.doi}
@@ -438,14 +438,14 @@ export default function PaperDetailPanel({
         <div className="flex gap-2">
           <button
             onClick={() => downloadFile(toBibtex(paper), `${paper.id}.bib`, 'text/plain')}
-            className="flex items-center justify-center gap-1.5 flex-1 px-3 py-2 rounded-lg text-[10px] font-mono uppercase tracking-wider text-[#7B8CDE] transition-all border border-[rgba(0,229,255,0.08)] hover:border-[rgba(0,229,255,0.15)] hover:bg-[rgba(0,229,255,0.03)]"
+            className="flex items-center justify-center gap-1.5 flex-1 px-3 py-2 rounded-lg text-[10px] font-mono uppercase tracking-wider text-[#999999] transition-all border border-[rgba(255,255,255,0.04)] hover:border-[rgba(255,255,255,0.08)] hover:bg-[rgba(255,255,255,0.02)]"
           >
             <Download className="w-3 h-3" />
             BibTeX
           </button>
           <button
             onClick={() => downloadFile(toRIS(paper), `${paper.id}.ris`, 'text/plain')}
-            className="flex items-center justify-center gap-1.5 flex-1 px-3 py-2 rounded-lg text-[10px] font-mono uppercase tracking-wider text-[#7B8CDE] transition-all border border-[rgba(0,229,255,0.08)] hover:border-[rgba(0,229,255,0.15)] hover:bg-[rgba(0,229,255,0.03)]"
+            className="flex items-center justify-center gap-1.5 flex-1 px-3 py-2 rounded-lg text-[10px] font-mono uppercase tracking-wider text-[#999999] transition-all border border-[rgba(255,255,255,0.04)] hover:border-[rgba(255,255,255,0.08)] hover:bg-[rgba(255,255,255,0.02)]"
           >
             <Download className="w-3 h-3" />
             RIS

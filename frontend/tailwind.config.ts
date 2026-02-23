@@ -9,31 +9,30 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Core void
         background: '#000000',
-        'void': '#000000',
-        surface: '#060a14',
-        'surface-hover': '#0c1220',
-        border: '#141e38',
+        void: '#000000',
+        surface: '#0A0A0A',
+        'surface-hover': '#111111',
+        'surface-elevated': '#161616',
+        border: '#1A1A1A',
+        'border-hover': '#2A2A2A',
+        'border-active': '#3A3A3A',
         // Text
-        'text-primary': '#E8EAF6',
-        'text-secondary': '#7B8CDE',
-        'text-muted': '#4a5580',
-        // System accent
-        accent: '#00E5FF',
-        'accent-green': '#2ECC71',
-        'accent-orange': '#E67E22',
-        'accent-red': '#E74C3C',
-        'accent-purple': '#9B59B6',
-        'accent-yellow': '#F39C12',
-        'accent-gold': '#FFD700',
-        'accent-amber': '#FFAB40',
-        // Cosmic palette
-        'cosmic-glow': '#00E5FF',
-        'cosmic-nebula': '#6c5ce7',
-        'cosmic-star': '#a29bfe',
-        'accent-warm': '#fd79a8',
-        // Field of Study - Full Spectrum
+        'text-primary': '#FFFFFF',
+        'text-secondary': '#999999',
+        'text-muted': '#555555',
+        'text-dim': '#333333',
+        // Accent
+        accent: '#D4AF37',
+        'accent-hover': '#E5C04B',
+        'accent-muted': '#B8963A',
+        // Legacy support (some components may still reference these)
+        'cosmic-glow': '#D4AF37',
+        'cosmic-nebula': '#8B7355',
+        'cosmic-star': '#C4A777',
+        'accent-warm': '#D4AF37',
+        'accent-gold': '#D4AF37',
+        // Field of Study - more muted versions
         'field-cs': '#4FC3F7',
         'field-medicine': '#66BB6A',
         'field-physics': '#AB47BC',
@@ -44,13 +43,10 @@ const config: Config = {
         'field-chemistry': '#FF7043',
         'field-earth': '#8D6E63',
         'field-humanities': '#EC407A',
-        // HUD
-        'hud-border': 'rgba(0,229,255,0.12)',
-        'hud-bg': 'rgba(4,8,18,0.88)',
-        'hud-glow': 'rgba(0,229,255,0.06)',
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
+        serif: ['Playfair Display', 'Georgia', 'serif'],
         mono: ['JetBrains Mono', 'monospace'],
       },
       backdropBlur: {

@@ -127,15 +127,15 @@ export default function SeedChatPanel() {
   const isEmpty = messages.length === 0;
 
   return (
-    <div className="flex flex-col h-full bg-[rgba(4,8,18,0.5)]">
+    <div className="flex flex-col h-full bg-[rgba(10,10,10,0.5)]">
       {/* Header */}
-      <div className="flex-shrink-0 px-4 py-3 border-b border-[rgba(0,229,255,0.08)]">
+      <div className="flex-shrink-0 px-4 py-3 border-b border-[rgba(255,255,255,0.04)]">
         <div className="flex items-center gap-2">
-          <MessageCircle className="w-4 h-4 text-[#00E5FF]" />
-          <span className="hud-label text-[#00E5FF]/60">RESEARCH ASSISTANT</span>
+          <MessageCircle className="w-4 h-4 text-[#D4AF37]" />
+          <span className="hud-label text-[#D4AF37]/60">RESEARCH ASSISTANT</span>
         </div>
         {graphData && (
-          <p className="text-[10px] text-[#7B8CDE]/35 font-mono mt-1">
+          <p className="text-[10px] text-[#999999]/35 font-mono mt-1">
             {graphData.nodes.length} papers · {graphData.clusters.length} clusters loaded
           </p>
         )}
@@ -148,8 +148,8 @@ export default function SeedChatPanel() {
       >
         {isEmpty && !isLoading && (
           <div className="flex flex-col items-center justify-center h-full text-center py-8 px-4">
-            <MessageCircle className="w-8 h-8 text-[rgba(0,229,255,0.08)] mb-3" />
-            <p className="text-[#7B8CDE]/40 text-[10px] font-mono mb-4">
+            <MessageCircle className="w-8 h-8 text-[rgba(255,255,255,0.04)] mb-3" />
+            <p className="text-[#999999]/40 text-[10px] font-mono mb-4">
               Ask anything about your paper graph
             </p>
             <div className="w-full space-y-1.5">
@@ -165,7 +165,7 @@ export default function SeedChatPanel() {
               ))}
             </div>
             {!graphData && (
-              <p className="text-[10px] text-[#7B8CDE]/25 font-mono mt-4">
+              <p className="text-[10px] text-[#999999]/25 font-mono mt-4">
                 Load a graph to begin
               </p>
             )}
@@ -180,12 +180,12 @@ export default function SeedChatPanel() {
               <div
                 className={
                   msg.role === 'user'
-                    ? 'max-w-[85%] px-3 py-2 hud-panel-clean rounded-lg text-xs font-mono bg-[rgba(0,229,255,0.06)] text-[#E8EAF6] rounded-tr-sm'
-                    : 'max-w-[95%] px-3 py-2 hud-panel-clean rounded-lg text-xs font-mono text-[#a29bfe]/90 rounded-tl-sm'
+                    ? 'max-w-[85%] px-3 py-2 hud-panel-clean rounded-lg text-xs font-mono bg-[rgba(255,255,255,0.03)] text-white rounded-tr-sm'
+                    : 'max-w-[95%] px-3 py-2 hud-panel-clean rounded-lg text-xs font-mono text-[#999999] rounded-tl-sm'
                 }
               >
                 {msg.role === 'assistant' && (
-                  <div className="hud-label text-[#00E5FF]/40 mb-1">
+                  <div className="hud-label text-[#D4AF37]/40 mb-1">
                     ASSISTANT
                   </div>
                 )}
@@ -216,7 +216,7 @@ export default function SeedChatPanel() {
         {isLoading && (
           <div className="flex justify-start">
             <div className="px-3 py-2 hud-panel-clean rounded-lg rounded-tl-sm">
-              <div className="flex items-center gap-2 text-[#00E5FF]/50">
+              <div className="flex items-center gap-2 text-[#D4AF37]/50">
                 <Loader2 className="w-3 h-3 animate-spin" />
                 <span className="hud-label">THINKING...</span>
               </div>
@@ -244,7 +244,7 @@ export default function SeedChatPanel() {
               placeholder={graphData ? 'Ask about your graph...' : 'Load a graph first...'}
               disabled={!graphData || isLoading}
               rows={2}
-              className="flex-1 resize-none bg-transparent border-none rounded-lg px-2 py-1.5 text-xs font-mono text-[#E8EAF6] placeholder-[#7B8CDE]/25 focus:outline-none disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              className="flex-1 resize-none bg-transparent border-none rounded-lg px-2 py-1.5 text-xs font-mono text-white placeholder-[#999999]/25 focus:outline-none disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             />
             <button
               type="submit"
@@ -260,7 +260,7 @@ export default function SeedChatPanel() {
             </button>
           </form>
         </div>
-        <p className="text-[9px] text-[#7B8CDE]/25 font-mono mt-1.5 text-center">
+        <p className="text-[9px] text-[#999999]/25 font-mono mt-1.5 text-center">
           Enter to send · Shift+Enter for newline
         </p>
       </div>

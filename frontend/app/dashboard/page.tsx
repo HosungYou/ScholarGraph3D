@@ -32,7 +32,7 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b border-[#1a2555]/50 glass-strong">
+      <header className="border-b border-[#1A1A1A] glass-strong">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="flex flex-col">

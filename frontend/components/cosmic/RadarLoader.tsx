@@ -19,7 +19,7 @@ export default function RadarLoader({ message = 'SCANNING...', size = 'md' }: Ra
         {/* Sweep gradient */}
         <div className="absolute inset-0 rounded-full animate-radar-sweep"
           style={{
-            background: 'conic-gradient(from 0deg, transparent 0%, transparent 70%, rgba(0, 229, 255, 0.3) 90%, transparent 100%)',
+            background: 'conic-gradient(from 0deg, transparent 0%, transparent 70%, rgba(212, 175, 55, 0.3) 90%, transparent 100%)',
           }}
         />
         {/* Center dot */}

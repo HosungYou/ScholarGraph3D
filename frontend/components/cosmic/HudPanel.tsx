@@ -24,7 +24,7 @@ export default function HudPanel({
 }: HudPanelProps) {
   const baseClass = variant === 'clean' ? 'hud-panel-clean' : 'hud-panel';
   const elevatedClass = variant === 'elevated'
-    ? 'shadow-[0_0_60px_rgba(0,229,255,0.04),inset_0_1px_0_rgba(0,229,255,0.08)]'
+    ? 'shadow-[0_0_60px_rgba(212,175,55,0.04),inset_0_1px_0_rgba(212,175,55,0.08)]'
     : '';
 
   const statusColor = {
@@ -37,7 +37,7 @@ export default function HudPanel({
   return (
     <div className={`${baseClass} ${elevatedClass} p-4 ${className}`}>
       {title && (
-        <div className="flex items-center gap-2 mb-3 pb-2 border-b border-[rgba(0,229,255,0.08)]">
+        <div className="flex items-center gap-2 mb-3 pb-2 border-b border-[rgba(255,255,255,0.04)]">
           {icon && <span className="text-cosmic-glow/60">{icon}</span>}
           <h3 className="hud-label text-cosmic-glow/70">
             {title}

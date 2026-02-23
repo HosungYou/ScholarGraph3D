@@ -36,8 +36,8 @@ export function createStarNode(options: StarNodeOptions): THREE.Group {
   // Determine display color
   let displayColor = starColors.core;
   if (isSelected) displayColor = '#FFD700';
-  else if (isHighlightedByPanel) displayColor = '#FF6B6B';
-  else if (isHighlighted) displayColor = '#4ECDC4';
+  else if (isHighlightedByPanel) displayColor = '#D4AF37';
+  else if (isHighlighted) displayColor = '#FFFFFF';
 
   let displayOpacity = opacity;
   if (isSelected) displayOpacity = 1;
@@ -59,7 +59,7 @@ export function createStarNode(options: StarNodeOptions): THREE.Group {
       uPhase: { value: phase },
       uTwinkleRate: { value: twinkleRate },
       uOpacity: { value: displayOpacity },
-      uEmissiveIntensity: { value: isSelected ? 0.8 : isHighlighted ? 0.6 : 0.35 },
+      uEmissiveIntensity: { value: isSelected ? 0.8 : isHighlighted ? 0.6 : 0.2 },
     },
     transparent: true,
     depthWrite: displayOpacity > 0.5,
@@ -74,12 +74,12 @@ export function createStarNode(options: StarNodeOptions): THREE.Group {
       map: getGlowTexture(),
       color: new THREE.Color(starColors.glow),
       transparent: true,
-      opacity: displayOpacity * 0.9,
+      opacity: displayOpacity * 0.35,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     })
   );
-  glowSprite.scale.setScalar(size * 6);
+  glowSprite.scale.setScalar(size * 2.5);
   group.add(glowSprite);
 
   // Selected: lens flare sprite
@@ -122,11 +122,11 @@ export function createStarNode(options: StarNodeOptions): THREE.Group {
 
   // Top 10% citation: supernova burst (pulsing ring + particles)
   if (showCitationAura && isTopCited && !isSelected) {
-    const ringGeo = new THREE.RingGeometry(size * 1.5, size * 1.8, 32);
+    const ringGeo = new THREE.RingGeometry(size * 1.5, size * 1.65, 32);
     const ringMat = new THREE.MeshBasicMaterial({
       color: new THREE.Color('#FFD700'),
       transparent: true,
-      opacity: 0.4,
+      opacity: 0.2,
       side: THREE.DoubleSide,
       depthWrite: false,
     });
@@ -141,12 +141,12 @@ export function createStarNode(options: StarNodeOptions): THREE.Group {
       update: (time) => {
         const scale = 1.0 + Math.sin(time * 2 + phase) * 0.4;
         ring.scale.setScalar(scale);
-        ringMat.opacity = 0.3 + Math.sin(time * 2 + phase) * 0.15;
+        ringMat.opacity = 0.15 + Math.sin(time * 2 + phase) * 0.08;
       },
     });
 
-    // Orbiting particles (12)
-    const particleCount = 12;
+    // Orbiting particles (6)
+    const particleCount = 6;
     const particleGeo = new THREE.BufferGeometry();
     const positions = new Float32Array(particleCount * 3);
     for (let i = 0; i < particleCount; i++) {
@@ -160,7 +160,7 @@ export function createStarNode(options: StarNodeOptions): THREE.Group {
       color: 0xFFD700,
       size: 1.2,
       transparent: true,
-      opacity: 0.8,
+      opacity: 0.4,
       blending: THREE.AdditiveBlending,
     });
     const particles = new THREE.Points(particleGeo, particleMat);
@@ -170,8 +170,8 @@ export function createStarNode(options: StarNodeOptions): THREE.Group {
   // Bridge node: binary star (2 small spheres orbiting)
   if (isBridge) {
     const orbitGroup = new THREE.Group();
-    const companion1Geo = new THREE.SphereGeometry(size * 0.3, 8, 8);
-    const companion2Geo = new THREE.SphereGeometry(size * 0.25, 8, 8);
+    const companion1Geo = new THREE.SphereGeometry(size * 0.2, 8, 8);
+    const companion2Geo = new THREE.SphereGeometry(size * 0.15, 8, 8);
     const compMat = new THREE.MeshBasicMaterial({
       color: new THREE.Color('#FFD700'),
       transparent: true,
@@ -195,11 +195,11 @@ export function createStarNode(options: StarNodeOptions): THREE.Group {
 
   // Bloom effect
   if (showBloom && isSelected) {
-    const bloomGeo = new THREE.SphereGeometry(size * 1.3, 8, 8);
+    const bloomGeo = new THREE.SphereGeometry(size * 1.1, 8, 8);
     const bloomMat = new THREE.MeshBasicMaterial({
       color: new THREE.Color(displayColor),
       transparent: true,
-      opacity: 0.12,
+      opacity: 0.06,
       depthWrite: false,
     });
     group.add(new THREE.Mesh(bloomGeo, bloomMat));

@@ -103,10 +103,10 @@ export default function ClusterPanel() {
     return (
       <div className="p-4">
         <div className="flex items-center gap-2 mb-3">
-          <Layers className="w-4 h-4 text-[#00E5FF]/60" />
-          <span className="hud-label text-[#00E5FF]/50">SECTOR SCANNER</span>
+          <Layers className="w-4 h-4 text-[#D4AF37]/60" />
+          <span className="hud-label text-[#D4AF37]/50">SECTOR SCANNER</span>
         </div>
-        <p className="text-xs text-[#7B8CDE]/40 font-mono">
+        <p className="text-xs text-[#999999]/40 font-mono">
           Search to see topic clusters
         </p>
       </div>
@@ -119,10 +119,10 @@ export default function ClusterPanel() {
     <div className="p-4">
       {/* Header */}
       <div className="flex items-center gap-2 mb-4">
-        <Layers className="w-4 h-4 text-[#00E5FF]" />
-        <span className="hud-label text-[#00E5FF]/60">SECTOR SCANNER</span>
-        <div className="flex-1 h-px bg-gradient-to-r from-[rgba(0,229,255,0.12)] to-transparent" />
-        <span className="hud-label text-[#7B8CDE]/40">{clusters.length}</span>
+        <Layers className="w-4 h-4 text-[#D4AF37]" />
+        <span className="hud-label text-[#D4AF37]/60">SECTOR SCANNER</span>
+        <div className="flex-1 h-px bg-gradient-to-r from-[rgba(255,255,255,0.06)] to-transparent" />
+        <span className="hud-label text-[#999999]/40">{clusters.length}</span>
       </div>
 
       {/* Cluster list */}
@@ -141,8 +141,8 @@ export default function ClusterPanel() {
               transition={{ delay: i * 0.03 }}
               className={`rounded-lg border transition-all ${
                 isSelected
-                  ? 'bg-[rgba(0,229,255,0.04)] border-[rgba(0,229,255,0.12)]'
-                  : 'hover:bg-[rgba(0,229,255,0.02)] border-transparent'
+                  ? 'bg-[rgba(255,255,255,0.02)] border-[rgba(255,255,255,0.06)]'
+                  : 'hover:bg-[rgba(255,255,255,0.01)] border-transparent'
               } ${isHidden ? 'opacity-40' : ''}`}
             >
               <div className="flex items-center gap-2 p-3">
@@ -165,15 +165,15 @@ export default function ClusterPanel() {
                   <div className="text-sm font-medium text-text-primary truncate">
                     {cluster.label}
                   </div>
-                  <div className="flex items-center gap-2 text-[10px] font-mono text-[#7B8CDE]/50 mt-0.5">
+                  <div className="flex items-center gap-2 text-[10px] font-mono text-[#999999]/50 mt-0.5">
                     <span>{cluster.paper_count} papers</span>
                     {edgeCount > 0 && (
-                      <span className="text-[#7B8CDE]/30">{edgeCount} edges</span>
+                      <span className="text-[#999999]/30">{edgeCount} edges</span>
                     )}
                   </div>
 
                   {/* Density bar */}
-                  <div className="mt-1.5 h-0.5 bg-[rgba(0,229,255,0.04)] rounded-full overflow-hidden">
+                  <div className="mt-1.5 h-0.5 bg-[rgba(255,255,255,0.02)] rounded-full overflow-hidden">
                     <div
                       className="h-full rounded-full transition-all duration-500"
                       style={{
@@ -195,8 +195,8 @@ export default function ClusterPanel() {
                     title={isHidden ? 'Show cluster' : 'Hide cluster'}
                     className={`p-1.5 rounded-lg transition-all ${
                       isHidden
-                        ? 'text-[#7B8CDE]/30 hover:text-[#7B8CDE]'
-                        : 'text-[#00E5FF]/50 hover:text-[#00E5FF]'
+                        ? 'text-[#999999]/30 hover:text-[#999999]'
+                        : 'text-[#D4AF37]/50 hover:text-[#D4AF37]'
                     }`}
                   >
                     {isHidden ? (
@@ -214,13 +214,13 @@ export default function ClusterPanel() {
                       );
                     }}
                     title="Focus on cluster"
-                    className="p-1.5 rounded-lg text-[#7B8CDE]/30 hover:text-[#7B8CDE] transition-colors"
+                    className="p-1.5 rounded-lg text-[#999999]/30 hover:text-[#999999] transition-colors"
                   >
                     <Focus className="w-3.5 h-3.5" />
                   </button>
 
                   <ChevronRight
-                    className={`w-3.5 h-3.5 text-[#7B8CDE]/30 transition-transform ${
+                    className={`w-3.5 h-3.5 text-[#999999]/30 transition-transform ${
                       isSelected ? 'rotate-90' : ''
                     }`}
                   />
@@ -242,12 +242,12 @@ export default function ClusterPanel() {
           >
             {/* Topics */}
             <div className="hud-panel-clean rounded-lg p-3" style={{ borderLeft: `2px solid ${selectedCluster.color}` }}>
-              <span className="hud-label text-[#7B8CDE]/50">Top Topics</span>
+              <span className="hud-label text-[#999999]/50">Top Topics</span>
               <div className="flex flex-wrap gap-1.5 mt-2">
                 {selectedCluster.topics.slice(0, 6).map((topic) => (
                   <span
                     key={topic}
-                    className="px-2 py-0.5 rounded text-[10px] font-mono text-[#7B8CDE]/70 bg-[rgba(0,229,255,0.03)] border border-[rgba(0,229,255,0.08)]"
+                    className="px-2 py-0.5 rounded text-[10px] font-mono text-[#999999]/70 bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.04)]"
                   >
                     {topic}
                   </span>
@@ -259,8 +259,8 @@ export default function ClusterPanel() {
             {clusterStats && (
               <div className="hud-panel-clean rounded-lg p-3">
                 <div className="flex items-center gap-1.5 mb-2">
-                  <BarChart3 className="w-3.5 h-3.5 text-[#7B8CDE]/40" />
-                  <span className="hud-label text-[#7B8CDE]/50">Statistics</span>
+                  <BarChart3 className="w-3.5 h-3.5 text-[#999999]/40" />
+                  <span className="hud-label text-[#999999]/50">Statistics</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
@@ -292,9 +292,9 @@ export default function ClusterPanel() {
             {/* Paper list */}
             <div className="hud-panel-clean rounded-lg p-3">
               <div className="flex items-center gap-1.5 mb-2">
-                <FileText className="w-3.5 h-3.5 text-[#7B8CDE]/40" />
-                <span className="hud-label text-[#7B8CDE]/50">Papers</span>
-                <span className="ml-auto hud-label text-[#7B8CDE]/30">
+                <FileText className="w-3.5 h-3.5 text-[#999999]/40" />
+                <span className="hud-label text-[#999999]/50">Papers</span>
+                <span className="ml-auto hud-label text-[#999999]/30">
                   {clusterPapers.length}
                 </span>
               </div>
@@ -303,12 +303,12 @@ export default function ClusterPanel() {
                   <button
                     key={paper.id}
                     onClick={() => selectPaper(paper)}
-                    className="w-full text-left p-2 rounded-lg hover:bg-[rgba(0,229,255,0.04)] border border-transparent hover:border-[rgba(0,229,255,0.08)] transition-all group"
+                    className="w-full text-left p-2 rounded-lg hover:bg-[rgba(255,255,255,0.02)] border border-transparent hover:border-[rgba(255,255,255,0.04)] transition-all group"
                   >
-                    <div className="text-xs text-text-primary truncate group-hover:text-[#00E5FF] transition-colors">
+                    <div className="text-xs text-text-primary truncate group-hover:text-[#D4AF37] transition-colors">
                       {paper.title}
                     </div>
-                    <div className="flex items-center gap-2 text-[10px] font-mono text-[#7B8CDE]/40 mt-0.5">
+                    <div className="flex items-center gap-2 text-[10px] font-mono text-[#999999]/40 mt-0.5">
                       {paper.year && <span>{paper.year}</span>}
                       <span>{(paper.citation_count || 0).toLocaleString()} cit.</span>
                     </div>
@@ -326,7 +326,7 @@ export default function ClusterPanel() {
               {showAllPapers && clusterPapers.length > 10 && (
                 <button
                   onClick={() => setShowAllPapers(false)}
-                  className="w-full mt-2 py-1.5 text-[10px] font-mono text-[#7B8CDE]/50 hover:text-[#7B8CDE] transition-colors"
+                  className="w-full mt-2 py-1.5 text-[10px] font-mono text-[#999999]/50 hover:text-[#999999] transition-colors"
                 >
                   Show less
                 </button>

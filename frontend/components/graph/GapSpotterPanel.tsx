@@ -32,12 +32,12 @@ export default function GapSpotterPanel() {
     return (
       <div className="p-4">
         <div className="flex items-center gap-2 mb-4">
-          <Radar className="w-4 h-4 text-[#00E5FF]/60" />
-          <span className="hud-label text-[#00E5FF]/50">GAP SPOTTER</span>
+          <Radar className="w-4 h-4 text-[#D4AF37]/60" />
+          <span className="hud-label text-[#D4AF37]/50">GAP SPOTTER</span>
         </div>
         <div className="flex flex-col items-center justify-center py-8 text-center">
-          <Waypoints className="w-8 h-8 text-[rgba(0,229,255,0.08)] mb-3" />
-          <p className="text-[10px] font-mono text-[#7B8CDE]/40 leading-relaxed max-w-[200px]">
+          <Waypoints className="w-8 h-8 text-[rgba(255,255,255,0.04)] mb-3" />
+          <p className="text-[10px] font-mono text-[#999999]/40 leading-relaxed max-w-[200px]">
             No research gaps detected yet. Build a larger graph to discover connections.
           </p>
         </div>
@@ -49,10 +49,10 @@ export default function GapSpotterPanel() {
     <div className="p-4">
       {/* Header */}
       <div className="flex items-center gap-2 mb-4">
-        <Radar className="w-4 h-4 text-[#00E5FF]" />
-        <span className="hud-label text-[#00E5FF]/60">GAP SPOTTER</span>
-        <div className="flex-1 h-px bg-gradient-to-r from-[rgba(0,229,255,0.12)] to-transparent" />
-        <span className="hud-label text-[#7B8CDE]/40">
+        <Radar className="w-4 h-4 text-[#D4AF37]" />
+        <span className="hud-label text-[#D4AF37]/60">GAP SPOTTER</span>
+        <div className="flex-1 h-px bg-gradient-to-r from-[rgba(255,255,255,0.06)] to-transparent" />
+        <span className="hud-label text-[#999999]/40">
           {gaps.length} gap{gaps.length !== 1 ? 's' : ''}
         </span>
       </div>
@@ -77,29 +77,29 @@ export default function GapSpotterPanel() {
         <div className="mt-4 pt-4">
           <div className="hud-divider mb-4" />
           <div className="flex items-center gap-2 mb-3">
-            <Sparkles className="w-3.5 h-3.5 text-[#a29bfe]" />
-            <span className="hud-label text-[#a29bfe]/60">FRONTIER PAPERS</span>
-            <div className="flex-1 h-px bg-gradient-to-r from-[rgba(162,155,254,0.12)] to-transparent" />
-            <span className="hud-label text-[#7B8CDE]/30">
+            <Sparkles className="w-3.5 h-3.5 text-[#D4AF37]" />
+            <span className="hud-label text-[#D4AF37]/60">FRONTIER PAPERS</span>
+            <div className="flex-1 h-px bg-gradient-to-r from-[rgba(212,175,55,0.12)] to-transparent" />
+            <span className="hud-label text-[#999999]/30">
               {frontierPapers.length}
             </span>
           </div>
-          <p className="text-[10px] font-mono text-[#7B8CDE]/35 mb-2 leading-relaxed">
+          <p className="text-[10px] font-mono text-[#999999]/35 mb-2 leading-relaxed">
             Papers with many unexplored connections
           </p>
           <div className="space-y-1">
             {frontierPapers.slice(0, 8).map((paper) => (
               <div
                 key={paper.id}
-                className="p-2 rounded-lg border border-[rgba(162,155,254,0.08)] bg-[rgba(162,155,254,0.02)] hover:border-[rgba(162,155,254,0.15)] hover:bg-[rgba(162,155,254,0.04)] transition-all"
+                className="p-2 rounded-lg border border-[rgba(212,175,55,0.08)] bg-[rgba(212,175,55,0.02)] hover:border-[rgba(212,175,55,0.15)] hover:bg-[rgba(212,175,55,0.04)] transition-all"
               >
-                <p className="text-[10px] font-mono text-[#a29bfe]/70 leading-snug line-clamp-2">
+                <p className="text-[10px] font-mono text-[#D4AF37]/70 leading-snug line-clamp-2">
                   {paper.title}
                 </p>
               </div>
             ))}
             {frontierPapers.length > 8 && (
-              <p className="text-[10px] font-mono text-[#7B8CDE]/30 pt-1 text-center">
+              <p className="text-[10px] font-mono text-[#999999]/30 pt-1 text-center">
                 +{frontierPapers.length - 8} more frontier papers
               </p>
             )}
@@ -123,31 +123,31 @@ function GapCard({ gap, onMouseEnter, onMouseLeave }: GapCardProps) {
 
   const strengthColor =
     gap.gap_strength > 0.75
-      ? '#00E5FF'
+      ? '#D4AF37'
       : gap.gap_strength > 0.5
-      ? '#7B8CDE'
-      : '#3a4a8a';
+      ? '#999999'
+      : '#444444';
 
   return (
     <div
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      className="hud-panel-clean rounded-lg hover:border-[rgba(0,229,255,0.15)] transition-all cursor-default"
+      className="hud-panel-clean rounded-lg hover:border-[rgba(212,175,55,0.15)] transition-all cursor-default"
     >
       <div className="p-3">
         {/* Cluster pair */}
         <div className="flex items-center gap-1.5 mb-2">
-          <Waypoints className="w-3 h-3 text-[#7B8CDE]/40 flex-shrink-0" />
+          <Waypoints className="w-3 h-3 text-[#999999]/40 flex-shrink-0" />
           <div className="flex items-center gap-1 min-w-0 flex-1">
-            <span className="text-[10px] font-mono text-[#7B8CDE]/70 truncate max-w-[80px]">
+            <span className="text-[10px] font-mono text-[#999999]/70 truncate max-w-[80px]">
               {gap.cluster_a.label}
             </span>
-            <span className="text-[10px] font-mono text-[rgba(0,229,255,0.2)]">↔</span>
-            <span className="text-[10px] font-mono text-[#7B8CDE]/70 truncate max-w-[80px]">
+            <span className="text-[10px] font-mono text-[rgba(255,255,255,0.1)]">↔</span>
+            <span className="text-[10px] font-mono text-[#999999]/70 truncate max-w-[80px]">
               {gap.cluster_b.label}
             </span>
           </div>
-          <span className="hud-label text-[#7B8CDE]/30 flex-shrink-0 ml-auto">
+          <span className="hud-label text-[#999999]/30 flex-shrink-0 ml-auto">
             {gap.cluster_a.paper_count + gap.cluster_b.paper_count}p
           </span>
         </div>
@@ -160,7 +160,7 @@ function GapCard({ gap, onMouseEnter, onMouseLeave }: GapCardProps) {
               {strengthPct}%
             </span>
           </div>
-          <div className="h-0.5 bg-[rgba(0,229,255,0.04)] rounded-full overflow-hidden">
+          <div className="h-0.5 bg-[rgba(255,255,255,0.02)] rounded-full overflow-hidden">
             <div
               className="h-full rounded-full transition-all duration-500"
               style={{
@@ -180,22 +180,22 @@ function GapCard({ gap, onMouseEnter, onMouseLeave }: GapCardProps) {
               {gap.bridge_papers.slice(0, 3).map((bp) => (
                 <div
                   key={bp.paper_id}
-                  className="flex items-start gap-1.5 px-1.5 py-1 rounded hover:bg-[rgba(0,229,255,0.03)] transition-colors"
+                  className="flex items-start gap-1.5 px-1.5 py-1 rounded hover:bg-[rgba(255,255,255,0.02)] transition-colors"
                 >
                   <div
                     className="w-1 h-1 rounded-full flex-shrink-0 mt-1.5"
-                    style={{ backgroundColor: '#00E5FF', opacity: bp.score * 0.8 }}
+                    style={{ backgroundColor: '#D4AF37', opacity: bp.score * 0.8 }}
                   />
-                  <span className="text-[10px] font-mono text-[#7B8CDE]/60 leading-snug line-clamp-2">
+                  <span className="text-[10px] font-mono text-[#999999]/60 leading-snug line-clamp-2">
                     {bp.title}
                   </span>
-                  <span className="text-[9px] font-mono text-[#7B8CDE]/25 flex-shrink-0 ml-auto">
+                  <span className="text-[9px] font-mono text-[#999999]/25 flex-shrink-0 ml-auto">
                     {Math.round(bp.score * 100)}%
                   </span>
                 </div>
               ))}
               {gap.bridge_papers.length > 3 && (
-                <p className="text-[9px] font-mono text-[#7B8CDE]/25 px-1.5">
+                <p className="text-[9px] font-mono text-[#999999]/25 px-1.5">
                   +{gap.bridge_papers.length - 3} more
                 </p>
               )}
