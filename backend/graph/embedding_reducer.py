@@ -3,19 +3,57 @@ UMAP 3D reduction for SPECTER2 embeddings.
 
 Reduces 768-dim SPECTER2 embeddings to 3D coordinates for visualization.
 Z-axis is overridden with publication year for temporal interpretation (v0.7.0).
+
+v2.0.2: PCA pre-reduction (768→100D) before UMAP to avoid 50+ second
+UMAP fits on low-CPU environments (Render Starter 0.5 vCPU).
 """
 
 import logging
 import math
+import time
 from typing import List, Optional
 
 import numpy as np
 
 logger = logging.getLogger(__name__)
 
+# Threshold above which PCA pre-reduction kicks in before UMAP
+_PCA_THRESHOLD = 200
+
 
 class EmbeddingReducer:
     """Reduces high-dimensional embeddings to 3D coordinates via UMAP."""
+
+    @staticmethod
+    def _pca_pre_reduce(embeddings: np.ndarray, target_dim: int = 100) -> np.ndarray:
+        """
+        Fast PCA pre-reduction for high-dimensional embeddings.
+
+        Reduces 768-dim SPECTER2 embeddings to ~100D before UMAP,
+        cutting UMAP fit time from ~50s to ~3s on 0.5 vCPU.
+
+        Args:
+            embeddings: (N, D) array where D > target_dim
+            target_dim: Target dimensionality (default 100)
+
+        Returns:
+            (N, target_dim) array
+        """
+        from sklearn.decomposition import PCA
+
+        effective_dim = min(target_dim, embeddings.shape[0] - 1, embeddings.shape[1])
+        if effective_dim <= 0 or embeddings.shape[1] <= target_dim:
+            return embeddings
+
+        t0 = time.time()
+        pca = PCA(n_components=effective_dim, random_state=42)
+        reduced = pca.fit_transform(embeddings)
+        variance_kept = sum(pca.explained_variance_ratio_) * 100
+        logger.info(
+            f"PCA {embeddings.shape[1]}→{effective_dim}D: "
+            f"{variance_kept:.1f}% variance retained in {time.time() - t0:.2f}s"
+        )
+        return reduced
 
     def reduce_to_3d(
         self,
@@ -52,9 +90,15 @@ class EmbeddingReducer:
             logger.warning("Need at least 3 embeddings for UMAP, returning zeros")
             return np.zeros((embeddings.shape[0], 3))
 
-        # Adjust n_neighbors for small datasets
-        effective_neighbors = min(n_neighbors, embeddings.shape[0] - 1)
+        # PCA pre-reduction for high-dimensional input
+        input_data = embeddings
+        if embeddings.shape[1] > _PCA_THRESHOLD:
+            input_data = self._pca_pre_reduce(embeddings, target_dim=100)
 
+        # Adjust n_neighbors for small datasets
+        effective_neighbors = min(n_neighbors, input_data.shape[0] - 1)
+
+        t0 = time.time()
         reducer = UMAP(
             n_components=3,
             n_neighbors=effective_neighbors,
@@ -63,8 +107,8 @@ class EmbeddingReducer:
             random_state=random_state,
         )
 
-        coords_3d = reducer.fit_transform(embeddings)
-        logger.info(f"Reduced {embeddings.shape} to {coords_3d.shape} via UMAP")
+        coords_3d = reducer.fit_transform(input_data)
+        logger.info(f"UMAP {input_data.shape}→{coords_3d.shape} in {time.time() - t0:.2f}s")
 
         # Override Z-axis with publication year (temporal depth)
         if use_temporal_z and years is not None and len(years) == embeddings.shape[0]:
@@ -81,10 +125,11 @@ class EmbeddingReducer:
         random_state: int = 42,
     ) -> np.ndarray:
         """
-        Reduce 768-dim embeddings to intermediate dimension (50D) for clustering.
+        Reduce high-dim embeddings to intermediate dimension (50D) for clustering.
 
-        Used before HDBSCAN to avoid double-distortion bug:
-        768D → 50D UMAP (for clustering) — NOT → 3D then cluster.
+        Pipeline (v2.0.2):
+        - If input dim > _PCA_THRESHOLD (200): PCA pre-reduce to 100D first (~0.01s)
+        - Then UMAP 100D→50D (~2-3s instead of 768→50D at ~50s)
 
         McInnes et al. (2018): 50D UMAP preserves topological structure
         of original high-dimensional space nearly perfectly.
@@ -108,9 +153,19 @@ class EmbeddingReducer:
             # Already at or below target dimensionality
             return embeddings
 
-        effective_neighbors = min(n_neighbors, embeddings.shape[0] - 1)
-        effective_components = min(n_components, embeddings.shape[0] - 2)
+        # PCA pre-reduction for high-dimensional input (768D SPECTER2)
+        input_data = embeddings
+        if embeddings.shape[1] > _PCA_THRESHOLD:
+            input_data = self._pca_pre_reduce(embeddings, target_dim=100)
 
+        # If PCA already reduced below target, return as-is
+        if input_data.shape[1] <= n_components:
+            return input_data
+
+        effective_neighbors = min(n_neighbors, input_data.shape[0] - 1)
+        effective_components = min(n_components, input_data.shape[0] - 2)
+
+        t0 = time.time()
         reducer = UMAP(
             n_components=effective_components,
             n_neighbors=effective_neighbors,
@@ -119,10 +174,9 @@ class EmbeddingReducer:
             random_state=random_state,
         )
 
-        intermediate = reducer.fit_transform(embeddings)
+        intermediate = reducer.fit_transform(input_data)
         logger.info(
-            f"Reduced {embeddings.shape} to {intermediate.shape} "
-            f"via intermediate UMAP (for clustering)"
+            f"UMAP {input_data.shape}→{intermediate.shape} in {time.time() - t0:.2f}s"
         )
         return intermediate
 
