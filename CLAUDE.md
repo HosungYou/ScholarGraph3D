@@ -66,7 +66,7 @@ backend/
 │   ├── semantic_scholar.py  # S2 API client (semaphore rate limiter, auto-detect RPS)
 │   └── crossref.py          # CrossRef DOI lookup
 ├── graph/
-│   ├── embedding_reducer.py   # UMAP reduction (768→50D intermediate→3D)
+│   ├── embedding_reducer.py   # PCA 768→100D + UMAP 100→50D→3D (v2.0.2)
 │   ├── clusterer.py           # HDBSCAN + cluster labeling
 │   ├── similarity.py          # Cosine similarity edges (>0.7)
 │   ├── bridge_detector.py     # Cross-cluster bridge node detection (top-5%)
@@ -197,7 +197,8 @@ Seed explore returns: `{ nodes: Paper[], edges: GraphEdge[], clusters: Cluster[]
 - S2 API: 1 RPS authenticated, 0.3 RPS unauthenticated (auto-detected), non-commercial license
 - pgvector: 768-dim SPECTER2 vectors, ivfflat index with 100 lists
 - HDBSCAN min_cluster_size=5; UMAP n_neighbors=15 (50D intermediate) / 10 (3D visualization)
-- UMAP pipeline: 768→50D (once), then 50D→3D for viz + 50D direct to HDBSCAN (no double computation)
+- UMAP pipeline: PCA 768→100D (instant) + UMAP 100→50D (shared) + 50D→3D for viz; 50D direct to HDBSCAN
+- PCA pre-reduction triggers when input dim > 200 (_PCA_THRESHOLD); cuts UMAP from ~51s to ~3s on 0.5 vCPU
 - HDBSCAN runs on 50-dim intermediate UMAP embeddings (NOT 3D coords)
 - Z-axis = publication year (semantic topology on X/Y, time depth on Z)
 - Backend: 1 uvicorn worker (async handles concurrency; CPU ops via asyncio.to_thread)
@@ -229,6 +230,8 @@ Key state slices:
 | PHILOSOPHY | docs/PHILOSOPHY.md |
 | TECH_PROOF | docs/TECH_PROOF.md |
 | DESIGN_THEME | docs/DESIGN_THEME.md |
+| RELEASE_v2.0.2 | docs/RELEASE_v2.0.2.md |
+| RELEASE_v2.0.1 | docs/RELEASE_v2.0.1.md |
 | RELEASE_v2.0.0 | docs/RELEASE_v2.0.0.md |
 | Earlier releases | docs/RELEASE_v*.md |
 

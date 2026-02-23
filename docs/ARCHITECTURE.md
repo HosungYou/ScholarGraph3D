@@ -1,6 +1,6 @@
 # ScholarGraph3D — System Architecture
 
-> **Version:** 1.4 | **Last Updated:** 2026-02-23
+> **Version:** 1.5 | **Last Updated:** 2026-02-23
 > **Related:** [PRD.md](./PRD.md) | [SPEC.md](./SPEC.md) | [SDD/TDD Plan](./SDD_TDD_PLAN.md)
 
 ---
@@ -180,7 +180,7 @@ search_papers()  handler  [backend/routers/search.py]
 | **Database driver** | asyncpg | 0.29+ | Pure-async PostgreSQL driver; connection pooling (min 1, max 3); JSONB codec registration in `init` callback |
 | **Auth provider** | Supabase Auth | cloud | GoTrue-based JWT (RS256); manages `auth.users` table; RLS integration; email/password + OAuth |
 | **Embeddings** | SPECTER2 (allenai) | via S2 API | 768-dim scientific document embeddings; retrieved via S2 batch API — no local model hosting required |
-| **Dimensionality reduction** | UMAP-learn | 0.5+ | Reduces 768D SPECTER2 vectors to 3D; cosine metric; fixed `random_state=42` for reproducibility |
+| **Dimensionality reduction** | UMAP-learn + scikit-learn PCA | 0.5+ | PCA 768→100D pre-reduction + UMAP 100→50→3D; cosine metric; `random_state=42` for reproducibility |
 | **Clustering** | hdbscan | 0.8+ | Density-based; automatically determines cluster count; handles noise points (`cluster_id=-1`) |
 | **Numerical computing** | NumPy + SciPy | latest | Embedding arrays; cosine similarity matrix; ConvexHull computation for cluster hull overlays |
 | **Settings management** | pydantic-settings | 2.x | Environment variable parsing with type coercion; `.env` file support; `@lru_cache()` singleton |
@@ -216,7 +216,7 @@ backend/
 │   ├── semantic_scholar.py    # SemanticScholarClient: search, batch embeddings, 1 RPS limiter
 │   └── data_fusion.py         # DataFusionService: OA-first + S2 enrichment + DOI dedup
 ├── graph/
-│   ├── embedding_reducer.py   # EmbeddingReducer: UMAP 768D -> 3D
+│   ├── embedding_reducer.py   # EmbeddingReducer: PCA 768→100D + UMAP 100→50→3D
 │   ├── clusterer.py           # PaperClusterer: HDBSCAN + OA Topic labels + ConvexHull
 │   ├── similarity.py          # SimilarityComputer: cosine similarity edges
 │   ├── bridge_detector.py     # Phase 1.5: cross-cluster bridge node detection (top-5%)
@@ -379,10 +379,13 @@ SearchRequest {query, limit, year_start, year_end,
               Result: deduplicated List[UnifiedPaper]
     |
     v
-[Step 3] EmbeddingReducer.reduce_to_3d()
+[Step 3] EmbeddingReducer.reduce_to_intermediate() + reduce_to_3d()
     Input:  numpy array shape (N, 768)
+    Stage 0: PCA(n_components=100) pre-reduction (v2.0.2)
+             → (N, 100) — instant (~0.01s), retains ~95% variance
+             Triggered when input dim > 200 (i.e., 768D SPECTER2)
     Stage 1: UMAP(n_components=50, n_neighbors=min(15, N-1),
-                  min_dist=0.1, metric='cosine', random_state=42)
+                  min_dist=0.0, metric='cosine', random_state=42)
              → shared 50D intermediate (N, 50) — used by both clusterer and viz
     Stage 2: UMAP(n_components=3, n_neighbors=min(10, N-1),
                   min_dist=0.1, metric='cosine', random_state=42)
@@ -390,7 +393,7 @@ SearchRequest {query, limit, year_start, year_end,
     Output: (N, 3) 3D coords + (N, 50) intermediate embeddings
     Papers without embeddings: x=offset*0.5, y=10.0, z=0.0, cluster_id=-1
     Execution: asyncio.to_thread() — non-blocking event loop
-    Note: single 768→50D pass shared with clusterer eliminates double UMAP computation
+    Note: PCA pre-reduction cuts UMAP fit from ~51s to ~3s on 0.5 vCPU (Render Starter)
     |
     v
 [Step 4] PaperClusterer.cluster()
