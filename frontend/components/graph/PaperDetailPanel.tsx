@@ -48,7 +48,6 @@ export default function PaperDetailPanel({
     setActivePath,
   } = useGraphStore();
 
-  // Compute relationship summary
   const relationshipSummary = React.useMemo(() => {
     if (!graphData || !paper) return null;
     const incomingCitations = graphData.edges.filter(
@@ -64,7 +63,6 @@ export default function PaperDetailPanel({
     return { incomingCitations, outgoingCitations, similarEdges, isBridge, conceptualCount: 0 };
   }, [graphData, paper]);
 
-  // Find expansion parent paper
   const parentPaper = React.useMemo(() => {
     if (!expandedFromMap || !paper) return null;
     const parentId = expandedFromMap.get(paper.id);
@@ -87,131 +85,144 @@ export default function PaperDetailPanel({
       : abstractText;
 
   return (
-    <div className="p-5 animate-slide-in-right">
-      {/* Header */}
+    <div className="p-5">
+      {/* ── Header ── */}
       <div className="flex items-start justify-between mb-1">
         <div className="flex-1 mr-3">
-          <span className="text-[9px] font-mono uppercase tracking-widest text-[#00E5FF]/40 block mb-1">
-            OBJECT SCAN
-          </span>
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="hud-label text-[#00E5FF]/50">OBJECT SCAN</span>
+            <div className="flex-1 h-px bg-gradient-to-r from-[rgba(0,229,255,0.2)] to-transparent" />
+          </div>
           <h2 className="text-base font-semibold leading-snug text-text-primary">
             {paper.title}
           </h2>
         </div>
         <button
           onClick={onClose}
-          className="p-1.5 rounded-lg hover:bg-[#111833] transition-colors flex-shrink-0"
+          className="p-1.5 rounded-lg hover:bg-[rgba(0,229,255,0.06)] border border-transparent hover:border-[rgba(0,229,255,0.15)] transition-all flex-shrink-0"
         >
           <X className="w-4 h-4 text-[#7B8CDE] hover:text-[#00E5FF]" />
         </button>
       </div>
 
-      <div className="mb-4" />
+      {/* Visual Badges */}
+      {(citationPercentile > 0.9 || paper.is_bridge || paper.is_open_access) && (
+        <div className="mt-3 mb-4 flex flex-wrap gap-1.5">
+          {citationPercentile > 0.9 && (
+            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-[#FFD700]/10 text-[#FFD700] border border-[#FFD700]/25">
+              TOP 10% CITED
+            </span>
+          )}
+          {paper.is_bridge && (
+            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-[#a29bfe]/10 text-[#a29bfe] border border-[#a29bfe]/25">
+              BRIDGE NODE
+            </span>
+          )}
+          {paper.is_open_access && (
+            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-[#2ECC71]/10 text-[#2ECC71] border border-[#2ECC71]/25">
+              OPEN ACCESS
+            </span>
+          )}
+        </div>
+      )}
 
-      {/* Authors */}
+      <div className="hud-divider my-4" />
+
+      {/* ── Authors ── */}
       <div className="mb-4">
-        <div className="flex items-center gap-1.5 mb-1.5 text-[#7B8CDE]">
-          <Users className="w-3.5 h-3.5" />
-          <span className="text-xs font-medium uppercase tracking-wide">
-            Authors
-          </span>
+        <div className="flex items-center gap-1.5 mb-2">
+          <Users className="w-3.5 h-3.5 text-[#7B8CDE]/60" />
+          <span className="hud-label">Authors</span>
         </div>
         <div className="space-y-1">
           {paper.authors.slice(0, 5).map((author, i) => (
             <div key={i} className="text-sm text-text-primary">
               {author.name}
               {author.affiliations?.[0] && (
-                <span className="text-xs text-[#7B8CDE] ml-1">
+                <span className="text-[10px] text-[#7B8CDE]/60 ml-1.5">
                   ({author.affiliations[0]})
                 </span>
               )}
             </div>
           ))}
           {paper.authors.length > 5 && (
-            <div className="text-xs text-[#7B8CDE]">
+            <div className="text-[10px] font-mono text-[#7B8CDE]/50">
               +{paper.authors.length - 5} more authors
             </div>
           )}
         </div>
       </div>
 
-      {/* Meta */}
-      <div className="grid grid-cols-2 gap-3 mb-4">
-        <div className="bg-[#0a0f1e] border border-[#1a2555] rounded-lg p-2 font-mono text-xs">
-          <div className="flex items-center gap-1.5 text-[#7B8CDE] mb-1">
-            <Calendar className="w-3.5 h-3.5" />
-            <span>Year</span>
+      {/* ── Meta Grid ── */}
+      <div className="grid grid-cols-2 gap-2 mb-4">
+        <div className="hud-panel-clean rounded-lg p-2.5">
+          <div className="flex items-center gap-1.5 mb-1">
+            <Calendar className="w-3 h-3 text-[#7B8CDE]/50" />
+            <span className="hud-label">Year</span>
           </div>
-          <div className="text-sm font-medium text-text-primary">{paper.year}</div>
+          <div className="hud-value">{paper.year}</div>
         </div>
-        <div className="bg-[#0a0f1e] border border-[#1a2555] rounded-lg p-2 font-mono text-xs">
-          <div className="flex items-center gap-1.5 text-[#7B8CDE] mb-1">
-            <Hash className="w-3.5 h-3.5" />
-            <span>Citations</span>
+        <div className="hud-panel-clean rounded-lg p-2.5">
+          <div className="flex items-center gap-1.5 mb-1">
+            <Hash className="w-3 h-3 text-[#7B8CDE]/50" />
+            <span className="hud-label">Citations</span>
           </div>
-          <div className="text-sm font-medium text-text-primary">
-            {paper.citation_count.toLocaleString()}
-          </div>
+          <div className="hud-value">{paper.citation_count.toLocaleString()}</div>
         </div>
       </div>
 
-      {/* Venue */}
+      {/* ── Venue ── */}
       {paper.venue && (
         <div className="mb-4">
-          <div className="flex items-center gap-1.5 mb-1 text-[#7B8CDE]">
-            <BookOpen className="w-3.5 h-3.5" />
-            <span className="text-xs font-medium uppercase tracking-wide">
-              Venue
-            </span>
+          <div className="flex items-center gap-1.5 mb-1">
+            <BookOpen className="w-3.5 h-3.5 text-[#7B8CDE]/50" />
+            <span className="hud-label">Venue</span>
           </div>
           <div className="text-sm text-text-primary">{paper.venue}</div>
         </div>
       )}
 
-      {/* Abstract */}
+      {/* ── Abstract ── */}
       <div className="mb-4">
-        <div className="flex items-center gap-1.5 mb-1.5 text-[#7B8CDE]">
-          <span className="text-xs font-medium uppercase tracking-wide">
+        <div className="flex items-center gap-1.5 mb-1.5">
+          <span className="hud-label">
             {paper.abstract ? 'Abstract' : 'TLDR'}
           </span>
         </div>
-        <p className="text-sm text-[#7B8CDE] leading-relaxed border-l border-[#1a2555]/50 pl-3">
+        <p className="text-sm text-[#7B8CDE]/80 leading-relaxed border-l-2 border-[rgba(0,229,255,0.1)] pl-3">
           {displayAbstract}
         </p>
         {isLongAbstract && (
           <button
             onClick={() => setShowFullAbstract(!showFullAbstract)}
-            className="flex items-center gap-1 mt-1 text-xs text-[#00E5FF] hover:text-[#00E5FF]/80 transition-colors"
+            className="flex items-center gap-1 mt-1.5 text-[10px] font-mono text-[#00E5FF]/70 hover:text-[#00E5FF] transition-colors uppercase tracking-wider"
           >
             {showFullAbstract ? (
               <>
-                Show less <ChevronUp className="w-3 h-3" />
+                Collapse <ChevronUp className="w-3 h-3" />
               </>
             ) : (
               <>
-                Show more <ChevronDown className="w-3 h-3" />
+                Expand <ChevronDown className="w-3 h-3" />
               </>
             )}
           </button>
         )}
       </div>
 
-      {/* Fields */}
+      {/* ── Fields of Study ── */}
       {paper.fields.length > 0 && (
         <div className="mb-4">
-          <div className="text-xs font-medium uppercase tracking-wide text-[#7B8CDE] mb-1.5">
-            Fields of Study
-          </div>
-          <div className="flex flex-wrap gap-1.5">
+          <span className="hud-label">Fields of Study</span>
+          <div className="flex flex-wrap gap-1.5 mt-2">
             {paper.fields.map((field) => (
               <span
                 key={field}
-                className="px-2 py-0.5 rounded-full text-xs font-medium"
+                className="px-2 py-0.5 rounded text-[10px] font-mono font-medium"
                 style={{
-                  backgroundColor:
-                    (FIELD_COLORS[field] || '#95A5A6') + '20',
+                  backgroundColor: (FIELD_COLORS[field] || '#95A5A6') + '15',
                   color: FIELD_COLORS[field] || '#95A5A6',
-                  border: `1px solid ${(FIELD_COLORS[field] || '#95A5A6') + '40'}`,
+                  border: `1px solid ${(FIELD_COLORS[field] || '#95A5A6') + '30'}`,
                 }}
               >
                 {field}
@@ -221,38 +232,15 @@ export default function PaperDetailPanel({
         </div>
       )}
 
-      {/* Visual Badges — v1.1.0 */}
-      {(citationPercentile > 0.9 || paper.is_bridge || paper.is_open_access) && (
-        <div className="mb-4 flex flex-wrap gap-1.5">
-          {citationPercentile > 0.9 && (
-            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-[#FFD700]/15 text-[#FFD700] border border-[#FFD700]/30">
-              Top 10% Cited
-            </span>
-          )}
-          {paper.is_bridge && (
-            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-[#a29bfe]/15 text-[#a29bfe] border border-[#a29bfe]/30">
-              Bridge Node
-            </span>
-          )}
-          {paper.is_open_access && (
-            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-[#2ECC71]/15 text-[#2ECC71] border border-[#2ECC71]/30">
-              Open Access
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* Topics */}
+      {/* ── Topics ── */}
       {paper.topics.length > 0 && (
         <div className="mb-4">
-          <div className="text-xs font-medium uppercase tracking-wide text-[#7B8CDE] mb-1.5">
-            Topics
-          </div>
-          <div className="flex flex-wrap gap-1.5">
+          <span className="hud-label">Topics</span>
+          <div className="flex flex-wrap gap-1.5 mt-2">
             {paper.topics.slice(0, 8).map((topic) => (
               <span
                 key={topic.id}
-                className="px-2 py-0.5 rounded text-xs bg-[#0a0f1e] text-[#7B8CDE] border border-[#1a2555]/30"
+                className="px-2 py-0.5 rounded text-[10px] font-mono text-[#7B8CDE]/70 bg-[rgba(0,229,255,0.03)] border border-[rgba(0,229,255,0.08)]"
               >
                 {topic.display_name}
               </span>
@@ -261,78 +249,76 @@ export default function PaperDetailPanel({
         </div>
       )}
 
-      {/* Relationship context */}
+      {/* ── Graph Relationships ── */}
       {relationshipSummary && (
-        <div className="border-t border-[#1a2555]/20 pt-3 mt-3">
-          <h4 className="text-xs font-semibold uppercase tracking-wider text-[#7B8CDE]/60 mb-2 font-mono">
-            Graph Relationships
-          </h4>
-          <div className="grid grid-cols-2 gap-2 text-xs font-mono">
-            <div className="bg-[#0a0f1e] border border-[#1a2555] rounded-lg p-2">
-              <div className="text-[#7B8CDE]/60">Cited by (in graph)</div>
-              <div className="font-semibold text-text-primary">
-                {relationshipSummary.incomingCitations} papers
-              </div>
+        <>
+          <div className="hud-divider my-4" />
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="hud-label text-[#00E5FF]/50">Graph Relationships</span>
+              <div className="flex-1 h-px bg-gradient-to-r from-[rgba(0,229,255,0.15)] to-transparent" />
             </div>
-            <div className="bg-[#0a0f1e] border border-[#1a2555] rounded-lg p-2">
-              <div className="text-[#7B8CDE]/60">Cites (in graph)</div>
-              <div className="font-semibold text-text-primary">
-                {relationshipSummary.outgoingCitations} papers
+            <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+              <div className="hud-panel-clean rounded-lg p-2.5">
+                <div className="hud-label mb-0.5">Cited by</div>
+                <div className="hud-value text-sm">{relationshipSummary.incomingCitations}</div>
               </div>
+              <div className="hud-panel-clean rounded-lg p-2.5">
+                <div className="hud-label mb-0.5">Cites</div>
+                <div className="hud-value text-sm">{relationshipSummary.outgoingCitations}</div>
+              </div>
+              <div className="hud-panel-clean rounded-lg p-2.5">
+                <div className="hud-label mb-0.5">Similar</div>
+                <div className="hud-value text-sm">{relationshipSummary.similarEdges}</div>
+              </div>
+              <div className="hud-panel-clean rounded-lg p-2.5">
+                <div className="flex items-center gap-1 mb-0.5">
+                  <Cpu className="w-2.5 h-2.5 text-[#7B8CDE]/40" />
+                  <span className="hud-label">AI</span>
+                </div>
+                <div className="hud-value text-sm">{relationshipSummary.conceptualCount}</div>
+              </div>
+              {relationshipSummary.isBridge && (
+                <div className="col-span-2 rounded-lg p-2.5 bg-[#FFD700]/05 border border-[#FFD700]/15">
+                  <div className="text-[#FFD700]/80 text-[10px] font-mono uppercase tracking-wider">Bridge Node</div>
+                  <div className="text-[#FFD700]/50 text-[10px] font-mono mt-0.5">Connects distinct clusters</div>
+                </div>
+              )}
             </div>
-            <div className="bg-[#0a0f1e] border border-[#1a2555] rounded-lg p-2">
-              <div className="text-[#7B8CDE]/60">Similar papers</div>
-              <div className="font-semibold text-text-primary">
-                {relationshipSummary.similarEdges} connected
-              </div>
-            </div>
-            <div className="bg-[#0a0f1e] border border-[#1a2555] rounded-lg p-2">
-              <div className="flex items-center gap-1 text-[#7B8CDE]/60">
-                <Cpu className="w-3 h-3" />
-                <span>AI relationships</span>
-              </div>
-              <div className="font-semibold text-text-primary">
-                {relationshipSummary.conceptualCount} analyzed
-              </div>
-            </div>
-            {relationshipSummary.isBridge && (
-              <div className="bg-yellow-900/20 border border-yellow-700/30 rounded-lg p-2">
-                <div className="text-yellow-400/80 text-xs">◈ Bridge Node</div>
-                <div className="text-yellow-300/70 text-xs">Connects clusters</div>
-              </div>
-            )}
           </div>
-        </div>
+        </>
       )}
 
-      {/* Expanded from — v1.1.0 */}
+      {/* ── Expanded From ── */}
       {parentPaper && (
-        <div className="border-t border-[#1a2555]/20 pt-3 mt-3">
-          <h4 className="text-xs font-semibold uppercase tracking-wider text-[#7B8CDE]/60 mb-1.5 font-mono">
-            Expanded From
-          </h4>
-          <button
-            onClick={() => {
-              const store = useGraphStore.getState();
-              store.selectPaper(parentPaper);
-              window.dispatchEvent(new CustomEvent('focusPaper', { detail: { paperId: parentPaper.id } }));
-            }}
-            className="text-sm text-[#00E5FF] hover:text-[#00E5FF]/80 transition-colors text-left"
-          >
-            {parentPaper.title.length > 80 ? parentPaper.title.substring(0, 80) + '...' : parentPaper.title}
-          </button>
-          <div className="text-xs text-[#7B8CDE]/50 mt-0.5">
-            {parentPaper.authors?.[0]?.name} {parentPaper.year}
+        <>
+          <div className="hud-divider my-4" />
+          <div>
+            <span className="hud-label text-[#7B8CDE]/50">Expanded From</span>
+            <button
+              onClick={() => {
+                const store = useGraphStore.getState();
+                store.selectPaper(parentPaper);
+                window.dispatchEvent(new CustomEvent('focusPaper', { detail: { paperId: parentPaper.id } }));
+              }}
+              className="block mt-1.5 text-sm text-[#00E5FF]/80 hover:text-[#00E5FF] transition-colors text-left leading-snug"
+            >
+              {parentPaper.title.length > 80 ? parentPaper.title.substring(0, 80) + '...' : parentPaper.title}
+            </button>
+            <div className="text-[10px] text-[#7B8CDE]/40 mt-0.5 font-mono">
+              {parentPaper.authors?.[0]?.name} {parentPaper.year}
+            </div>
           </div>
-        </div>
+        </>
       )}
 
-      {/* Actions */}
-      <div className="flex flex-col gap-2 mt-6">
+      {/* ── Actions ── */}
+      <div className="hud-divider my-4" />
+      <div className="flex flex-col gap-2">
         <button
           onClick={onExpand}
           disabled={isExpanding}
-          className="hud-button flex items-center justify-center gap-2 w-full uppercase font-mono tracking-wider text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          className="hud-button flex items-center justify-center gap-2 w-full py-2.5 rounded-lg uppercase text-xs tracking-wider disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {isExpanding ? (
             <>
@@ -348,10 +334,10 @@ export default function PaperDetailPanel({
         </button>
 
         {/* Citation Path Finder */}
-        <div className="border border-[#1a2555]/30 rounded-lg p-3 bg-[#0a0f1e]">
-          <div className="text-xs font-mono uppercase tracking-wider text-[#7B8CDE]/60 mb-2 flex items-center gap-1.5">
-            <RouteIcon className="w-3 h-3" />
-            Citation Path Finder
+        <div className="hud-panel-clean rounded-lg p-3">
+          <div className="flex items-center gap-1.5 mb-2">
+            <RouteIcon className="w-3 h-3 text-[#7B8CDE]/50" />
+            <span className="hud-label">Citation Path Finder</span>
           </div>
           <div className="flex flex-col gap-1.5">
             <button
@@ -363,10 +349,10 @@ export default function PaperDetailPanel({
                   setActivePath(null);
                 }
               }}
-              className={`flex items-center justify-center gap-2 w-full px-3 py-2 rounded-lg text-xs font-mono transition-colors border ${
+              className={`flex items-center justify-center gap-2 w-full px-3 py-2 rounded-lg text-[10px] font-mono uppercase tracking-wider transition-all border ${
                 pathStart === paper.id
-                  ? 'bg-[#00E5FF]/20 text-[#00E5FF] border-[#00E5FF]/40'
-                  : 'bg-[#111833] hover:bg-[#1a2555] text-[#7B8CDE] border-[#1a2555]/30'
+                  ? 'bg-[#00E5FF]/15 text-[#00E5FF] border-[#00E5FF]/30 shadow-[0_0_8px_rgba(0,229,255,0.1)]'
+                  : 'bg-[rgba(0,229,255,0.03)] hover:bg-[rgba(0,229,255,0.06)] text-[#7B8CDE] border-[rgba(0,229,255,0.08)] hover:border-[rgba(0,229,255,0.15)]'
               }`}
             >
               {pathStart === paper.id ? 'PATH START SET' : 'SET AS PATH START'}
@@ -380,16 +366,16 @@ export default function PaperDetailPanel({
                   setActivePath(null);
                 }
               }}
-              className={`flex items-center justify-center gap-2 w-full px-3 py-2 rounded-lg text-xs font-mono transition-colors border ${
+              className={`flex items-center justify-center gap-2 w-full px-3 py-2 rounded-lg text-[10px] font-mono uppercase tracking-wider transition-all border ${
                 pathEnd === paper.id
-                  ? 'bg-[#FFD700]/20 text-[#FFD700] border-[#FFD700]/40'
-                  : 'bg-[#111833] hover:bg-[#1a2555] text-[#7B8CDE] border-[#1a2555]/30'
+                  ? 'bg-[#FFD700]/15 text-[#FFD700] border-[#FFD700]/30 shadow-[0_0_8px_rgba(255,215,0,0.1)]'
+                  : 'bg-[rgba(0,229,255,0.03)] hover:bg-[rgba(0,229,255,0.06)] text-[#7B8CDE] border-[rgba(0,229,255,0.08)] hover:border-[rgba(0,229,255,0.15)]'
               }`}
             >
               {pathEnd === paper.id ? 'PATH END SET' : 'SET AS PATH END'}
             </button>
             {pathStart && pathEnd && pathStart !== paper.id && pathEnd !== paper.id && (
-              <div className="text-xs text-[#7B8CDE]/50 text-center font-mono">
+              <div className="text-[10px] text-[#7B8CDE]/40 text-center font-mono py-1">
                 Start + End selected — open either paper to find path
               </div>
             )}
@@ -400,14 +386,14 @@ export default function PaperDetailPanel({
                   const path = findCitationPath(pathStart!, pathEnd!, graphData.edges);
                   setActivePath(path);
                 }}
-                className="flex items-center justify-center gap-2 w-full px-3 py-2 bg-[#FFD700]/15 hover:bg-[#FFD700]/25 text-[#FFD700] rounded-lg text-xs font-mono transition-colors border border-[#FFD700]/30"
+                className="flex items-center justify-center gap-2 w-full px-3 py-2 bg-[#FFD700]/10 hover:bg-[#FFD700]/18 text-[#FFD700] rounded-lg text-[10px] font-mono uppercase tracking-wider transition-all border border-[#FFD700]/20 hover:shadow-[0_0_12px_rgba(255,215,0,0.08)]"
               >
                 <RouteIcon className="w-3 h-3" />
                 FIND PATH
               </button>
             )}
             {activePath && (
-              <div className="text-xs font-mono text-center">
+              <div className="text-[10px] font-mono text-center py-1">
                 {activePath.length > 0 ? (
                   <span className="text-[#FFD700]">Path: {activePath.length} nodes</span>
                 ) : (
@@ -415,7 +401,7 @@ export default function PaperDetailPanel({
                 )}
                 <button
                   onClick={() => { setActivePath(null); setPathStart(null); setPathEnd(null); }}
-                  className="ml-2 text-[#7B8CDE]/50 hover:text-[#7B8CDE] transition-colors"
+                  className="ml-2 text-[#7B8CDE]/40 hover:text-[#7B8CDE] transition-colors"
                 >
                   clear
                 </button>
@@ -424,14 +410,15 @@ export default function PaperDetailPanel({
           </div>
         </div>
 
+        {/* External links */}
         {paper.oa_url && (
           <a
             href={paper.oa_url}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-accent-green/10 hover:bg-accent-green/20 text-accent-green rounded-lg text-sm font-medium transition-colors border border-accent-green/20"
+            className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-[#2ECC71]/08 hover:bg-[#2ECC71]/15 text-[#2ECC71] rounded-lg text-[10px] font-mono uppercase tracking-wider transition-all border border-[#2ECC71]/15 hover:border-[#2ECC71]/25"
           >
-            <ExternalLink className="w-4 h-4" />
+            <ExternalLink className="w-3.5 h-3.5" />
             Open Access PDF
           </a>
         )}
@@ -440,9 +427,9 @@ export default function PaperDetailPanel({
             href={`https://doi.org/${paper.doi}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-[#0a0f1e] hover:bg-[#111833] text-[#7B8CDE] rounded-lg text-sm transition-colors border border-[#1a2555]/30"
+            className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg text-[10px] font-mono text-[#7B8CDE] transition-all border border-[rgba(0,229,255,0.08)] hover:border-[rgba(0,229,255,0.15)] hover:bg-[rgba(0,229,255,0.03)]"
           >
-            <ExternalLink className="w-4 h-4" />
+            <ExternalLink className="w-3.5 h-3.5" />
             DOI: {paper.doi}
           </a>
         )}
@@ -451,14 +438,14 @@ export default function PaperDetailPanel({
         <div className="flex gap-2">
           <button
             onClick={() => downloadFile(toBibtex(paper), `${paper.id}.bib`, 'text/plain')}
-            className="flex items-center justify-center gap-1.5 flex-1 px-3 py-2 bg-[#0a0f1e] hover:bg-[#111833] text-[#7B8CDE] rounded-lg text-xs font-mono transition-colors border border-[#1a2555]/30"
+            className="flex items-center justify-center gap-1.5 flex-1 px-3 py-2 rounded-lg text-[10px] font-mono uppercase tracking-wider text-[#7B8CDE] transition-all border border-[rgba(0,229,255,0.08)] hover:border-[rgba(0,229,255,0.15)] hover:bg-[rgba(0,229,255,0.03)]"
           >
             <Download className="w-3 h-3" />
             BibTeX
           </button>
           <button
             onClick={() => downloadFile(toRIS(paper), `${paper.id}.ris`, 'text/plain')}
-            className="flex items-center justify-center gap-1.5 flex-1 px-3 py-2 bg-[#0a0f1e] hover:bg-[#111833] text-[#7B8CDE] rounded-lg text-xs font-mono transition-colors border border-[#1a2555]/30"
+            className="flex items-center justify-center gap-1.5 flex-1 px-3 py-2 rounded-lg text-[10px] font-mono uppercase tracking-wider text-[#7B8CDE] transition-all border border-[rgba(0,229,255,0.08)] hover:border-[rgba(0,229,255,0.15)] hover:bg-[rgba(0,229,255,0.03)]"
           >
             <Download className="w-3 h-3" />
             RIS

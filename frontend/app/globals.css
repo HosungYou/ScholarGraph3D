@@ -3,16 +3,35 @@
 @tailwind utilities;
 
 :root {
-  --background: #050510;
-  --surface: #0a0f1e;
-  --surface-hover: #111833;
-  --border: #1a2555;
+  --void: #000000;
+  --background: #000000;
+  --surface: #060a14;
+  --surface-hover: #0c1220;
+  --border: #141e38;
   --text-primary: #E8EAF6;
   --text-secondary: #7B8CDE;
+  --text-muted: #4a5580;
   --accent: #00E5FF;
   --accent-nebula: #6c5ce7;
   --accent-star: #a29bfe;
   --accent-warm: #fd79a8;
+  --accent-gold: #FFD700;
+
+  /* HUD system */
+  --hud-border: rgba(0, 229, 255, 0.12);
+  --hud-border-active: rgba(0, 229, 255, 0.35);
+  --hud-bg: rgba(4, 8, 18, 0.88);
+  --hud-glow: rgba(0, 229, 255, 0.06);
+
+  /* Field of Study spectrum */
+  --field-cs: #4FC3F7;
+  --field-medicine: #66BB6A;
+  --field-physics: #AB47BC;
+  --field-biology: #FFA726;
+  --field-social: #EF5350;
+  --field-engineering: #26C6DA;
+  --field-math: #7E57C2;
+  --field-chemistry: #FF7043;
 }
 
 * {
@@ -24,97 +43,164 @@
 html,
 body {
   height: 100%;
-  background: var(--background);
+  background: var(--void);
   color: var(--text-primary);
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Scrollbar styling */
+/* Scrollbar - minimal */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 4px;
+  height: 4px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--background);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(0, 229, 255, 0.25);
-  border-radius: 3px;
+  background: rgba(0, 229, 255, 0.15);
+  border-radius: 2px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 229, 255, 0.4);
+  background: rgba(0, 229, 255, 0.3);
 }
 
-/* Utility classes */
+/* ============================================
+   HUD DESIGN SYSTEM — Mission Control
+   ============================================ */
+
 @layer utilities {
+
+  /* --- Glass layers --- */
   .glass {
-    background: rgba(5, 5, 16, 0.85);
+    background: rgba(4, 8, 18, 0.85);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(0, 229, 255, 0.08);
+    border: 1px solid var(--hud-border);
   }
 
   .glass-strong {
-    background: rgba(5, 5, 16, 0.92);
+    background: rgba(4, 8, 18, 0.92);
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
-    border: 1px solid rgba(0, 229, 255, 0.12);
+    border: 1px solid rgba(0, 229, 255, 0.15);
   }
 
+  /* --- HUD Panel --- angular frame with corner accents */
   .hud-panel {
     position: relative;
-    background: rgba(5, 5, 16, 0.85);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(0, 229, 255, 0.15);
-    border-radius: 12px;
+    background: var(--hud-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--hud-border);
     box-shadow:
-      inset 0 1px 30px rgba(0, 229, 255, 0.03),
-      0 0 30px rgba(0, 229, 255, 0.05);
+      inset 0 1px 0 rgba(0, 229, 255, 0.04),
+      0 0 40px rgba(0, 229, 255, 0.02);
   }
 
+  /* Top edge glow line */
   .hud-panel::before {
     content: '';
     position: absolute;
     top: 0;
-    left: 10%;
-    right: 10%;
+    left: 12%;
+    right: 12%;
     height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(0, 229, 255, 0.4), transparent);
+    background: linear-gradient(90deg, transparent, rgba(0, 229, 255, 0.3), transparent);
     pointer-events: none;
   }
 
+  /* Corner brackets */
+  .hud-panel::after {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    pointer-events: none;
+    border: 1px solid transparent;
+    /* Top-left corner */
+    background:
+      linear-gradient(to right, rgba(0,229,255,0.3) 12px, transparent 12px) no-repeat top left,
+      linear-gradient(to bottom, rgba(0,229,255,0.3) 12px, transparent 12px) no-repeat top left,
+      /* Top-right corner */
+      linear-gradient(to left, rgba(0,229,255,0.3) 12px, transparent 12px) no-repeat top right,
+      linear-gradient(to bottom, rgba(0,229,255,0.3) 12px, transparent 12px) no-repeat top right,
+      /* Bottom-left corner */
+      linear-gradient(to right, rgba(0,229,255,0.3) 12px, transparent 12px) no-repeat bottom left,
+      linear-gradient(to top, rgba(0,229,255,0.3) 12px, transparent 12px) no-repeat bottom left,
+      /* Bottom-right corner */
+      linear-gradient(to left, rgba(0,229,255,0.3) 12px, transparent 12px) no-repeat bottom right,
+      linear-gradient(to top, rgba(0,229,255,0.3) 12px, transparent 12px) no-repeat bottom right;
+    background-size: 13px 13px;
+    border-radius: inherit;
+  }
+
+  /* --- HUD Panel (no corners variant) --- */
+  .hud-panel-clean {
+    position: relative;
+    background: var(--hud-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--hud-border);
+  }
+
+  /* --- HUD Button --- */
   .hud-button {
-    background: rgba(0, 229, 255, 0.08);
+    background: rgba(0, 229, 255, 0.06);
     border: 1px solid rgba(0, 229, 255, 0.2);
     color: #00E5FF;
     font-weight: 500;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.08em;
     transition: all 0.2s ease;
   }
 
   .hud-button:hover {
-    background: rgba(0, 229, 255, 0.15);
-    box-shadow: 0 0 20px rgba(0, 229, 255, 0.15);
+    background: rgba(0, 229, 255, 0.12);
+    box-shadow:
+      0 0 20px rgba(0, 229, 255, 0.12),
+      inset 0 0 20px rgba(0, 229, 255, 0.04);
     border-color: rgba(0, 229, 255, 0.4);
   }
 
+  .hud-button:active {
+    background: rgba(0, 229, 255, 0.18);
+    transform: scale(0.98);
+  }
+
   .hud-button:disabled {
-    opacity: 0.4;
+    opacity: 0.3;
     cursor: not-allowed;
   }
 
-  .cosmic-glow {
-    text-shadow:
-      0 0 10px rgba(0, 229, 255, 0.5),
-      0 0 30px rgba(0, 229, 255, 0.3),
-      0 0 60px rgba(108, 92, 231, 0.2);
+  /* --- HUD Button Ghost --- */
+  .hud-button-ghost {
+    background: transparent;
+    border: 1px solid rgba(0, 229, 255, 0.1);
+    color: var(--text-secondary);
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.06em;
+    transition: all 0.2s ease;
   }
 
+  .hud-button-ghost:hover {
+    background: rgba(0, 229, 255, 0.05);
+    border-color: rgba(0, 229, 255, 0.25);
+    color: #00E5FF;
+  }
+
+  /* --- Cosmic glow text --- */
+  .cosmic-glow {
+    text-shadow:
+      0 0 10px rgba(0, 229, 255, 0.4),
+      0 0 30px rgba(0, 229, 255, 0.2),
+      0 0 60px rgba(108, 92, 231, 0.15);
+  }
+
+  /* --- Scanline overlay --- */
   .hud-scanline {
     position: relative;
   }
@@ -127,12 +213,56 @@ body {
       0deg,
       transparent,
       transparent 2px,
-      rgba(0, 229, 255, 0.03) 2px,
-      rgba(0, 229, 255, 0.03) 4px
+      rgba(0, 229, 255, 0.015) 2px,
+      rgba(0, 229, 255, 0.015) 4px
     );
     pointer-events: none;
-    opacity: 0.5;
+    opacity: 0.4;
     border-radius: inherit;
+  }
+
+  /* --- HUD section divider --- */
+  .hud-divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--hud-border), transparent);
+  }
+
+  /* --- HUD data label --- */
+  .hud-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  /* --- HUD data value --- */
+  .hud-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  /* --- Status indicator dot --- */
+  .hud-status {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #00E5FF;
+    box-shadow: 0 0 6px rgba(0, 229, 255, 0.5);
+  }
+
+  .hud-status-warn {
+    background: #FFA726;
+    box-shadow: 0 0 6px rgba(255, 167, 38, 0.5);
+  }
+
+  .hud-status-error {
+    background: #EF5350;
+    box-shadow: 0 0 6px rgba(239, 83, 80, 0.5);
   }
 }
 
@@ -141,7 +271,10 @@ body {
   outline: none;
 }
 
-/* Animations */
+/* ============================================
+   ANIMATIONS
+   ============================================ */
+
 @keyframes fade-in {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
@@ -158,8 +291,8 @@ body {
 }
 
 @keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 20px rgba(0, 229, 255, 0.2); }
-  50% { box-shadow: 0 0 40px rgba(0, 229, 255, 0.4); }
+  0%, 100% { box-shadow: 0 0 20px rgba(0, 229, 255, 0.15); }
+  50% { box-shadow: 0 0 40px rgba(0, 229, 255, 0.3); }
 }
 
 @keyframes warp-speed {
@@ -168,7 +301,7 @@ body {
 }
 
 @keyframes cosmic-pulse {
-  0%, 100% { opacity: 0.6; }
+  0%, 100% { opacity: 0.5; }
   50% { opacity: 1; }
 }
 
@@ -189,8 +322,8 @@ body {
 }
 
 @keyframes border-glow {
-  0%, 100% { border-color: rgba(0, 229, 255, 0.15); }
-  50% { border-color: rgba(0, 229, 255, 0.4); }
+  0%, 100% { border-color: rgba(0, 229, 255, 0.1); }
+  50% { border-color: rgba(0, 229, 255, 0.3); }
 }
 
 @keyframes drift {
@@ -198,6 +331,11 @@ body {
   25% { transform: translateY(-20px) translateX(10px); }
   50% { transform: translateY(-10px) translateX(-5px); }
   75% { transform: translateY(-30px) translateX(15px); }
+}
+
+@keyframes typing-cursor {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
 }
 
 .animate-fade-in { animation: fade-in 0.4s ease-out; }
@@ -209,3 +347,4 @@ body {
 .animate-hud-flicker { animation: hud-flicker 4s ease-in-out infinite; }
 .animate-radar-sweep { animation: radar-sweep 2s linear infinite; }
 .animate-border-glow { animation: border-glow 2s ease-in-out infinite; }
+.animate-typing-cursor { animation: typing-cursor 1s step-end infinite; }

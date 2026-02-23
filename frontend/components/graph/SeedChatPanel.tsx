@@ -64,7 +64,6 @@ export default function SeedChatPanel() {
 
   const initialSuggestions = getInitialSuggestions(graphData);
 
-  // Scroll to bottom on new messages
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -101,7 +100,6 @@ export default function SeedChatPanel() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to get response';
       setError(msg);
-      // Remove the optimistically added user message on failure
       setMessages((prev) => prev.slice(0, -1));
     } finally {
       setIsLoading(false);
@@ -129,17 +127,15 @@ export default function SeedChatPanel() {
   const isEmpty = messages.length === 0;
 
   return (
-    <div className="flex flex-col h-full bg-[#050510]">
+    <div className="flex flex-col h-full bg-[rgba(4,8,18,0.5)]">
       {/* Header */}
-      <div className="flex-shrink-0 px-4 py-3 border-b border-[#1a2555]/50">
+      <div className="flex-shrink-0 px-4 py-3 border-b border-[rgba(0,229,255,0.08)]">
         <div className="flex items-center gap-2">
           <MessageCircle className="w-4 h-4 text-[#00E5FF]" />
-          <span className="text-[10px] font-mono uppercase tracking-widest text-[#00E5FF]/70">
-            RESEARCH ASSISTANT
-          </span>
+          <span className="hud-label text-[#00E5FF]/60">RESEARCH ASSISTANT</span>
         </div>
         {graphData && (
-          <p className="text-[10px] text-[#7B8CDE]/50 font-mono mt-1">
+          <p className="text-[10px] text-[#7B8CDE]/35 font-mono mt-1">
             {graphData.nodes.length} papers · {graphData.clusters.length} clusters loaded
           </p>
         )}
@@ -152,24 +148,24 @@ export default function SeedChatPanel() {
       >
         {isEmpty && !isLoading && (
           <div className="flex flex-col items-center justify-center h-full text-center py-8 px-4">
-            <MessageCircle className="w-8 h-8 text-[#1a2555] mb-3" />
-            <p className="text-[#7B8CDE]/60 text-xs font-mono mb-4">
+            <MessageCircle className="w-8 h-8 text-[rgba(0,229,255,0.08)] mb-3" />
+            <p className="text-[#7B8CDE]/40 text-[10px] font-mono mb-4">
               Ask anything about your paper graph
             </p>
-            <div className="w-full space-y-2">
+            <div className="w-full space-y-1.5">
               {initialSuggestions.map((s, i) => (
                 <button
                   key={i}
                   onClick={() => sendMessage(s)}
                   disabled={!graphData}
-                  className="w-full text-left text-xs px-3 py-2 rounded-lg border border-[#1a2555] bg-[#0a0f1e] text-[#7B8CDE] hover:text-[#00E5FF] hover:border-[#00E5FF]/40 hover:bg-[#0d1530] transition-colors font-mono disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="w-full text-left text-[10px] px-3 py-2 hud-button-ghost rounded-lg disabled:opacity-30 disabled:cursor-not-allowed"
                 >
                   {s}
                 </button>
               ))}
             </div>
             {!graphData && (
-              <p className="text-[10px] text-[#7B8CDE]/30 font-mono mt-4">
+              <p className="text-[10px] text-[#7B8CDE]/25 font-mono mt-4">
                 Load a graph to begin
               </p>
             )}
@@ -178,19 +174,18 @@ export default function SeedChatPanel() {
 
         {messages.map((msg, idx) => (
           <div key={idx} className="space-y-2">
-            {/* Message bubble */}
             <div
               className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
               <div
                 className={
                   msg.role === 'user'
-                    ? 'max-w-[85%] px-3 py-2 rounded-lg text-xs font-mono bg-[#0d1530] border border-[#1a2555] text-[#E8EAF6] rounded-tr-sm'
-                    : 'max-w-[95%] px-3 py-2 rounded-lg text-xs font-mono bg-[#080d1a] border border-[#1a2555]/60 text-[#a29bfe] rounded-tl-sm'
+                    ? 'max-w-[85%] px-3 py-2 hud-panel-clean rounded-lg text-xs font-mono bg-[rgba(0,229,255,0.06)] text-[#E8EAF6] rounded-tr-sm'
+                    : 'max-w-[95%] px-3 py-2 hud-panel-clean rounded-lg text-xs font-mono text-[#a29bfe]/90 rounded-tl-sm'
                 }
               >
                 {msg.role === 'assistant' && (
-                  <div className="text-[9px] text-[#00E5FF]/50 uppercase tracking-widest mb-1">
+                  <div className="hud-label text-[#00E5FF]/40 mb-1">
                     ASSISTANT
                   </div>
                 )}
@@ -198,7 +193,6 @@ export default function SeedChatPanel() {
               </div>
             </div>
 
-            {/* Follow-up chips — only after last assistant message */}
             {msg.role === 'assistant' &&
               msg.followups &&
               idx === messages.length - 1 && (
@@ -208,7 +202,7 @@ export default function SeedChatPanel() {
                       key={fi}
                       onClick={() => sendMessage(f)}
                       disabled={isLoading}
-                      className="block w-full text-left text-[10px] px-2.5 py-1.5 rounded border border-[#1a2555]/70 bg-[#0a0f1e] text-[#7B8CDE] hover:text-[#00E5FF] hover:border-[#00E5FF]/30 hover:bg-[#0d1530] transition-colors font-mono disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="block w-full text-left text-[10px] px-2.5 py-1.5 hud-button-ghost rounded-lg disabled:opacity-30 disabled:cursor-not-allowed"
                     >
                       + {f}
                     </button>
@@ -221,12 +215,10 @@ export default function SeedChatPanel() {
         {/* Loading indicator */}
         {isLoading && (
           <div className="flex justify-start">
-            <div className="px-3 py-2 rounded-lg bg-[#080d1a] border border-[#1a2555]/60 rounded-tl-sm">
-              <div className="flex items-center gap-2 text-[#00E5FF]/60">
+            <div className="px-3 py-2 hud-panel-clean rounded-lg rounded-tl-sm">
+              <div className="flex items-center gap-2 text-[#00E5FF]/50">
                 <Loader2 className="w-3 h-3 animate-spin" />
-                <span className="text-[10px] font-mono uppercase tracking-wider">
-                  THINKING...
-                </span>
+                <span className="hud-label">THINKING...</span>
               </div>
             </div>
           </div>
@@ -234,39 +226,41 @@ export default function SeedChatPanel() {
 
         {/* Error */}
         {error && (
-          <div className="px-3 py-2 rounded-lg bg-red-950/40 border border-red-800/40 text-red-300 text-xs font-mono">
+          <div className="px-3 py-2 rounded-lg bg-red-950/30 border border-red-800/30 text-red-300/80 text-[10px] font-mono">
             {error}
           </div>
         )}
       </div>
 
       {/* Input */}
-      <div className="flex-shrink-0 border-t border-[#1a2555]/50 p-3">
-        <form onSubmit={handleSubmit} className="flex items-end gap-2">
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={graphData ? 'Ask about your graph...' : 'Load a graph first...'}
-            disabled={!graphData || isLoading}
-            rows={2}
-            className="flex-1 resize-none bg-[#0a0f1e] border border-[#1a2555] rounded-lg px-3 py-2 text-xs font-mono text-[#E8EAF6] placeholder-[#7B8CDE]/30 focus:outline-none focus:border-[#00E5FF]/50 focus:ring-1 focus:ring-[#00E5FF]/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          />
-          <button
-            type="submit"
-            disabled={!graphData || isLoading || !input.trim()}
-            className="flex-shrink-0 p-2 rounded-lg bg-[#0d1530] border border-[#1a2555] text-[#00E5FF] hover:bg-[#111e3d] hover:border-[#00E5FF]/50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            aria-label="Send message"
-          >
-            {isLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Send className="w-4 h-4" />
-            )}
-          </button>
-        </form>
-        <p className="text-[9px] text-[#7B8CDE]/30 font-mono mt-1.5 text-center">
+      <div className="flex-shrink-0 p-3">
+        <div className="hud-panel-clean rounded-lg p-2">
+          <form onSubmit={handleSubmit} className="flex items-end gap-2">
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={graphData ? 'Ask about your graph...' : 'Load a graph first...'}
+              disabled={!graphData || isLoading}
+              rows={2}
+              className="flex-1 resize-none bg-transparent border-none rounded-lg px-2 py-1.5 text-xs font-mono text-[#E8EAF6] placeholder-[#7B8CDE]/25 focus:outline-none disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            />
+            <button
+              type="submit"
+              disabled={!graphData || isLoading || !input.trim()}
+              className="hud-button flex-shrink-0 p-2 rounded-lg disabled:opacity-20 disabled:cursor-not-allowed"
+              aria-label="Send message"
+            >
+              {isLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Send className="w-4 h-4" />
+              )}
+            </button>
+          </form>
+        </div>
+        <p className="text-[9px] text-[#7B8CDE]/25 font-mono mt-1.5 text-center">
           Enter to send · Shift+Enter for newline
         </p>
       </div>

@@ -1,61 +1,67 @@
 'use client';
 
+/**
+ * CSS-only starfield — lightweight fallback for pages that don't need
+ * Three.js or Canvas rendering. Uses layered radial gradients.
+ * Pure black (#000) background with circular star points.
+ */
+
 interface CosmicStarfieldProps {
   density?: 'normal' | 'dense';
 }
 
 export default function CosmicStarfield({ density = 'normal' }: CosmicStarfieldProps) {
-  const opacity1 = density === 'dense' ? 0.8 : 0.5;
-  const opacity2 = density === 'dense' ? 0.6 : 0.35;
-  const opacity3 = density === 'dense' ? 0.4 : 0.25;
+  const baseOpacity = density === 'dense' ? 1 : 0.7;
 
   return (
-    <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
-      {/* Star layer 1 - small, many */}
+    <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none bg-black">
+      {/* Layer 1 — faint field stars */}
       <div
-        className="absolute inset-0 animate-drift-slow"
+        className="absolute inset-0"
         style={{
-          opacity: opacity1,
-          background: `radial-gradient(1px 1px at 20px 30px, #E8EAF6, transparent),
-            radial-gradient(1px 1px at 40px 70px, #7B8CDE, transparent),
-            radial-gradient(1px 1px at 90px 40px, #00E5FF, transparent),
-            radial-gradient(1px 1px at 130px 80px, #E8EAF6, transparent),
-            radial-gradient(1px 1px at 160px 30px, #a29bfe, transparent),
-            radial-gradient(1px 1px at 200px 60px, #E8EAF6, transparent),
-            radial-gradient(1px 1px at 240px 90px, #7B8CDE, transparent),
-            radial-gradient(1px 1px at 280px 20px, #00E5FF, transparent),
-            radial-gradient(1px 1px at 320px 70px, #E8EAF6, transparent),
-            radial-gradient(1px 1px at 360px 50px, #a29bfe, transparent)`,
+          opacity: baseOpacity * 0.4,
+          background: `
+            radial-gradient(circle 0.5px at 15px 25px, #C5CAE9, transparent),
+            radial-gradient(circle 0.5px at 45px 65px, #90CAF9, transparent),
+            radial-gradient(circle 0.5px at 85px 35px, #E8EAF6, transparent),
+            radial-gradient(circle 0.5px at 125px 75px, #CFD8DC, transparent),
+            radial-gradient(circle 0.5px at 165px 20px, #BBDEFB, transparent),
+            radial-gradient(circle 0.5px at 205px 55px, #C5CAE9, transparent),
+            radial-gradient(circle 0.5px at 245px 85px, #90CAF9, transparent),
+            radial-gradient(circle 0.5px at 285px 15px, #E8EAF6, transparent),
+            radial-gradient(circle 0.5px at 325px 60px, #CFD8DC, transparent),
+            radial-gradient(circle 0.5px at 365px 45px, #BBDEFB, transparent)
+          `,
           backgroundSize: '400px 100px',
         }}
       />
-      {/* Star layer 2 - medium */}
+      {/* Layer 2 — medium stars */}
       <div
-        className="absolute inset-0 animate-drift"
+        className="absolute inset-0"
         style={{
-          opacity: opacity2,
-          background: `radial-gradient(1.5px 1.5px at 50px 50px, #00E5FF, transparent),
-            radial-gradient(1.5px 1.5px at 150px 120px, #6c5ce7, transparent),
-            radial-gradient(1.5px 1.5px at 250px 40px, #E8EAF6, transparent),
-            radial-gradient(1.5px 1.5px at 350px 100px, #a29bfe, transparent),
-            radial-gradient(1.5px 1.5px at 450px 80px, #00E5FF, transparent)`,
-          backgroundSize: '500px 150px',
+          opacity: baseOpacity * 0.25,
+          background: `
+            radial-gradient(circle 0.8px at 60px 45px, #E8EAF6, transparent),
+            radial-gradient(circle 0.8px at 180px 110px, #B39DDB, transparent),
+            radial-gradient(circle 0.8px at 300px 30px, #90CAF9, transparent),
+            radial-gradient(circle 0.8px at 420px 90px, #CFD8DC, transparent)
+          `,
+          backgroundSize: '500px 140px',
         }}
       />
-      {/* Star layer 3 - large, few, twinkling */}
+      {/* Layer 3 — bright stars */}
       <div
-        className="absolute inset-0 animate-drift-fast"
+        className="absolute inset-0 animate-twinkle-slow"
         style={{
-          opacity: opacity3,
-          background: `radial-gradient(2px 2px at 100px 80px, #00E5FF, transparent),
-            radial-gradient(2px 2px at 300px 150px, #6c5ce7, transparent),
-            radial-gradient(2px 2px at 500px 50px, #a29bfe, transparent)`,
-          backgroundSize: '600px 200px',
+          opacity: baseOpacity * 0.15,
+          background: `
+            radial-gradient(circle 1.2px at 120px 70px, #FFF9C4, transparent),
+            radial-gradient(circle 1px at 350px 130px, #E8EAF6, transparent),
+            radial-gradient(circle 1.2px at 550px 40px, #FFE0B2, transparent)
+          `,
+          backgroundSize: '650px 180px',
         }}
       />
-      {/* Nebula glow */}
-      <div className="absolute top-1/4 left-1/3 w-[600px] h-[600px] rounded-full bg-cosmic-nebula/3 blur-[150px]" />
-      <div className="absolute bottom-1/3 right-1/4 w-[400px] h-[400px] rounded-full bg-cosmic-glow/2 blur-[120px]" />
     </div>
   );
 }

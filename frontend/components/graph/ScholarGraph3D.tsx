@@ -71,6 +71,7 @@ export interface ScholarGraph3DRef {
   focusOnPaper: (paperId: string) => void;
   focusOnCluster: (clusterId: number) => void;
   resetCamera: () => void;
+  zoomToFit: (duration?: number, padding?: number) => void;
   animateExpandNodes: (parentNodeId: string, newNodeIds: string[], targets: Map<string, {x: number; y: number; z: number}>) => void;
 }
 
@@ -1425,6 +1426,11 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
           { x: 0, y: 0, z: 0 },
           1000
         );
+      }
+    },
+    zoomToFit: (duration = 400, padding = 80) => {
+      if (fgRef.current) {
+        fgRef.current.zoomToFit(duration, padding);
       }
     },
     animateExpandNodes: (parentNodeId: string, newNodeIds: string[], targets: Map<string, {x: number; y: number; z: number}>) => {

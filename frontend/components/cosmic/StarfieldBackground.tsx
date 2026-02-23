@@ -13,15 +13,13 @@ const StarfieldBackground = forwardRef<StarfieldBackgroundRef>((_, ref) => {
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const starsRef = useRef<THREE.Points | null>(null);
-  const milkyWayRef = useRef<THREE.Points | null>(null);
   const mouseRef = useRef({ x: 0, y: 0 });
   const frameRef = useRef<number>(0);
   const isWarpingRef = useRef(false);
 
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
-  const starCount = isMobile ? 1500 : 3000;
-  const milkyWayCount = isMobile ? 800 : 1500;
-  const dpr = typeof window !== 'undefined' ? (isMobile ? Math.min(window.devicePixelRatio, 1.5) : window.devicePixelRatio) : 1;
+  const starCount = isMobile ? 2000 : 4000;
+  const dpr = typeof window !== 'undefined' ? (isMobile ? Math.min(window.devicePixelRatio, 1.5) : Math.min(window.devicePixelRatio, 2)) : 1;
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -33,79 +31,111 @@ const StarfieldBackground = forwardRef<StarfieldBackgroundRef>((_, ref) => {
     camera.position.z = 50;
     cameraRef.current = camera;
 
-    const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(dpr);
-    renderer.setClearColor(0x050510, 1);
+    renderer.setClearColor(0x000000, 1);
     containerRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    // Stars
+    // --- Stars with power-law brightness distribution ---
     const starGeo = new THREE.BufferGeometry();
-    const starPositions = new Float32Array(starCount * 3);
-    const starColors = new Float32Array(starCount * 3);
+    const positions = new Float32Array(starCount * 3);
+    const colors = new Float32Array(starCount * 3);
+    const sizes = new Float32Array(starCount);
+
     for (let i = 0; i < starCount; i++) {
       const i3 = i * 3;
-      starPositions[i3] = (Math.random() - 0.5) * 200;
-      starPositions[i3 + 1] = (Math.random() - 0.5) * 200;
-      starPositions[i3 + 2] = (Math.random() - 0.5) * 200;
-      // Color: warm white to cool blue
+      positions[i3] = (Math.random() - 0.5) * 300;
+      positions[i3 + 1] = (Math.random() - 0.5) * 300;
+      positions[i3 + 2] = (Math.random() - 0.5) * 300;
+
+      // Star color temperature: cool blue → warm yellow-white
       const temp = Math.random();
-      starColors[i3] = 0.7 + temp * 0.3;
-      starColors[i3 + 1] = 0.7 + temp * 0.2;
-      starColors[i3 + 2] = 0.8 + temp * 0.2;
+      if (temp > 0.95) {
+        // Warm (5%)
+        colors[i3] = 1.0;
+        colors[i3 + 1] = 0.85 + Math.random() * 0.1;
+        colors[i3 + 2] = 0.7 + Math.random() * 0.1;
+      } else if (temp > 0.8) {
+        // White (15%)
+        colors[i3] = 0.9 + Math.random() * 0.1;
+        colors[i3 + 1] = 0.9 + Math.random() * 0.1;
+        colors[i3 + 2] = 0.95 + Math.random() * 0.05;
+      } else {
+        // Cool blue-white (80%)
+        colors[i3] = 0.7 + Math.random() * 0.2;
+        colors[i3 + 1] = 0.75 + Math.random() * 0.2;
+        colors[i3 + 2] = 0.9 + Math.random() * 0.1;
+      }
+
+      // Power-law size: most tiny, few large
+      const roll = Math.random();
+      sizes[i] = roll > 0.99 ? 1.5 + Math.random() : roll > 0.95 ? 0.6 + Math.random() * 0.4 : 0.15 + Math.random() * 0.3;
     }
-    starGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
-    starGeo.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
-    const starMat = new THREE.PointsMaterial({ size: 0.3, vertexColors: true, transparent: true, opacity: 0.9, sizeAttenuation: true });
+
+    starGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    starGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    starGeo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
+    const starMat = new THREE.PointsMaterial({
+      size: 0.25,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.85,
+      sizeAttenuation: true,
+    });
     const stars = new THREE.Points(starGeo, starMat);
     scene.add(stars);
     starsRef.current = stars;
 
-    // Milky Way band
+    // --- Subtle milky way band ---
+    const mwCount = isMobile ? 600 : 1200;
     const mwGeo = new THREE.BufferGeometry();
-    const mwPositions = new Float32Array(milkyWayCount * 3);
-    const mwColors = new Float32Array(milkyWayCount * 3);
-    for (let i = 0; i < milkyWayCount; i++) {
+    const mwPos = new Float32Array(mwCount * 3);
+    const mwCol = new Float32Array(mwCount * 3);
+    for (let i = 0; i < mwCount; i++) {
       const i3 = i * 3;
-      const t = (Math.random() - 0.5) * 200;
-      mwPositions[i3] = t;
-      mwPositions[i3 + 1] = Math.sin(t * 0.05) * 15 + (Math.random() - 0.5) * 20;
-      mwPositions[i3 + 2] = (Math.random() - 0.5) * 60;
-      mwColors[i3] = 0.4 + Math.random() * 0.2;
-      mwColors[i3 + 1] = 0.3 + Math.random() * 0.3;
-      mwColors[i3 + 2] = 0.6 + Math.random() * 0.4;
+      const t = (Math.random() - 0.5) * 300;
+      mwPos[i3] = t;
+      mwPos[i3 + 1] = Math.sin(t * 0.03) * 12 + (Math.random() - 0.5) * 25;
+      mwPos[i3 + 2] = (Math.random() - 0.5) * 80;
+      mwCol[i3] = 0.3 + Math.random() * 0.15;
+      mwCol[i3 + 1] = 0.3 + Math.random() * 0.2;
+      mwCol[i3 + 2] = 0.5 + Math.random() * 0.3;
     }
-    mwGeo.setAttribute('position', new THREE.BufferAttribute(mwPositions, 3));
-    mwGeo.setAttribute('color', new THREE.BufferAttribute(mwColors, 3));
-    const mwMat = new THREE.PointsMaterial({ size: 0.4, vertexColors: true, transparent: true, opacity: 0.4, sizeAttenuation: true });
+    mwGeo.setAttribute('position', new THREE.BufferAttribute(mwPos, 3));
+    mwGeo.setAttribute('color', new THREE.BufferAttribute(mwCol, 3));
+    const mwMat = new THREE.PointsMaterial({
+      size: 0.3,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.2,
+      sizeAttenuation: true,
+    });
     const milkyWay = new THREE.Points(mwGeo, mwMat);
     scene.add(milkyWay);
-    milkyWayRef.current = milkyWay;
 
-    // Animation
+    // --- Animation loop ---
     const animate = () => {
       frameRef.current = requestAnimationFrame(animate);
-      // Parallax
+      // Mouse parallax
       if (cameraRef.current && !isMobile) {
-        cameraRef.current.rotation.x += (mouseRef.current.y * 0.05 - cameraRef.current.rotation.x) * 0.02;
-        cameraRef.current.rotation.y += (mouseRef.current.x * 0.05 - cameraRef.current.rotation.y) * 0.02;
+        cameraRef.current.rotation.x += (mouseRef.current.y * 0.03 - cameraRef.current.rotation.x) * 0.015;
+        cameraRef.current.rotation.y += (mouseRef.current.x * 0.03 - cameraRef.current.rotation.y) * 0.015;
       }
-      // Slow rotation
-      if (starsRef.current) starsRef.current.rotation.y += 0.0001;
-      if (milkyWayRef.current) milkyWayRef.current.rotation.y += 0.00005;
+      if (starsRef.current) starsRef.current.rotation.y += 0.00005;
+      milkyWay.rotation.y += 0.00003;
       renderer.render(scene, camera);
     };
     animate();
 
-    // Mouse
     const onMouseMove = (e: PointerEvent) => {
       mouseRef.current.x = (e.clientX / window.innerWidth) * 2 - 1;
       mouseRef.current.y = (e.clientY / window.innerHeight) * 2 - 1;
     };
     window.addEventListener('pointermove', onMouseMove);
 
-    // Resize
     const onResize = () => {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
@@ -139,15 +169,14 @@ const StarfieldBackground = forwardRef<StarfieldBackgroundRef>((_, ref) => {
         const warpAnimate = () => {
           const elapsed = performance.now() - startTime;
           const progress = Math.min(1, elapsed / duration);
-          const eased = progress * progress; // ease-in
+          const eased = progress * progress;
           for (let i = 0; i < starPositions.count; i++) {
-            starPositions.setZ(i, originalZ[i] + eased * 150);
+            starPositions.setZ(i, originalZ[i] + eased * 200);
           }
           starPositions.needsUpdate = true;
           if (progress < 1) {
             requestAnimationFrame(warpAnimate);
           } else {
-            // Reset
             for (let i = 0; i < starPositions.count; i++) {
               starPositions.setZ(i, originalZ[i]);
             }

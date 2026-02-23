@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, FileText, GitBranch, Layers, Clock } from 'lucide-react';
+import { Search, FileText, GitBranch, Layers, Clock, Crosshair, Radar, Orbit, ScanSearch } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api';
 import dynamic from 'next/dynamic';
@@ -35,6 +35,15 @@ const EXAMPLE_QUERIES = [
   { label: 'CRISPR gene editing', field: 'Bio' },
 ];
 
+// --- Mission stat counter animation ---
+function AnimatedCounter({ target, suffix = '' }: { target: string; suffix?: string }) {
+  return (
+    <span className="hud-value text-cosmic-glow tabular-nums">
+      {target}{suffix}
+    </span>
+  );
+}
+
 export default function LandingPage() {
   const [activeMode, setActiveMode] = useState<InputMode>('doi');
   const [inputValue, setInputValue] = useState('');
@@ -63,13 +72,18 @@ export default function LandingPage() {
     try {
       const data = await api.getPaperByDOI(doi.trim());
       if (data.paper_id) {
-        router.push(`/explore/seed?paper_id=${encodeURIComponent(data.paper_id)}`);
+        setIsWarping(true);
+        starfieldRef.current?.triggerWarp();
+        setTimeout(() => {
+          router.push(`/explore/seed?paper_id=${encodeURIComponent(data.paper_id)}`);
+        }, 600);
       } else {
         throw new Error('No paper ID returned');
       }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      setDoiError(`Could not find paper: ${msg}`);
+      setDoiError(`Target not found: ${msg}`);
+      setIsWarping(false);
     } finally {
       setIsLoadingDoi(false);
     }
@@ -78,7 +92,6 @@ export default function LandingPage() {
   const handleNaturalSearch = async (query: string) => {
     if (!query.trim()) return;
 
-    // Auto-detect DOIs in natural mode
     if (looksLikeDoi(query)) {
       setActiveMode('doi');
       setInputValue(query.trim());
@@ -94,7 +107,7 @@ export default function LandingPage() {
       setNaturalResults(data.papers || []);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      setDoiError(`Search failed: ${msg}`);
+      setDoiError(`Scan failed: ${msg}`);
     } finally {
       setIsLoadingNatural(false);
     }
@@ -120,35 +133,49 @@ export default function LandingPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden">
-      {/* Background */}
+    <div className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden bg-black">
+      {/* Deep Field Background */}
       <StarfieldBackground ref={starfieldRef} />
+
+      {/* Subtle vignette overlay */}
+      <div
+        className="fixed inset-0 z-[1] pointer-events-none"
+        style={{
+          background: 'radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.6) 100%)',
+        }}
+      />
 
       <div className={`relative z-10 w-full max-w-3xl px-6 ${isWarping ? 'animate-warp' : ''}`}>
 
-        {/* Hero */}
+        {/* === MISSION BRIEFING HEADER === */}
         <motion.div
-          initial={{ opacity: 0, y: 24 }}
+          initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7 }}
+          transition={{ duration: 0.8 }}
           className="text-center mb-10"
         >
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cosmic-glow/5 border border-cosmic-glow/20 text-xs text-cosmic-glow/80 mb-5 font-mono uppercase tracking-wider">
-            <span className="w-1.5 h-1.5 rounded-full bg-cosmic-glow animate-cosmic-pulse" />
-            Navigate the topology of knowledge
+          {/* Mission status badge */}
+          <div className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded border border-cosmic-glow/15 bg-cosmic-glow/[0.03] mb-6">
+            <span className="hud-status animate-cosmic-pulse" />
+            <span className="hud-label text-cosmic-glow/80 text-[10px]">
+              Navigate the topology of knowledge
+            </span>
           </div>
-          <h1 className="text-5xl font-bold tracking-tight mb-4 leading-tight cosmic-glow">
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-cosmic-glow via-cosmic-nebula to-accent-green">
+
+          {/* Title */}
+          <h1 className="text-5xl md:text-6xl font-bold tracking-tight mb-5 leading-[1.1]">
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#00E5FF] via-[#6c5ce7] to-[#a29bfe] cosmic-glow">
               ScholarGraph3D
             </span>
           </h1>
-          <p className="text-lg text-text-secondary/80 max-w-xl mx-auto leading-relaxed">
-            Academic papers mapped in 3D space — semantically, temporally, relationally.
-            Start from a paper you know. Let the knowledge topology guide the rest.
+
+          {/* Mission description */}
+          <p className="text-base text-text-secondary/70 max-w-lg mx-auto leading-relaxed font-light">
+            Enter a paper{"'"}s coordinates. Map its citation universe in 3D — semantically, temporally, relationally.
           </p>
         </motion.div>
 
-        {/* Input Modes */}
+        {/* === COORDINATE INPUT CONSOLE === */}
         <AnimatePresence mode="wait">
           {activeMode === 'doi' && (
             <motion.div
@@ -159,29 +186,33 @@ export default function LandingPage() {
               transition={{ duration: 0.3 }}
               className="mb-5"
             >
-              {/* Seed Paper concept pills */}
-              <div className="flex items-center justify-center gap-4 mb-4 text-xs text-text-secondary/50">
-                <span className="flex items-center gap-1.5">
-                  <GitBranch className="w-3 h-3 text-accent/50" />
-                  Citation network
-                </span>
-                <span className="w-px h-3 bg-border/30" />
-                <span className="flex items-center gap-1.5">
-                  <Layers className="w-3 h-3 text-accent-purple/50" />
-                  Semantic topology
-                </span>
-                <span className="w-px h-3 bg-border/30" />
-                <span className="flex items-center gap-1.5">
-                  <Clock className="w-3 h-3 text-accent-green/50" />
-                  Temporal depth
-                </span>
+              {/* Instrument readouts */}
+              <div className="flex items-center justify-center gap-5 mb-4">
+                {[
+                  { icon: GitBranch, label: 'Gravitational mapping', color: '#4A90D9' },
+                  { icon: Layers, label: 'Nebula classification', color: '#9B59B6' },
+                  { icon: Clock, label: 'Temporal archaeology', color: '#2ECC71' },
+                ].map((item) => (
+                  <span key={item.label} className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-text-muted/60">
+                    <item.icon className="w-3 h-3" style={{ color: item.color, opacity: 0.5 }} />
+                    {item.label}
+                  </span>
+                ))}
               </div>
 
+              {/* Input console */}
               <form onSubmit={handleSubmit}>
                 <div className="relative group">
-                  <div className="absolute -inset-0.5 bg-gradient-to-r from-accent/40 via-accent-purple/30 to-accent-green/30 rounded-2xl blur opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-500" />
-                  <div className="relative flex items-center hud-panel rounded-2xl overflow-hidden border border-accent/20">
-                    <FileText className="w-5 h-5 text-accent/60 ml-5 flex-shrink-0" />
+                  {/* Glow on focus */}
+                  <div className="absolute -inset-px bg-gradient-to-r from-cosmic-glow/20 via-cosmic-nebula/15 to-cosmic-glow/20 rounded-lg blur-sm opacity-0 group-focus-within:opacity-100 transition-opacity duration-700" />
+
+                  <div className="relative flex items-center bg-[rgba(4,8,18,0.9)] rounded-lg overflow-hidden border border-[rgba(0,229,255,0.12)] group-focus-within:border-[rgba(0,229,255,0.3)] transition-colors">
+                    {/* Input prefix */}
+                    <div className="flex items-center gap-2 pl-4 pr-2 text-cosmic-glow/30 flex-shrink-0">
+                      <Crosshair className="w-4 h-4" />
+                      <span className="text-[10px] font-mono uppercase tracking-wider hidden sm:inline">TARGET</span>
+                    </div>
+                    <div className="w-px h-6 bg-[rgba(0,229,255,0.1)] flex-shrink-0" />
                     <input
                       type="text"
                       value={inputValue}
@@ -189,43 +220,52 @@ export default function LandingPage() {
                         setInputValue(e.target.value);
                         setDoiError(null);
                       }}
-                      placeholder="Paste a DOI, URL, or arXiv link…  e.g. 10.1038/s41586-021-03819-2"
-                      className="flex-1 bg-transparent px-4 py-5 text-base text-text-primary placeholder:text-text-secondary/40 outline-none"
+                      placeholder="DOI, URL, or arXiv link…  e.g. 10.1038/s41586-021-03819-2"
+                      className="flex-1 bg-transparent px-4 py-4 text-sm text-text-primary placeholder:text-text-muted/40 outline-none font-mono"
                       autoFocus
                     />
                     <button
                       type="submit"
-                      disabled={!inputValue.trim() || isLoadingDoi}
-                      className="px-8 py-5 hud-button uppercase font-mono tracking-wider disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+                      disabled={!inputValue.trim() || isLoadingDoi || isWarping}
+                      className="px-6 py-4 hud-button text-xs uppercase tracking-widest disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2 rounded-none border-0 border-l border-l-[rgba(0,229,255,0.12)]"
                     >
-                      {isLoadingDoi && (
-                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      {isLoadingDoi ? (
+                        <>
+                          <div className="w-3.5 h-3.5 border-2 border-cosmic-glow/30 border-t-cosmic-glow rounded-full animate-spin" />
+                          <span>Locating</span>
+                        </>
+                      ) : (
+                        <>
+                          <Radar className="w-3.5 h-3.5" />
+                          <span>Initiate scan</span>
+                        </>
                       )}
-                      {isLoadingDoi ? 'Finding...' : 'EXPLORE'}
                     </button>
                   </div>
                 </div>
+
+                {/* Status line */}
                 <div className="flex items-center justify-between mt-2 px-1">
-                  <p className="text-xs text-text-secondary/40">
-                    Enter a paper{"'"}s DOI or URL &rarr; explore its full citation universe in 3D
+                  <p className="text-[10px] text-text-muted/50 font-mono">
+                    Input target coordinates &rarr; map full citation universe
                   </p>
                   {doiError && (
-                    <p className="text-xs text-red-400/80">{doiError}</p>
+                    <p className="text-[10px] text-accent-red/70 font-mono">{doiError}</p>
                   )}
                 </div>
               </form>
 
-              {/* Example seeds */}
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <span className="text-xs text-text-secondary/30">Try:</span>
+              {/* Known targets */}
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-text-muted/30">Known targets:</span>
                 {EXAMPLE_SEEDS.map((s) => (
                   <button
                     key={s.doi}
                     onClick={() => handleDOILookup(s.doi)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface/60 hover:bg-surface border border-cosmic-glow/10 hover:border-cosmic-glow/30 text-xs text-text-secondary hover:text-cosmic-glow transition-all"
+                    className="group/chip flex items-center gap-1.5 px-3 py-1.5 rounded border border-[rgba(0,229,255,0.06)] hover:border-[rgba(0,229,255,0.2)] bg-[rgba(0,229,255,0.02)] hover:bg-[rgba(0,229,255,0.05)] text-xs transition-all"
                   >
-                    <span>{s.label}</span>
-                    <span className="text-text-secondary/30">{s.field}</span>
+                    <span className="text-text-secondary/70 group-hover/chip:text-cosmic-glow transition-colors font-mono text-[11px]">{s.label}</span>
+                    <span className="text-text-muted/30 text-[9px] font-mono">{s.field}</span>
                   </button>
                 ))}
               </div>
@@ -243,9 +283,13 @@ export default function LandingPage() {
             >
               <form onSubmit={handleSubmit}>
                 <div className="relative group">
-                  <div className="absolute -inset-0.5 bg-gradient-to-r from-accent/20 to-accent-purple/20 rounded-2xl blur opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-500" />
-                  <div className="relative flex items-center hud-panel rounded-2xl overflow-hidden">
-                    <Search className="w-5 h-5 text-text-secondary ml-5 flex-shrink-0" />
+                  <div className="absolute -inset-px bg-gradient-to-r from-cosmic-nebula/15 to-cosmic-glow/15 rounded-lg blur-sm opacity-0 group-focus-within:opacity-100 transition-opacity duration-700" />
+                  <div className="relative flex items-center bg-[rgba(4,8,18,0.9)] rounded-lg overflow-hidden border border-[rgba(0,229,255,0.12)] group-focus-within:border-[rgba(0,229,255,0.3)] transition-colors">
+                    <div className="flex items-center gap-2 pl-4 pr-2 text-cosmic-nebula/30 flex-shrink-0">
+                      <ScanSearch className="w-4 h-4" />
+                      <span className="text-[10px] font-mono uppercase tracking-wider hidden sm:inline">SCAN</span>
+                    </div>
+                    <div className="w-px h-6 bg-[rgba(0,229,255,0.1)] flex-shrink-0" />
                     <input
                       type="text"
                       value={inputValue}
@@ -255,32 +299,40 @@ export default function LandingPage() {
                         setDoiError(null);
                       }}
                       placeholder="Describe your research topic or question..."
-                      className="flex-1 bg-transparent px-4 py-5 text-base text-text-primary placeholder:text-text-secondary/40 outline-none"
+                      className="flex-1 bg-transparent px-4 py-4 text-sm text-text-primary placeholder:text-text-muted/40 outline-none font-mono"
                       autoFocus
                     />
                     <button
                       type="submit"
                       disabled={!inputValue.trim() || isLoadingNatural}
-                      className="px-8 py-5 hud-button uppercase font-mono tracking-wider disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+                      className="px-6 py-4 hud-button text-xs uppercase tracking-widest disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2 rounded-none border-0 border-l border-l-[rgba(0,229,255,0.12)]"
                     >
-                      {isLoadingNatural && (
-                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      {isLoadingNatural ? (
+                        <>
+                          <div className="w-3.5 h-3.5 border-2 border-cosmic-glow/30 border-t-cosmic-glow rounded-full animate-spin" />
+                          <span>Scanning</span>
+                        </>
+                      ) : (
+                        <>
+                          <Search className="w-3.5 h-3.5" />
+                          <span>Deep scan</span>
+                        </>
                       )}
-                      {isLoadingNatural ? 'Searching...' : 'FIND PAPERS'}
                     </button>
                   </div>
                 </div>
-                <p className="text-xs text-text-secondary/40 mt-2 px-1">
-                  Search by topic, question, or keywords &rarr; select a paper &rarr; explore its citation universe
+                <p className="text-[10px] text-text-muted/50 font-mono mt-2 px-1">
+                  Broad spectrum scan &rarr; select target &rarr; map citation universe
                 </p>
                 {doiError && (
-                  <p className="text-xs text-red-400/80 mt-1 px-1">{doiError}</p>
+                  <p className="text-[10px] text-accent-red/70 font-mono mt-1 px-1">{doiError}</p>
                 )}
               </form>
 
-              {/* Quick examples */}
+              {/* Scan presets */}
               {!naturalResults && (
-                <div className="mt-3 flex flex-wrap gap-2">
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <span className="text-[10px] font-mono uppercase tracking-wider text-text-muted/30">Presets:</span>
                   {EXAMPLE_QUERIES.map((ex) => (
                     <button
                       key={ex.label}
@@ -288,26 +340,26 @@ export default function LandingPage() {
                         setInputValue(ex.label);
                         handleNaturalSearch(ex.label);
                       }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface/60 hover:bg-surface border border-cosmic-glow/10 hover:border-cosmic-glow/30 text-xs text-text-secondary hover:text-cosmic-glow transition-all"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-[rgba(0,229,255,0.06)] hover:border-[rgba(0,229,255,0.2)] bg-[rgba(0,229,255,0.02)] hover:bg-[rgba(0,229,255,0.05)] text-xs transition-all font-mono"
                     >
-                      {ex.label}
-                      <span className="ml-0.5 text-text-secondary/30">{ex.field}</span>
+                      <span className="text-text-secondary/60">{ex.label}</span>
+                      <span className="text-text-muted/30 text-[9px]">{ex.field}</span>
                     </button>
                   ))}
                 </div>
               )}
 
-              {/* Paper Selection Cards */}
+              {/* Paper results */}
               <AnimatePresence>
                 {naturalResults && naturalResults.length > 0 && (
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
-                    className="mt-4 flex flex-col gap-2 max-h-[400px] overflow-y-auto"
+                    className="mt-4 flex flex-col gap-1.5 max-h-[400px] overflow-y-auto"
                   >
-                    <p className="text-xs text-text-secondary/50 px-1">
-                      Select a seed paper to explore:
+                    <p className="text-[10px] text-text-muted/50 px-1 font-mono uppercase tracking-wider mb-1">
+                      {naturalResults.length} targets detected — select to explore:
                     </p>
                     {naturalResults.map((paper: any) => (
                       <button
@@ -319,12 +371,12 @@ export default function LandingPage() {
                             router.push(`/explore/seed?paper_id=${encodeURIComponent(paper.paper_id)}`);
                           }, 600);
                         }}
-                        className="text-left hud-panel rounded-xl p-4 hover:border-cosmic-glow/30 transition-all group"
+                        className="text-left rounded-lg p-4 bg-[rgba(4,8,18,0.8)] border border-[rgba(0,229,255,0.06)] hover:border-[rgba(0,229,255,0.2)] transition-all group"
                       >
                         <h3 className="text-sm font-medium text-text-primary group-hover:text-cosmic-glow transition-colors leading-snug">
                           {paper.title}
                         </h3>
-                        <div className="flex items-center gap-3 mt-1.5 text-xs text-text-secondary/50">
+                        <div className="flex items-center gap-3 mt-1.5 text-[11px] text-text-muted/50 font-mono">
                           {paper.authors?.slice(0, 3).map((a: any) => a.name || a).join(', ')}
                           {paper.authors?.length > 3 && ' et al.'}
                           {paper.year && <span>&middot; {paper.year}</span>}
@@ -333,14 +385,14 @@ export default function LandingPage() {
                           )}
                         </div>
                         {paper.abstract_snippet && (
-                          <p className="text-xs text-text-secondary/40 mt-1 line-clamp-2">
+                          <p className="text-[11px] text-text-muted/40 mt-1.5 line-clamp-2">
                             {paper.abstract_snippet}
                           </p>
                         )}
                         {paper.fields?.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-2">
                             {paper.fields.slice(0, 3).map((f: string) => (
-                              <span key={f} className="px-1.5 py-0.5 text-[10px] rounded bg-accent/10 text-accent/70">
+                              <span key={f} className="px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wider rounded bg-cosmic-glow/5 text-cosmic-glow/50 border border-cosmic-glow/10">
                                 {f}
                               </span>
                             ))}
@@ -354,9 +406,9 @@ export default function LandingPage() {
                   <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    className="mt-4 text-center text-sm text-text-secondary/50 py-6"
+                    className="mt-4 text-center text-[11px] text-text-muted/40 font-mono py-8"
                   >
-                    No papers found. Try a different query.
+                    No targets detected. Adjust scan parameters.
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -364,24 +416,24 @@ export default function LandingPage() {
           )}
         </AnimatePresence>
 
-        {/* Mode switcher */}
+        {/* === MODE SWITCH === */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.3 }}
-          className="flex items-center justify-center gap-1 mb-8"
+          className="flex items-center justify-center gap-1 mb-10"
         >
           {([
-            { mode: 'doi' as InputMode, icon: FileText, label: 'Seed Paper' },
-            { mode: 'natural' as InputMode, icon: Search, label: 'Find Papers' },
+            { mode: 'doi' as InputMode, icon: Crosshair, label: 'Seed Paper' },
+            { mode: 'natural' as InputMode, icon: ScanSearch, label: 'Find Papers' },
           ]).map(({ mode, icon: Icon, label }) => (
             <button
               key={mode}
               onClick={() => switchMode(mode)}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+              className={`flex items-center gap-1.5 px-4 py-2 rounded text-[10px] font-mono uppercase tracking-widest transition-all border ${
                 activeMode === mode
-                  ? 'bg-cosmic-glow/10 border-cosmic-glow/30 text-cosmic-glow font-mono'
-                  : 'bg-transparent border-transparent text-text-secondary/50 hover:text-text-secondary hover:border-cosmic-glow/10 font-mono'
+                  ? 'bg-cosmic-glow/[0.06] border-cosmic-glow/20 text-cosmic-glow'
+                  : 'bg-transparent border-transparent text-text-muted/40 hover:text-text-secondary/60 hover:border-[rgba(0,229,255,0.08)]'
               }`}
             >
               <Icon className="w-3.5 h-3.5" />
@@ -390,59 +442,88 @@ export default function LandingPage() {
           ))}
         </motion.div>
 
-        {/* Philosophy strip */}
+        {/* === MISSION BRIEFING PANELS === */}
         <motion.div
-          initial={{ opacity: 0, y: 16 }}
+          initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.5 }}
-          className="grid grid-cols-3 gap-4 mb-10"
+          transition={{ duration: 0.6, delay: 0.5 }}
+          className="grid grid-cols-3 gap-3 mb-12"
         >
           {[
             {
-              icon: GitBranch,
+              icon: Orbit,
               color: '#4A90D9',
-              title: 'Citation topology',
-              desc: 'References and co-citations reveal the intellectual lineage of every idea.',
+              title: 'Gravitational Mapping',
+              code: 'GRAV-MAP',
+              desc: 'Citation links form gravitational bonds. References and co-citations reveal the intellectual lineage of every idea.',
+              stat: '16M+',
+              statLabel: 'citation pairs indexed',
             },
             {
               icon: Layers,
               color: '#9B59B6',
-              title: 'Semantic clusters',
-              desc: 'SPECTER2 embeddings place papers by meaning — not just keywords.',
+              title: 'Nebula Classification',
+              code: 'NEB-CLASS',
+              desc: 'SPECTER2 embeddings cluster papers by semantic meaning — forming nebulae of related knowledge.',
+              stat: 'HDBSCAN',
+              statLabel: 'density clustering',
             },
             {
               icon: Clock,
               color: '#2ECC71',
-              title: 'Time depth on Z',
-              desc: 'The Z-axis is publication year — knowledge archaeology in 3D.',
+              title: 'Temporal Archaeology',
+              code: 'TEMP-ARCH',
+              desc: 'Publication year maps to the Z-axis. Excavate knowledge layers from recent discoveries to foundational works.',
+              stat: 'Z-axis',
+              statLabel: 'time depth mapping',
             },
           ].map((f) => (
             <motion.div
               key={f.title}
-              whileHover={{ y: -2 }}
-              className="hud-panel rounded-xl p-4 hover:border-cosmic-glow/30 transition-colors"
+              whileHover={{ y: -2, borderColor: 'rgba(0,229,255,0.2)' }}
+              className="hud-panel rounded-lg p-4 transition-all cursor-default group"
             >
-              <f.icon className="w-5 h-5 mb-3" style={{ color: f.color }} />
-              <h3 className="text-sm font-semibold mb-1">{f.title}</h3>
-              <p className="text-xs text-text-secondary/60 leading-relaxed">{f.desc}</p>
+              {/* Panel header */}
+              <div className="flex items-center justify-between mb-3">
+                <f.icon className="w-4 h-4" style={{ color: f.color, opacity: 0.7 }} />
+                <span className="text-[8px] font-mono tracking-widest text-text-muted/30">{f.code}</span>
+              </div>
+
+              {/* Title */}
+              <h3 className="text-xs font-mono font-semibold uppercase tracking-wider mb-2 text-text-primary/90">
+                {f.title}
+              </h3>
+
+              {/* Description */}
+              <p className="text-[11px] text-text-muted/50 leading-relaxed mb-3">
+                {f.desc}
+              </p>
+
+              {/* Stat readout */}
+              <div className="pt-2 border-t border-[rgba(0,229,255,0.06)]">
+                <div className="hud-label text-[8px] text-text-muted/30 mb-0.5">{f.statLabel}</div>
+                <div className="text-xs font-mono font-bold" style={{ color: f.color, opacity: 0.8 }}>{f.stat}</div>
+              </div>
             </motion.div>
           ))}
         </motion.div>
 
-        {/* Footer */}
+        {/* === FOOTER === */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.5, delay: 0.8 }}
-          className="text-center text-xs text-text-secondary/30"
+          className="text-center mb-8"
         >
-          <a href={user ? '/dashboard' : '/auth'} className="hover:text-accent transition-colors">
-            {user ? 'My Account' : 'Sign In'}
-          </a>
-          <span className="mx-3">&middot;</span>
-          <a href="/dashboard" className="hover:text-accent transition-colors">
-            Dashboard
-          </a>
+          <div className="flex items-center justify-center gap-4 text-[10px] font-mono text-text-muted/25">
+            <a href={user ? '/dashboard' : '/auth'} className="hover:text-cosmic-glow/50 transition-colors uppercase tracking-wider">
+              {user ? 'My Account' : 'Sign In'}
+            </a>
+            <span className="w-px h-3 bg-text-muted/10" />
+            <a href="/dashboard" className="hover:text-cosmic-glow/50 transition-colors uppercase tracking-wider">
+              Dashboard
+            </a>
+          </div>
         </motion.div>
       </div>
     </div>

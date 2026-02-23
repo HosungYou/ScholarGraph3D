@@ -14,7 +14,6 @@ export default function GapSpotterPanel() {
     clearHighlightedPaperIds,
   } = useGraphStore();
 
-  // Build paper id → title lookup from graph nodes
   const paperTitleMap = useMemo(() => {
     const map = new Map<string, string>();
     if (!graphData) return map;
@@ -22,7 +21,6 @@ export default function GapSpotterPanel() {
     return map;
   }, [graphData]);
 
-  // Resolve frontier papers with titles
   const frontierPapers = useMemo(() => {
     return frontierIds
       .map((id) => ({ id, title: paperTitleMap.get(id) ?? id }))
@@ -34,14 +32,12 @@ export default function GapSpotterPanel() {
     return (
       <div className="p-4">
         <div className="flex items-center gap-2 mb-4">
-          <Radar className="w-4 h-4 text-[#00E5FF]" />
-          <span className="text-[10px] font-mono uppercase tracking-widest text-[#00E5FF]/60">
-            GAP SPOTTER
-          </span>
+          <Radar className="w-4 h-4 text-[#00E5FF]/60" />
+          <span className="hud-label text-[#00E5FF]/50">GAP SPOTTER</span>
         </div>
         <div className="flex flex-col items-center justify-center py-8 text-center">
-          <Waypoints className="w-8 h-8 text-[#1a2555] mb-3" />
-          <p className="text-xs font-mono text-[#7B8CDE]/50 leading-relaxed">
+          <Waypoints className="w-8 h-8 text-[rgba(0,229,255,0.08)] mb-3" />
+          <p className="text-[10px] font-mono text-[#7B8CDE]/40 leading-relaxed max-w-[200px]">
             No research gaps detected yet. Build a larger graph to discover connections.
           </p>
         </div>
@@ -54,16 +50,15 @@ export default function GapSpotterPanel() {
       {/* Header */}
       <div className="flex items-center gap-2 mb-4">
         <Radar className="w-4 h-4 text-[#00E5FF]" />
-        <span className="text-[10px] font-mono uppercase tracking-widest text-[#00E5FF]/60">
-          GAP SPOTTER
-        </span>
-        <span className="ml-auto text-[10px] font-mono text-[#7B8CDE]/60">
+        <span className="hud-label text-[#00E5FF]/60">GAP SPOTTER</span>
+        <div className="flex-1 h-px bg-gradient-to-r from-[rgba(0,229,255,0.12)] to-transparent" />
+        <span className="hud-label text-[#7B8CDE]/40">
           {gaps.length} gap{gaps.length !== 1 ? 's' : ''}
         </span>
       </div>
 
       {/* Gap cards */}
-      <div className="space-y-3 mb-4">
+      <div className="space-y-2 mb-4">
         {gaps.map((gap: StructuralGap) => (
           <GapCard
             key={gap.gap_id}
@@ -79,32 +74,32 @@ export default function GapSpotterPanel() {
 
       {/* Frontier papers section */}
       {frontierPapers.length > 0 && (
-        <div className="mt-4 pt-4 border-t border-[#1a2555]/40">
+        <div className="mt-4 pt-4">
+          <div className="hud-divider mb-4" />
           <div className="flex items-center gap-2 mb-3">
             <Sparkles className="w-3.5 h-3.5 text-[#a29bfe]" />
-            <span className="text-[10px] font-mono uppercase tracking-widest text-[#a29bfe]/70">
-              FRONTIER PAPERS
-            </span>
-            <span className="ml-auto text-[10px] font-mono text-[#7B8CDE]/40">
+            <span className="hud-label text-[#a29bfe]/60">FRONTIER PAPERS</span>
+            <div className="flex-1 h-px bg-gradient-to-r from-[rgba(162,155,254,0.12)] to-transparent" />
+            <span className="hud-label text-[#7B8CDE]/30">
               {frontierPapers.length}
             </span>
           </div>
-          <p className="text-[10px] font-mono text-[#7B8CDE]/40 mb-2 leading-relaxed">
+          <p className="text-[10px] font-mono text-[#7B8CDE]/35 mb-2 leading-relaxed">
             Papers with many unexplored connections
           </p>
           <div className="space-y-1">
             {frontierPapers.slice(0, 8).map((paper) => (
               <div
                 key={paper.id}
-                className="p-2 rounded border border-[#1a2555]/30 bg-[#050510]/60 hover:border-[#a29bfe]/30 hover:bg-[#0d0b1e]/60 transition-colors"
+                className="p-2 rounded-lg border border-[rgba(162,155,254,0.08)] bg-[rgba(162,155,254,0.02)] hover:border-[rgba(162,155,254,0.15)] hover:bg-[rgba(162,155,254,0.04)] transition-all"
               >
-                <p className="text-xs font-mono text-[#a29bfe]/80 leading-snug line-clamp-2">
+                <p className="text-[10px] font-mono text-[#a29bfe]/70 leading-snug line-clamp-2">
                   {paper.title}
                 </p>
               </div>
             ))}
             {frontierPapers.length > 8 && (
-              <p className="text-[10px] font-mono text-[#7B8CDE]/40 pt-1 text-center">
+              <p className="text-[10px] font-mono text-[#7B8CDE]/30 pt-1 text-center">
                 +{frontierPapers.length - 8} more frontier papers
               </p>
             )}
@@ -126,7 +121,6 @@ interface GapCardProps {
 function GapCard({ gap, onMouseEnter, onMouseLeave }: GapCardProps) {
   const strengthPct = Math.round(gap.gap_strength * 100);
 
-  // Color ramp: low gap strength = dim blue, high = bright cyan
   const strengthColor =
     gap.gap_strength > 0.75
       ? '#00E5FF'
@@ -138,22 +132,22 @@ function GapCard({ gap, onMouseEnter, onMouseLeave }: GapCardProps) {
     <div
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      className="rounded-lg border border-[#1a2555] bg-[#050510]/80 hover:border-[#1a2555]/80 hover:bg-[#0a0d1e]/80 transition-all cursor-default"
+      className="hud-panel-clean rounded-lg hover:border-[rgba(0,229,255,0.15)] transition-all cursor-default"
     >
       <div className="p-3">
         {/* Cluster pair */}
         <div className="flex items-center gap-1.5 mb-2">
-          <Waypoints className="w-3 h-3 text-[#7B8CDE]/60 flex-shrink-0" />
+          <Waypoints className="w-3 h-3 text-[#7B8CDE]/40 flex-shrink-0" />
           <div className="flex items-center gap-1 min-w-0 flex-1">
-            <span className="text-[10px] font-mono text-[#7B8CDE] truncate max-w-[80px]">
+            <span className="text-[10px] font-mono text-[#7B8CDE]/70 truncate max-w-[80px]">
               {gap.cluster_a.label}
             </span>
-            <span className="text-[10px] font-mono text-[#1a2555]">↔</span>
-            <span className="text-[10px] font-mono text-[#7B8CDE] truncate max-w-[80px]">
+            <span className="text-[10px] font-mono text-[rgba(0,229,255,0.2)]">↔</span>
+            <span className="text-[10px] font-mono text-[#7B8CDE]/70 truncate max-w-[80px]">
               {gap.cluster_b.label}
             </span>
           </div>
-          <span className="text-[10px] font-mono text-[#7B8CDE]/40 flex-shrink-0 ml-auto">
+          <span className="hud-label text-[#7B8CDE]/30 flex-shrink-0 ml-auto">
             {gap.cluster_a.paper_count + gap.cluster_b.paper_count}p
           </span>
         </div>
@@ -161,20 +155,18 @@ function GapCard({ gap, onMouseEnter, onMouseLeave }: GapCardProps) {
         {/* Gap strength bar */}
         <div className="mb-2">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-[9px] font-mono uppercase tracking-wider text-[#7B8CDE]/40">
-              Gap Strength
-            </span>
-            <span className="text-[9px] font-mono" style={{ color: strengthColor }}>
+            <span className="hud-label">Gap Strength</span>
+            <span className="text-[9px] font-mono font-semibold" style={{ color: strengthColor }}>
               {strengthPct}%
             </span>
           </div>
-          <div className="h-1 bg-[#0a0f1e] rounded-full overflow-hidden">
+          <div className="h-0.5 bg-[rgba(0,229,255,0.04)] rounded-full overflow-hidden">
             <div
               className="h-full rounded-full transition-all duration-500"
               style={{
                 width: `${strengthPct}%`,
                 backgroundColor: strengthColor,
-                boxShadow: gap.gap_strength > 0.6 ? `0 0 6px ${strengthColor}60` : undefined,
+                boxShadow: gap.gap_strength > 0.6 ? `0 0 6px ${strengthColor}40` : undefined,
               }}
             />
           </div>
@@ -182,37 +174,34 @@ function GapCard({ gap, onMouseEnter, onMouseLeave }: GapCardProps) {
 
         {/* Bridge papers */}
         {gap.bridge_papers.length > 0 && (
-          <div className="mb-2">
-            <div className="text-[9px] font-mono uppercase tracking-wider text-[#7B8CDE]/40 mb-1">
-              Bridge Papers
-            </div>
+          <div className="mb-1">
+            <span className="hud-label mb-1 block">Bridge Papers</span>
             <div className="space-y-0.5">
               {gap.bridge_papers.slice(0, 3).map((bp) => (
                 <div
                   key={bp.paper_id}
-                  className="flex items-start gap-1.5 px-1.5 py-1 rounded hover:bg-[#111833]/60 transition-colors"
+                  className="flex items-start gap-1.5 px-1.5 py-1 rounded hover:bg-[rgba(0,229,255,0.03)] transition-colors"
                 >
                   <div
                     className="w-1 h-1 rounded-full flex-shrink-0 mt-1.5"
-                    style={{ backgroundColor: '#00E5FF', opacity: bp.score }}
+                    style={{ backgroundColor: '#00E5FF', opacity: bp.score * 0.8 }}
                   />
-                  <span className="text-[10px] font-mono text-[#7B8CDE]/70 leading-snug line-clamp-2">
+                  <span className="text-[10px] font-mono text-[#7B8CDE]/60 leading-snug line-clamp-2">
                     {bp.title}
                   </span>
-                  <span className="text-[9px] font-mono text-[#7B8CDE]/30 flex-shrink-0 ml-auto">
+                  <span className="text-[9px] font-mono text-[#7B8CDE]/25 flex-shrink-0 ml-auto">
                     {Math.round(bp.score * 100)}%
                   </span>
                 </div>
               ))}
               {gap.bridge_papers.length > 3 && (
-                <p className="text-[9px] font-mono text-[#7B8CDE]/30 px-1.5">
+                <p className="text-[9px] font-mono text-[#7B8CDE]/25 px-1.5">
                   +{gap.bridge_papers.length - 3} more
                 </p>
               )}
             </div>
           </div>
         )}
-
       </div>
     </div>
   );

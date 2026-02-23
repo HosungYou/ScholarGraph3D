@@ -9,11 +9,32 @@ import ScholarGraph3D, { type ScholarGraph3DRef } from '@/components/graph/Schol
 import PaperDetailPanel from '@/components/graph/PaperDetailPanel';
 import ClusterPanel from '@/components/graph/ClusterPanel';
 import GraphControls from '@/components/graph/GraphControls';
+import GraphLegend from '@/components/graph/GraphLegend';
 import RadarLoader from '@/components/cosmic/RadarLoader';
 import SeedChatPanel from '@/components/graph/SeedChatPanel';
 import GapSpotterPanel from '@/components/graph/GapSpotterPanel';
 import type { Paper, CitationIntent, GraphData, StructuralGap } from '@/types';
-import { Search, ArrowLeft, Network, GitBranch, Layers, Share2, CheckCircle, MessageCircle, ScanSearch } from 'lucide-react';
+import {
+  Search,
+  ArrowLeft,
+  Network,
+  GitBranch,
+  Layers,
+  Share2,
+  CheckCircle,
+  MessageCircle,
+  ScanSearch,
+  ChevronLeft,
+  ChevronRight,
+  X,
+} from 'lucide-react';
+
+/* ──────────────────────────────────────────────
+   Sidebar collapsed width & expanded width
+   ────────────────────────────────────────────── */
+const SIDEBAR_COLLAPSED = 48;
+const SIDEBAR_EXPANDED = 300;
+const DRAWER_WIDTH = 480;
 
 function SeedExploreContent() {
   const searchParams = useSearchParams();
@@ -52,6 +73,22 @@ function SeedExploreContent() {
     similarity_edges?: number;
   } | null>(null);
 
+  /* ── Left sidebar collapse ── */
+  const [leftCollapsed, setLeftCollapsed] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('seed-left-collapsed') === 'true';
+    }
+    return false;
+  });
+
+  const toggleLeftCollapsed = useCallback(() => {
+    setLeftCollapsed(prev => {
+      const next = !prev;
+      localStorage.setItem('seed-left-collapsed', String(next));
+      return next;
+    });
+  }, []);
+
   // Auto-save helpers
   const showSavedIndicator = useCallback(() => {
     setSavedIndicator(true);
@@ -66,7 +103,6 @@ function SeedExploreContent() {
         : `Seed: ${paperId}`;
 
       if (savedGraphIdRef.current) {
-        // Update existing saved graph
         await api.saveGraph({
           name,
           seed_query: paperId,
@@ -82,7 +118,6 @@ function SeedExploreContent() {
       }
       showSavedIndicator();
     } catch (err) {
-      // Auto-save failures are silent — don't interrupt the user
       if (process.env.NODE_ENV === 'development') {
         console.debug('[AutoSave] Failed:', err);
       }
@@ -104,64 +139,6 @@ function SeedExploreContent() {
     };
   }, []);
 
-  // Panel resize — left
-  const [leftPanelWidth, setLeftPanelWidth] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('seed-left-panel-width');
-      return saved ? Math.min(500, Math.max(240, Number(saved))) : 360;
-    }
-    return 360;
-  });
-  const leftResizeRef = useRef(false);
-  const handleLeftPanelResizeStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    leftResizeRef.current = true;
-    const startX = e.clientX;
-    const startWidth = leftPanelWidth;
-    const onMouseMove = (ev: MouseEvent) => {
-      if (!leftResizeRef.current) return;
-      const newWidth = Math.min(500, Math.max(240, startWidth + (ev.clientX - startX)));
-      setLeftPanelWidth(newWidth);
-      localStorage.setItem('seed-left-panel-width', String(newWidth));
-    };
-    const onMouseUp = () => {
-      leftResizeRef.current = false;
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mouseup', onMouseUp);
-    };
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mouseup', onMouseUp);
-  }, [leftPanelWidth]);
-
-  // Panel resize — right
-  const [rightPanelWidth, setRightPanelWidth] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('seed-right-panel-width');
-      return saved ? Math.min(700, Math.max(320, Number(saved))) : 520;
-    }
-    return 520;
-  });
-  const rightResizeRef = useRef(false);
-  const handleRightPanelResizeStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    rightResizeRef.current = true;
-    const startX = e.clientX;
-    const startWidth = rightPanelWidth;
-    const onMouseMove = (ev: MouseEvent) => {
-      if (!rightResizeRef.current) return;
-      const newWidth = Math.min(700, Math.max(320, startWidth - (ev.clientX - startX)));
-      setRightPanelWidth(newWidth);
-      localStorage.setItem('seed-right-panel-width', String(newWidth));
-    };
-    const onMouseUp = () => {
-      rightResizeRef.current = false;
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mouseup', onMouseUp);
-    };
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mouseup', onMouseUp);
-  }, [rightPanelWidth]);
-
   // Load saved graph if graph_id is present
   const graphId = searchParams.get('graph_id');
 
@@ -181,7 +158,6 @@ function SeedExploreContent() {
         const meta = data.meta as any;
         setSeedMeta(meta);
 
-        // Extract citation intents from edges for ScholarGraph3D coloring
         const intents: CitationIntent[] = data.edges
           .filter(e => e.type === 'citation' && e.intent)
           .map(e => ({
@@ -194,7 +170,6 @@ function SeedExploreContent() {
           setCitationIntents(intents);
         }
 
-        // Extract gaps and frontier data from response
         const responseAny = data as any;
         if (responseAny.gaps && Array.isArray(responseAny.gaps)) {
           setGaps(responseAny.gaps);
@@ -203,7 +178,6 @@ function SeedExploreContent() {
           setFrontierIds(responseAny.frontier_ids);
         }
 
-        // Auto-save after initial load
         autoSave(data, meta?.seed_title);
       })
       .catch((err) => {
@@ -260,13 +234,11 @@ function SeedExploreContent() {
         const count = result.nodes.length;
 
         if (count > 0) {
-          // Track expansion origin
           const store = useGraphStore.getState();
           const newMap = new Map(store.expandedFromMap);
           result.nodes.forEach((n: Paper) => newMap.set(n.id, paper.id));
           store.setExpandedFromMap(newMap);
 
-          // Get parent node position for expand animation
           const parentNode = graphData?.nodes.find(
             n => n.id === expandId ||
                  n.s2_paper_id === expandId ||
@@ -276,12 +248,10 @@ function SeedExploreContent() {
           const oy = parentNode?.y ?? 0;
           const oz = parentNode?.z ?? 0;
 
-          // Save final target positions
           const targets = new Map(
             result.nodes.map(n => [n.id, { x: n.x, y: n.y, z: n.z }])
           );
 
-          // Add nodes at parent position, then animate
           const nodesAtOrigin = result.nodes.map(n => ({
             ...n,
             x: ox,
@@ -299,7 +269,6 @@ function SeedExploreContent() {
             );
           }, 50);
 
-          // Build success message with meta
           const meta = result.meta;
           if (meta && (!meta.references_ok || !meta.citations_ok)) {
             const detail = meta.error_detail ? ` — ${meta.error_detail}` : '';
@@ -308,7 +277,6 @@ function SeedExploreContent() {
             setExpandSuccess(`${count} papers added`);
           }
 
-          // Debounced auto-save after expand
           const currentGraphData = useGraphStore.getState().graphData;
           if (currentGraphData) {
             scheduleDebouncedSave(currentGraphData, seedMeta?.seed_title);
@@ -344,28 +312,49 @@ function SeedExploreContent() {
 
   const showPaperDetail = !!selectedPaper;
 
+  /* ── Tab metadata for sidebar ── */
+  const tabs = [
+    { id: 'clusters' as const, icon: Layers, label: 'CLUSTERS' },
+    { id: 'gaps' as const, icon: ScanSearch, label: 'GAPS' },
+    { id: 'chat' as const, icon: MessageCircle, label: 'CHAT' },
+  ];
+
   return (
-    <div className="h-screen flex flex-col bg-background">
-      {/* Top bar */}
-      <div className="flex-shrink-0 border-b border-border/50 glass-strong z-20">
-        <div className="flex items-center gap-4 px-4 py-3">
-          <a href="/" className="text-lg font-bold text-[#00E5FF] flex-shrink-0 font-mono tracking-wider">
+    <div className="h-screen flex flex-col bg-black">
+      {/* ═══════════════════════════════════════════
+          TOP BAR — Mission Control HUD
+          ═══════════════════════════════════════════ */}
+      <div className="flex-shrink-0 z-20 hud-panel-clean border-b border-[rgba(0,229,255,0.12)]">
+        <div className="flex items-center gap-4 px-4 py-2.5">
+          {/* Logo */}
+          <a
+            href="/"
+            className="text-sm font-bold text-[#00E5FF] flex-shrink-0 font-mono tracking-[0.2em] hover:text-[#00E5FF]/80 transition-colors"
+          >
             SG3D
           </a>
-          <span className="text-[#7B8CDE]/40">|</span>
-          <div className="flex items-center gap-2 text-sm text-[#7B8CDE]">
-            <Network className="w-4 h-4 text-[#6c5ce7]" />
-            <span className="font-mono uppercase tracking-wider text-[#a29bfe]">ORIGIN POINT MODE</span>
+
+          <div className="w-px h-5 bg-[rgba(0,229,255,0.12)]" />
+
+          {/* Mode badge */}
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Network className="w-3.5 h-3.5 text-[#6c5ce7]" />
+              <div className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-[#00E5FF] animate-pulse" />
+            </div>
+            <span className="hud-label text-[#a29bfe]">ORIGIN POINT</span>
           </div>
 
+          {/* Seed title */}
           {seedMeta?.seed_title && (
             <div className="flex-1 min-w-0">
-              <p className="text-xs text-[#7B8CDE] truncate max-w-md font-mono">
+              <p className="text-[10px] text-[#7B8CDE]/60 truncate max-w-md font-mono">
                 {seedMeta.seed_title}
               </p>
             </div>
           )}
 
+          {/* Right actions */}
           <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
             <AnimatePresence>
               {savedIndicator && (
@@ -375,123 +364,142 @@ function SeedExploreContent() {
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.85 }}
                   transition={{ duration: 0.2 }}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-mono text-green-400 border border-green-700/40 bg-green-900/20"
+                  className="flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-mono text-green-400 border border-green-700/30 bg-green-900/15"
                 >
-                  <CheckCircle className="w-3.5 h-3.5" />
-                  Saved
+                  <CheckCircle className="w-3 h-3" />
+                  SAVED
                 </motion.div>
               )}
             </AnimatePresence>
             <button
               onClick={() => router.push('/dashboard')}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium font-mono uppercase tracking-wider bg-[#0a0f1e] text-[#7B8CDE] hover:text-[#E8EAF6] hover:bg-[#111833] border border-[#1a2555]"
+              className="hud-button-ghost flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[10px] uppercase tracking-wider"
             >
-              <Search className="w-3.5 h-3.5" />
-              My Graphs
+              <Search className="w-3 h-3" />
+              Graphs
             </button>
             <button
               onClick={() => router.push('/')}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium font-mono uppercase tracking-wider bg-[#0a0f1e] text-[#7B8CDE] hover:text-[#E8EAF6] hover:bg-[#111833] border border-[#1a2555]"
+              className="hud-button-ghost flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[10px] uppercase tracking-wider"
             >
-              <ArrowLeft className="w-3.5 h-3.5" />
+              <ArrowLeft className="w-3 h-3" />
               Home
             </button>
           </div>
         </div>
       </div>
 
-      {/* Main content */}
-      <motion.div
-        className="flex-1 flex overflow-hidden relative"
-        initial={{ scale: 1.02, filter: 'blur(4px)' }}
-        animate={{ scale: 1, filter: 'blur(0px)' }}
-        transition={{ duration: 0.5 }}
-      >
-        {/* Left panel: tabbed */}
-        <div
-          style={{ width: leftPanelWidth }}
-          className="flex-shrink-0 border-r border-border/30 glass flex flex-col relative"
+      {/* ═══════════════════════════════════════════
+          MAIN CONTENT — Sidebar + Graph + Drawer
+          ═══════════════════════════════════════════ */}
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* ─── Left Sidebar — Collapsible ─── */}
+        <motion.div
+          animate={{ width: leftCollapsed ? SIDEBAR_COLLAPSED : SIDEBAR_EXPANDED }}
+          transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+          className="flex-shrink-0 border-r border-[rgba(0,229,255,0.08)] bg-[rgba(4,8,18,0.92)] flex flex-col relative z-10"
         >
-          {/* Tab header */}
-          <div className="flex-shrink-0 border-b border-[#1a2555]/30">
-            <div className="flex">
+          {leftCollapsed ? (
+            /* ── Collapsed: icon-only vertical tabs ── */
+            <div className="flex flex-col items-center pt-2 gap-1">
+              {tabs.map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => {
+                    setActiveTab(tab.id);
+                    setLeftCollapsed(false);
+                    localStorage.setItem('seed-left-collapsed', 'false');
+                  }}
+                  title={tab.label}
+                  className={`w-9 h-9 flex items-center justify-center rounded-lg transition-all ${
+                    activeTab === tab.id
+                      ? 'bg-[#00E5FF]/10 text-[#00E5FF] shadow-[0_0_8px_rgba(0,229,255,0.12)]'
+                      : 'text-[#7B8CDE]/40 hover:text-[#7B8CDE] hover:bg-[#111833]/50'
+                  }`}
+                >
+                  <tab.icon className="w-4 h-4" />
+                </button>
+              ))}
+              <div className="flex-1" />
               <button
-                onClick={() => setActiveTab('clusters')}
-                className={`flex items-center gap-1.5 px-3 py-2.5 text-[10px] font-mono uppercase tracking-widest transition-colors ${
-                  activeTab === 'clusters'
-                    ? 'text-[#00E5FF] border-b-2 border-[#00E5FF]'
-                    : 'text-[#7B8CDE]/50 hover:text-[#7B8CDE]'
-                }`}
+                onClick={toggleLeftCollapsed}
+                className="w-9 h-9 flex items-center justify-center text-[#7B8CDE]/30 hover:text-[#7B8CDE] transition-colors mb-2"
+                title="Expand sidebar"
               >
-                <Layers className="w-3 h-3" />
-                CLUSTERS
-              </button>
-              <button
-                onClick={() => setActiveTab('gaps')}
-                className={`flex items-center gap-1.5 px-3 py-2.5 text-[10px] font-mono uppercase tracking-widest transition-colors ${
-                  activeTab === 'gaps'
-                    ? 'text-[#00E5FF] border-b-2 border-[#00E5FF]'
-                    : 'text-[#7B8CDE]/50 hover:text-[#7B8CDE]'
-                }`}
-              >
-                <ScanSearch className="w-3 h-3" />
-                GAPS
-              </button>
-              <button
-                onClick={() => setActiveTab('chat')}
-                className={`flex items-center gap-1.5 px-3 py-2.5 text-[10px] font-mono uppercase tracking-widest transition-colors ${
-                  activeTab === 'chat'
-                    ? 'text-[#00E5FF] border-b-2 border-[#00E5FF]'
-                    : 'text-[#7B8CDE]/50 hover:text-[#7B8CDE]'
-                }`}
-              >
-                <MessageCircle className="w-3 h-3" />
-                CHAT
+                <ChevronRight className="w-4 h-4" />
               </button>
             </div>
-          </div>
-          {/* Tab content */}
-          <div className="flex-1 overflow-y-auto min-h-0">
-            {activeTab === 'clusters' && <ClusterPanel />}
-            {activeTab === 'gaps' && <GapSpotterPanel />}
-            {activeTab === 'chat' && <SeedChatPanel />}
-          </div>
-          {/* Resize handle */}
-          <div
-            className="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-[#00E5FF]/30 active:bg-[#00E5FF]/50 transition-colors z-10"
-            onMouseDown={handleLeftPanelResizeStart}
-          />
-        </div>
+          ) : (
+            /* ── Expanded: full tabs + content ── */
+            <>
+              {/* Tab header */}
+              <div className="flex-shrink-0 border-b border-[rgba(0,229,255,0.08)]">
+                <div className="flex">
+                  {tabs.map(tab => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id)}
+                      className={`flex items-center gap-1.5 px-3 py-2.5 text-[10px] font-mono uppercase tracking-widest transition-colors ${
+                        activeTab === tab.id
+                          ? 'text-[#00E5FF] border-b-2 border-[#00E5FF]'
+                          : 'text-[#7B8CDE]/40 hover:text-[#7B8CDE]'
+                      }`}
+                    >
+                      <tab.icon className="w-3 h-3" />
+                      {tab.label}
+                    </button>
+                  ))}
+                  <div className="flex-1" />
+                  <button
+                    onClick={toggleLeftCollapsed}
+                    className="px-2 flex items-center text-[#7B8CDE]/30 hover:text-[#7B8CDE] transition-colors"
+                    title="Collapse sidebar"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+              {/* Tab content */}
+              <div className="flex-1 overflow-y-auto min-h-0">
+                {activeTab === 'clusters' && <ClusterPanel />}
+                {activeTab === 'gaps' && <GapSpotterPanel />}
+                {activeTab === 'chat' && <SeedChatPanel />}
+              </div>
+            </>
+          )}
+        </motion.div>
 
-        {/* Center: 3D Graph */}
+        {/* ─── Center: 3D Graph ─── */}
         <div className="flex-1 relative min-w-0 overflow-hidden">
           {isLoading && (
-            <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/80">
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/80">
               <div className="text-center">
                 <RadarLoader message="BUILDING CITATION NETWORK..." />
-                <p className="text-xs text-[#7B8CDE]/50 mt-3 font-mono">Fetching references &amp; citations from Semantic Scholar</p>
+                <p className="text-[10px] text-[#7B8CDE]/40 mt-3 font-mono">
+                  Fetching references &amp; citations from Semantic Scholar
+                </p>
               </div>
             </div>
           )}
 
           {!isLoading && !graphData && paperId && (
             <div className="absolute inset-0 flex items-center justify-center">
-              <p className="text-[#7B8CDE] font-mono">No results found</p>
+              <p className="text-[#7B8CDE] font-mono text-sm">No results found</p>
             </div>
           )}
 
           {!paperId && (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="text-center max-w-md px-4">
-                <Network className="w-12 h-12 text-[#6c5ce7] mx-auto mb-4" />
-                <div className="text-[10px] font-mono uppercase tracking-widest text-[#00E5FF]/40 mb-2">[ AWAITING ORIGIN POINT ]</div>
+                <Network className="w-12 h-12 text-[#6c5ce7] mx-auto mb-4 opacity-60" />
+                <div className="hud-label text-[#00E5FF]/30 mb-2">[ AWAITING ORIGIN POINT ]</div>
                 <h2 className="text-xl font-semibold text-text-primary mb-2 font-mono">
                   ORIGIN POINT EXPLORATION
                 </h2>
-                <p className="text-[#7B8CDE]/70 text-sm mb-6 font-mono">
+                <p className="text-[#7B8CDE]/60 text-sm mb-6 font-mono">
                   Start from a single paper and explore its citation network
                 </p>
-                <p className="text-[#7B8CDE]/50 text-xs font-mono">
+                <p className="text-[#7B8CDE]/40 text-xs font-mono">
                   Enter a DOI or Semantic Scholar ID on the home page to begin
                 </p>
               </div>
@@ -500,68 +508,109 @@ function SeedExploreContent() {
 
           {graphData && <ScholarGraph3D ref={graphRef} />}
           <GraphControls />
+          <GraphLegend />
 
-          {/* Seed paper info bar */}
+          {/* ─── Right Drawer Overlay ─── */}
+          <AnimatePresence>
+            {showPaperDetail && (
+              <>
+                {/* Backdrop */}
+                <motion.div
+                  key="drawer-backdrop"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="absolute inset-0 bg-black/30 z-20"
+                  onClick={() => handlePaperSelect(null)}
+                />
+                {/* Drawer panel */}
+                <motion.div
+                  key="paper-drawer"
+                  initial={{ x: DRAWER_WIDTH }}
+                  animate={{ x: 0 }}
+                  exit={{ x: DRAWER_WIDTH }}
+                  transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+                  style={{ width: DRAWER_WIDTH }}
+                  className="absolute top-0 right-0 bottom-0 z-30 border-l border-[rgba(0,229,255,0.12)] bg-[rgba(4,8,18,0.95)] backdrop-blur-xl overflow-y-auto"
+                >
+                  <PaperDetailPanel
+                    paper={selectedPaper}
+                    onClose={() => handlePaperSelect(null)}
+                    onExpand={() => handleExpandPaper(selectedPaper)}
+                    isExpanding={isExpanding}
+                  />
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
+
+          {/* ─── Bottom Status Bar ─── */}
           {graphData && seedMeta && (
-            <div className="absolute bottom-4 left-4 glass rounded-lg px-3 py-2 text-xs text-[#7B8CDE] font-mono space-y-0.5">
-              <div className="flex items-center gap-2">
-                <Network className="w-3.5 h-3.5 text-[#6c5ce7]" />
-                <span>{graphData.nodes.length} papers</span>
-                <span className="text-[#7B8CDE]/30">|</span>
-                <GitBranch className="w-3.5 h-3.5" />
-                <span>{graphData.edges.filter(e => e.type === 'citation').length} citations</span>
-                <span className="text-[#7B8CDE]/30">|</span>
-                <Share2 className="w-3.5 h-3.5 text-[#00E5FF]" />
-                <span>{graphData.edges.filter(e => e.type === 'similarity').length} similar</span>
-                <span className="text-[#7B8CDE]/30">|</span>
-                <Layers className="w-3.5 h-3.5" />
-                <span>{graphData.clusters.length} clusters</span>
-              </div>
-              <div className="text-[10px] text-[#7B8CDE]/50">
-                Double-click a node to expand its citations
+            <div className="absolute bottom-4 left-4 right-4 z-10 pointer-events-none">
+              <div className="inline-flex items-center gap-3 px-3 py-2 hud-panel-clean rounded-lg text-[10px] font-mono text-[#7B8CDE] pointer-events-auto">
+                <div className="flex items-center gap-1.5">
+                  <Network className="w-3 h-3 text-[#6c5ce7]" />
+                  <span className="text-text-primary font-medium">{graphData.nodes.length}</span>
+                  <span className="text-[#7B8CDE]/50">papers</span>
+                </div>
+                <div className="w-px h-3 bg-[rgba(0,229,255,0.1)]" />
+                <div className="flex items-center gap-1.5">
+                  <GitBranch className="w-3 h-3" />
+                  <span className="text-text-primary font-medium">
+                    {graphData.edges.filter(e => e.type === 'citation').length}
+                  </span>
+                  <span className="text-[#7B8CDE]/50">citations</span>
+                </div>
+                <div className="w-px h-3 bg-[rgba(0,229,255,0.1)]" />
+                <div className="flex items-center gap-1.5">
+                  <Share2 className="w-3 h-3 text-[#00E5FF]/60" />
+                  <span className="text-text-primary font-medium">
+                    {graphData.edges.filter(e => e.type === 'similarity').length}
+                  </span>
+                  <span className="text-[#7B8CDE]/50">similar</span>
+                </div>
+                <div className="w-px h-3 bg-[rgba(0,229,255,0.1)]" />
+                <div className="flex items-center gap-1.5">
+                  <Layers className="w-3 h-3" />
+                  <span className="text-text-primary font-medium">{graphData.clusters.length}</span>
+                  <span className="text-[#7B8CDE]/50">clusters</span>
+                </div>
+                <div className="w-px h-3 bg-[rgba(0,229,255,0.1)]" />
+                <span className="text-[#7B8CDE]/30 italic">dbl-click to expand</span>
               </div>
             </div>
           )}
         </div>
+      </div>
 
-        {/* Right panel: paper detail */}
-        <AnimatePresence mode="wait">
-          {showPaperDetail && (
-            <motion.div
-              key="paper-detail"
-              initial={{ x: 100, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              exit={{ x: 100, opacity: 0 }}
-              transition={{ type: 'spring', damping: 25, stiffness: 250 }}
-              style={{ width: rightPanelWidth }}
-              className="flex-shrink-0 border-l border-border/30 glass overflow-y-auto relative z-10"
-            >
-              <div
-                className="absolute left-0 top-0 h-full w-1 cursor-col-resize hover:bg-[#00E5FF]/30 active:bg-[#00E5FF]/50 transition-colors z-10"
-                onMouseDown={handleRightPanelResizeStart}
-              />
-              <PaperDetailPanel
-                paper={selectedPaper}
-                onClose={() => handlePaperSelect(null)}
-                onExpand={() => handleExpandPaper(selectedPaper)}
-                isExpanding={isExpanding}
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </motion.div>
-
-      {/* Toasts */}
-      {expandError && (
-        <div className="fixed bottom-4 right-4 z-50 bg-red-900/90 border border-red-700/50 text-red-200 px-4 py-3 rounded-lg text-sm max-w-sm shadow-xl">
-          {expandError}
-        </div>
-      )}
-      {expandSuccess && (
-        <div className="fixed bottom-4 right-4 z-50 bg-green-900/90 border border-green-700/50 text-green-200 px-4 py-3 rounded-lg text-sm max-w-sm shadow-xl">
-          {expandSuccess}
-        </div>
-      )}
+      {/* ═══════════════════════════════════════════
+          TOASTS
+          ═══════════════════════════════════════════ */}
+      <AnimatePresence>
+        {expandError && (
+          <motion.div
+            key="toast-error"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="fixed bottom-4 right-4 z-50 bg-red-900/90 border border-red-700/40 text-red-200 px-4 py-3 rounded-lg text-sm max-w-sm shadow-xl font-mono"
+          >
+            {expandError}
+          </motion.div>
+        )}
+        {expandSuccess && (
+          <motion.div
+            key="toast-success"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="fixed bottom-4 right-4 z-50 bg-green-900/90 border border-green-700/40 text-green-200 px-4 py-3 rounded-lg text-sm max-w-sm shadow-xl font-mono"
+          >
+            {expandSuccess}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -570,7 +619,7 @@ export default function SeedExplorePage() {
   return (
     <Suspense
       fallback={
-        <div className="h-screen flex items-center justify-center bg-background">
+        <div className="h-screen flex items-center justify-center bg-black">
           <div className="w-12 h-12 border-2 border-[#00E5FF] border-t-transparent rounded-full animate-spin" />
         </div>
       }
