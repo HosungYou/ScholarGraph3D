@@ -1,14 +1,15 @@
 # ScholarGraph3D - Development Guide
 
-Quick reference for setting up and working on ScholarGraph3D locally.
+Quick reference for setting up and working on ScholarGraph3D v2.0 locally.
 
 ## Local Development Setup
 
 ### Prerequisites
+
 - Node.js 18+
 - Python 3.11+
 - PostgreSQL with pgvector
-- Redis (optional, for caching)
+- Redis (optional, graceful no-op if unavailable)
 
 ### Option 1: Docker Compose (Recommended)
 
@@ -40,11 +41,11 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
 # Setup environment
-cp ../.env.example .env
+cp .env.example .env
 # Edit .env with your API keys and database URL
 
-# Run database migrations
-python -m alembic upgrade head
+# Run database migrations (raw SQL)
+psql $DATABASE_URL < database/migrations/003_seed_graphs.sql
 
 # Start server
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
@@ -59,7 +60,7 @@ cd frontend
 npm install
 
 # Setup environment
-cp .env.example .env.local
+cp .env.local.example .env.local
 # Edit .env.local with your Supabase and API URLs
 
 # Start dev server
@@ -79,15 +80,15 @@ SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_JWT_SECRET=your-jwt-secret
 
 # API Keys
-OA_API_KEY=your-openalex-api-key
-OA_EMAIL=your@email.com
-S2_API_KEY=your-semantic-scholar-key  # Optional
+S2_API_KEY=your-semantic-scholar-key
+GROQ_API_KEY=your-groq-api-key
 
 # Cache
 REDIS_URL=redis://localhost:6379
 
-# Frontend
+# CORS
 FRONTEND_URL=http://localhost:3000
+CORS_ORIGINS=http://localhost:3000
 ```
 
 ### Frontend (.env.local)
@@ -112,18 +113,14 @@ pylint backend/
 # Type checking
 mypy backend/
 
-# Tests
-pytest
-
-# Run migrations
-alembic upgrade head
-alembic downgrade -1  # Rollback one migration
+# Tests (with coverage)
+cd backend && pytest -v --cov=. --cov-report=term-missing
 ```
 
 ### Frontend
 
 ```bash
-# Format code
+# Format / lint
 npm run lint
 
 # Type check
@@ -133,7 +130,7 @@ npm run type-check
 npm run build
 
 # Test
-npm run test
+cd frontend && npx jest
 
 # Start production build
 npm start
@@ -148,7 +145,10 @@ npm start
    ```sql
    CREATE EXTENSION IF NOT EXISTS vector;
    ```
-3. Run schema migrations from `backend/database/001_initial_schema.sql`
+3. Run schema migrations from `database/migrations/`:
+   ```bash
+   psql $DATABASE_URL < database/migrations/003_seed_graphs.sql
+   ```
 
 ### Local PostgreSQL
 
@@ -167,27 +167,81 @@ createdb scholargraph3d
 # Follow installation instructions
 
 # Run migrations
-psql scholargraph3d < backend/database/001_initial_schema.sql
+psql scholargraph3d < database/migrations/003_seed_graphs.sql
 ```
 
 ## API Documentation
 
-### Search Endpoint
+Interactive Swagger UI: http://localhost:8000/api/docs
+
+### Paper Search
 
 ```bash
-curl -X POST http://localhost:8000/api/search \
+curl -X POST http://localhost:8000/api/paper-search \
   -H "Content-Type: application/json" \
   -d '{
-    "query": "machine learning",
-    "limit": 100,
-    "year_range": [2020, 2024],
-    "fields": ["Computer Science"]
+    "query": "transformer architectures for vision tasks",
+    "limit": 10
   }'
 ```
 
-Response includes nodes, edges, clusters, and metadata.
+### Seed Explore
 
-See `/api/docs` for interactive API docs (Swagger UI).
+```bash
+curl -X POST http://localhost:8000/api/seed-explore \
+  -H "Content-Type: application/json" \
+  -d '{
+    "paper_id": "204e3073870fae3d05bcbc2f6a8e263d9b72e776",
+    "depth": 2,
+    "max_papers": 150
+  }'
+```
+
+Response: `{ nodes, edges, clusters, gaps, frontier_ids, meta }`
+
+### Expand Node
+
+```bash
+curl -X POST http://localhost:8000/api/papers/{id}/expand-stable \
+  -H "Content-Type: application/json" \
+  -d '{ "existing_positions": {} }'
+```
+
+### Citation Intents
+
+```bash
+curl http://localhost:8000/api/papers/{id}/intents
+```
+
+### Seed Chat
+
+```bash
+curl -X POST http://localhost:8000/api/seed-chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "What are the main research gaps in this graph?",
+    "graph_context": { "nodes": [], "clusters": [] }
+  }'
+```
+
+### Saved Graphs (auth required)
+
+```bash
+# List
+curl -H "Authorization: Bearer <jwt>" http://localhost:8000/api/graphs
+
+# Save
+curl -X POST -H "Authorization: Bearer <jwt>" \
+  -H "Content-Type: application/json" \
+  -d '{ "name": "My Graph", "graph_data": {...} }' \
+  http://localhost:8000/api/graphs
+
+# Load
+curl -H "Authorization: Bearer <jwt>" http://localhost:8000/api/graphs/{id}
+
+# Delete
+curl -X DELETE -H "Authorization: Bearer <jwt>" http://localhost:8000/api/graphs/{id}
+```
 
 ## Project Structure
 
@@ -202,23 +256,30 @@ ScholarGraph3D/
 ├── .gitignore             # Git exclusions
 │
 ├── backend/               # FastAPI application
-│   ├── main.py           # App entry point
-│   ├── config.py         # Settings
-│   ├── database.py       # DB connection pool
-│   ├── database/         # Schema migrations
-│   ├── integrations/     # API clients (S2, OpenAlex)
-│   ├── graph/            # Embedding, clustering, similarity
-│   ├── routers/          # API endpoints
-│   ├── auth/             # Supabase auth
+│   ├── main.py            # App entry point (registers 5 routers)
+│   ├── config.py          # Pydantic Settings (env vars)
+│   ├── database.py        # asyncpg connection pool
+│   ├── cache.py           # Redis helpers (graceful no-op if unavailable)
+│   ├── auth/              # Supabase JWT auth
+│   ├── middleware/        # Analytics + rate limiter
+│   ├── integrations/      # S2 API client + CrossRef DOI lookup
+│   ├── graph/             # Embedding, UMAP, HDBSCAN, gap detection
+│   ├── llm/               # Groq provider (llama-3.3-70b)
+│   ├── services/          # Citation intent classification
+│   ├── routers/           # API endpoints (papers, graphs, seed_explore, paper_search, seed_chat)
+│   ├── database/
+│   │   └── migrations/    # Raw SQL migrations (003_seed_graphs.sql)
 │   └── requirements.txt   # Python dependencies
 │
 └── frontend/              # Next.js application
-    ├── app/              # App Router pages
-    ├── components/       # React components
-    ├── lib/              # Utilities (auth, API, store)
-    ├── hooks/            # Custom React hooks
-    ├── types/            # TypeScript definitions
-    ├── package.json      # Node dependencies
+    ├── app/               # App Router pages (/, /explore/seed, /auth, /dashboard)
+    ├── components/        # React components (cosmic/, graph/, auth/, dashboard/)
+    ├── hooks/             # useGraphStore (Zustand)
+    ├── lib/               # api.ts, auth-context.tsx, supabase.ts, utils.ts, export.ts
+    ├── types/             # TypeScript definitions (Paper, GraphData, StructuralGap, etc.)
+    ├── __tests__/         # Jest test suite
+    ├── jest.config.js     # Jest configuration
+    ├── package.json       # Node dependencies
     └── tailwind.config.ts # Tailwind configuration
 ```
 
@@ -228,7 +289,10 @@ ScholarGraph3D/
 
 1. Push to GitHub
 2. Connect repo in Vercel dashboard
-3. Set environment variables in Vercel
+3. Set environment variables in Vercel:
+   - `NEXT_PUBLIC_API_URL`
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 4. Deploy from main branch
 
 ### Backend (Render)
@@ -236,7 +300,10 @@ ScholarGraph3D/
 1. Push to GitHub
 2. Create Web Service on Render
 3. Connect GitHub repo
-4. Set environment variables
+4. Set environment variables:
+   - `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_JWT_SECRET`
+   - `S2_API_KEY`, `GROQ_API_KEY`
+   - `REDIS_URL`, `FRONTEND_URL`, `CORS_ORIGINS`
 5. Deploy
 
 See `backend/render.yaml` for Render configuration.
@@ -261,56 +328,56 @@ kill -9 <PID>
 psql $DATABASE_URL
 
 # Verify pgvector extension
-SELECT * FROM pg_extension;
+SELECT * FROM pg_extension WHERE extname = 'vector';
 ```
 
 ### API Key Issues
 
-- Verify all required keys in `.env` (Backend) and `.env.local` (Frontend)
-- Check OpenAlex API key at https://openalex.org/signup
-- Check Semantic Scholar API at https://api.semanticscholar.org
+- Verify all required keys in `.env` (backend) and `.env.local` (frontend)
+- Semantic Scholar API key: https://api.semanticscholar.org
+- Groq API key: https://console.groq.com
 
 ### Redis Connection
 
 ```bash
 # Test Redis connection
 redis-cli ping  # Should return PONG
+# Redis is optional — backend degrades gracefully if unavailable
 ```
 
 ## Performance Tips
 
-1. **Cache search results**: 24-hour Redis cache on `POST /api/search`
-2. **Batch API calls**: Request multiple papers at once from S2 and OpenAlex
-3. **Lazy load panels**: Don't render paper detail panel until clicked
-4. **Code splitting**: Frontend auto-splits routes via Next.js
-5. **Database indexing**: Index frequently queried columns in PostgreSQL
+1. **Pipeline parallelization**: `seed-explore` fetches refs and cites concurrently via `asyncio.gather`
+2. **Redis caching**: 24-hour cache on S2 references, citations, and SPECTER2 embeddings; keyed by paper ID
+3. **Incremental layout**: `expand-stable` uses k-NN position interpolation so new nodes appear near their neighbors without re-running UMAP
+4. **Partial S2 failures**: refs/cites fetched independently — if S2 returns `{"data": null}` for an unindexed paper, available data is returned rather than a 404
+5. **Lazy load panels**: Paper detail panel only renders on node click
+6. **Code splitting**: Frontend auto-splits routes via Next.js App Router
+7. **DB pool**: min=1, max=3 asyncpg connections (single uvicorn worker, async concurrency)
 
 ## Testing
 
 ### Backend
 
 ```bash
-# Run all tests
-pytest
+# Run all tests with coverage
+cd backend && pytest -v --cov=. --cov-report=term-missing
 
-# Run with coverage
-pytest --cov=backend
-
-# Run specific test
-pytest tests/test_search.py::test_search_endpoint
+# Run specific test file
+pytest tests/test_seed_explore.py -v
 ```
 
 ### Frontend
 
 ```bash
 # Run all tests
-npm test
+cd frontend && npx jest
 
 # Watch mode
-npm test -- --watch
+npx jest --watch
 
 # With coverage
-npm test -- --coverage
+npx jest --coverage
 ```
 
 ## Contributing
@@ -323,17 +390,18 @@ npm test -- --coverage
 
 ## Resources
 
-- **OpenAlex API**: https://openalex.org/about/api
 - **Semantic Scholar API**: https://api.semanticscholar.org
+- **Groq Console**: https://console.groq.com
 - **Supabase Docs**: https://supabase.com/docs
 - **FastAPI**: https://fastapi.tiangolo.com
 - **Next.js**: https://nextjs.org
 - **react-force-graph-3d**: https://github.com/vasturiano/react-force-graph-3d
+- **pgvector**: https://github.com/pgvector/pgvector
 
 ## Questions?
 
-Refer to AGENTS.md for detailed architecture, data models, and API contracts.
+Refer to `AGENTS.md` for detailed architecture, data models, and API contracts. See `docs/` for PRD, SPEC, and release notes.
 
 ---
 
-Last updated: 2026-02-19
+Last updated: 2026-02-23

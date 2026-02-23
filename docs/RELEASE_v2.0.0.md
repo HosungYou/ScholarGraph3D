@@ -74,7 +74,7 @@ The `GapDetector` module is now integrated directly into the `seed_explore` pipe
 
 - **Frontier papers** — stars with many unexplored connections, sitting at the edge of your current map
 - **Bridge papers** — papers that already span two or more nebulae, hinting at where synthesis is possible
-- **Research questions** — generated via Groq on a best-effort basis, asking what might live in the gap between two clusters
+- **Gap analysis** — structural metrics (gap strength, potential edges) quantify the distance between clusters
 
 The new **GapSpotterPanel** presents gap cards, bridge paper listings, and generated research questions in a readable sidebar panel. Research question generation is non-blocking; the panel renders structural findings immediately and populates LLM output when available.
 
@@ -117,7 +117,7 @@ From the dashboard, any saved graph can be reloaded via `?graph_id=` query param
 - **Gaps** — GapSpotter output
 - **Chat** — SeedChat conversation
 
-**Depth control** (1 / 2 / 3) lets you specify how many hops to expand from a node in a single operation. Depth 1 is surgical. Depth 3 floods the graph with connections.
+**Depth-1 exploration** provides focused citation graphs centered on the seed paper. Direct references and citations give the optimal density-to-speed ratio.
 
 **GraphLegend** updated with entries for frontier nodes (red ring) and citation paths (gold trail).
 

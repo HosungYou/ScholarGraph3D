@@ -18,16 +18,10 @@ services:
         sync: false
       - key: S2_API_KEY
         sync: false
-      - key: OA_API_KEY
-        sync: false
-      - key: OA_EMAIL
+      - key: GROQ_API_KEY
         sync: false
       - key: REDIS_URL
         sync: false
-      - key: RESEND_API_KEY
-        sync: false
-      - key: WATCH_CRON_SECRET
-        generateValue: true
       - key: ENVIRONMENT
         value: production
       - key: CORS_ORIGINS
