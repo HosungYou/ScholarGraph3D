@@ -168,7 +168,7 @@ search_papers()  handler  [backend/routers/search.py]
 |-------|-----------|---------|-----------|
 | **Frontend framework** | Next.js | 14 (App Router) | Server components, file-based routing, Vercel-native deployment; App Router enables layout nesting and streaming |
 | **Language (frontend)** | TypeScript | 5.x | Type safety for complex graph data structures; Paper, GraphEdge, Cluster types catch runtime errors at compile time |
-| **Styling** | Tailwind CSS | 3.x | Utility-first; dark theme with consistent design tokens; zero runtime CSS overhead |
+| **Styling** | Tailwind CSS | 3.x | Utility-first; Stellar Observatory design system: black + gold palette with luxury minimalist design tokens; zero runtime CSS overhead |
 | **3D visualization** | react-force-graph-3d | latest | Wraps Three.js with force-directed graph primitives; manages WebGL canvas, OrbitControls, and node/link lifecycle |
 | **3D rendering** | Three.js | **0.152.2 (pinned)** | WebGL scene management. **Must stay at 0.152.2** — later versions break ESM compatibility with react-force-graph-3d |
 | **State management** | Zustand | 4.x | Minimal boilerplate for graph state; single store covers graphData, selectedPaper, visibility toggles, and loading state |
@@ -529,12 +529,17 @@ frontend/
 │   ├── auth/page.tsx              # Station Access — login/signup (combined)
 │   ├── auth/callback/page.tsx     # OAuth callback handler
 │   └── dashboard/page.tsx         # Saved graphs list
+├── components/cosmic/
+│   └── AstronautHelmet.tsx        # Three.js 3D chrome astronaut helmet (landing hero)
 ├── components/graph/
 │   ├── ScholarGraph3D.tsx         # 3D canvas component (706 lines, forwardRef)
 │   ├── PaperDetailPanel.tsx       # Right panel: paper metadata + expand
 │   ├── ClusterPanel.tsx           # Left panel: cluster list + focus actions
 │   ├── SearchBar.tsx              # Search input + year/field filters
-│   └── GraphControls.tsx          # Floating toggle buttons + reset camera
+│   ├── GraphControls.tsx          # Floating toggle buttons + reset camera
+│   ├── GapSpotterPanel.tsx        # Gap analysis between clusters
+│   ├── SeedChatPanel.tsx          # AI chat about the graph
+│   └── GraphLegend.tsx            # Visual guide legend
 ├── hooks/
 │   └── useGraphStore.ts           # Zustand store (single global state)
 ├── lib/
@@ -568,8 +573,9 @@ app/explore/page.tsx
     │     ├── ForceGraph3D (react-force-graph-3d, dynamic import ssr=false)
     │     │     |
     │     │     └── Three.js scene
-    │     │           ├── SphereGeometry per node (MeshPhongMaterial)
-    │     │           ├── RingGeometry for selected node (gold, #FFD700)
+    │     │           ├── starNodeRenderer.ts — THREE.Group (shader core + glow sprite + optional supernova/binary/flare)
+    │     │           ├── nebulaClusterRenderer.ts — THREE.Points (Gaussian distribution, max 120 particles)
+    │     │           ├── RingGeometry for selected node (gold, #D4AF37)
     │     │           ├── Sprite (CanvasTexture) for author+year labels
     │     │           ├── LineDashedMaterial for similarity edges
     │     │           └── cluster-hulls THREE.Group (ShapeGeometry, 1s interval)
@@ -626,27 +632,35 @@ forceGraphData (useMemo)
 ForceGraph3D renders:
 
   Per Node (nodeThreeObject callback):
-    THREE.Group
-      └── THREE.Mesh (SphereGeometry, radius = Math.min(30, Math.max(4, Math.sqrt(citation_count+1)*1.5)))
+    THREE.Group (via starNodeRenderer.ts — shader core + glow sprite + optional supernova/binary/flare)
+      └── THREE.Mesh (SphereGeometry, radius = Math.min(12, Math.max(4, Math.sqrt(citation_count+1)*0.8)))
             MeshPhongMaterial {
               color:             FIELD_COLOR_MAP[primaryField]
-                                 '#FFD700' if selected
-                                 '#4ECDC4' if highlighted (neighbor of selected)
+                                 '#D4AF37' if selected   (gold)
+                                 '#FFFFFF' if highlighted (neighbor of selected, white)
               emissiveIntensity: 0.6 selected | 0.4 highlighted | 0.15 default
               opacity:           1.0 selected/highlighted
                                  0.15 if selection exists but not connected
                                  0.3 + 0.7 * ((year - minYear) / yearSpan) default
             }
-      └── THREE.Mesh (RingGeometry r*1.3..r*1.5) — selected node only (#FFD700)
+      └── THREE.Mesh (RingGeometry r*1.3..r*1.5) — selected node only (#D4AF37)
       └── THREE.Sprite (CanvasTexture 512x128px)  — if showLabels=true
             Text: "AuthorLastName Year" truncated at 18 chars
-            Color: #FFD700 selected | #4ECDC4 highlighted | #FFFFFF default
+            Color: #D4AF37 selected | #FFFFFF highlighted | #FFFFFF default
+
+  Cosmic Theme Renderers:
+    starNodeRenderer.ts:   builds THREE.Group with shader-based star core, additive glow sprite,
+                           and conditional effects (supernova burst, binary companion, lens flare)
+    nebulaClusterRenderer.ts: builds THREE.Points with Gaussian-distributed particle positions
+                              (max 120 particles per cluster) for volumetric nebula appearance
 
   Per Link (linkThreeObject + linkColor callbacks):
     Similarity: THREE.Line (LineDashedMaterial, dashSize=2, gapSize=1.5, opacity=0.3)
-    Citation:   default react-force-graph-3d line + directional arrow (3px, at target)
+                color: #555555
+    Citation:   default react-force-graph-3d line + directional particles (#D4AF37, at target)
+                color: #444444
     Color rules:
-      No selection:  similarity='rgba(74,144,217,0.15)', citation=opacity(0.2+w*0.1)
+      No selection:  similarity='#555555' (opacity 0.15), citation='#444444' (opacity 0.2+w*0.1)
       With selection: connected edges = color+'CC', others = 'rgba(255,255,255,0.03)'
 
   Cluster Hulls (useEffect, setInterval 1000ms):

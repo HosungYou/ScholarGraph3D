@@ -1,6 +1,6 @@
 # ScholarGraph3D - Development Guide
 
-Quick reference for setting up and working on ScholarGraph3D v2.0 locally.
+Quick reference for setting up and working on ScholarGraph3D v3.0 locally.
 
 ## Local Development Setup
 
@@ -280,7 +280,7 @@ ScholarGraph3D/
     ├── __tests__/         # Jest test suite
     ├── jest.config.js     # Jest configuration
     ├── package.json       # Node dependencies
-    └── tailwind.config.ts # Tailwind configuration
+    └── tailwind.config.ts # Tailwind configuration (Stellar Observatory design system)
 ```
 
 ## Deployment

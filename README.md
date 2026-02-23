@@ -2,7 +2,7 @@
 
 > Seed Paper Exploration Platform — explore the citation universe from a single paper
 
-ScholarGraph3D v2.0 lets you start from any academic paper and navigate its citation network as an interactive 3D cosmic universe. Enter a natural language query, select a seed paper, and watch its scholarly neighborhood materialize as stars, nebulae, and light streams.
+ScholarGraph3D v3.0 lets you start from any academic paper and navigate its citation network as an interactive 3D cosmic universe. Enter a DOI or natural language query, select a seed paper, and watch its scholarly neighborhood materialize as stars, nebulae, and light streams — rendered in a luxury minimalist "Stellar Observatory" aesthetic (black + gold).
 
 ## Features
 
@@ -10,7 +10,7 @@ ScholarGraph3D v2.0 lets you start from any academic paper and navigate its cita
 - **3D Cosmic Visualization**: SPECTER2 embeddings → UMAP → interactive 3D star map with star nodes, nebula clusters, and citation light streams
 - **HDBSCAN Clustering**: Auto-detected research communities rendered as Gaussian particle nebula clouds
 - **Gap Spotter**: Structural gap detection between clusters with bridge papers and AI-generated research questions
-- **Frontier Detection**: Papers with many unexplored connections highlighted with red rings
+- **Frontier Detection**: Papers with many unexplored connections highlighted with gold rings
 - **Citation Path Finder**: BFS shortest path between any two papers in the graph
 - **Seed Chat**: Groq-powered conversational exploration of your citation graph (llama-3.3-70b)
 - **BibTeX/RIS Export**: Export selected papers for reference managers
@@ -20,7 +20,7 @@ ScholarGraph3D v2.0 lets you start from any academic paper and navigate its cita
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | Next.js 14 + TypeScript + Tailwind CSS |
+| Frontend | Next.js 14 + TypeScript + Tailwind CSS (Stellar Observatory theme) |
 | 3D Rendering | react-force-graph-3d + Three.js 0.152.2 |
 | Backend | FastAPI + Python 3.11 |
 | Database | PostgreSQL + pgvector (Supabase) |
@@ -79,4 +79,4 @@ MIT
 
 ## Documentation
 
-See `docs/` for detailed documentation: PRD, SPEC, ARCHITECTURE, SDD/TDD Plan, and release notes.
+See `docs/` for detailed documentation: PRD, SPEC, ARCHITECTURE, DESIGN_THEME, SDD/TDD Plan, and release notes.
