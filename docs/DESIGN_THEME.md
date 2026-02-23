@@ -1,71 +1,143 @@
-# ScholarGraph3D — Cosmic Universe Design Theme
+# ScholarGraph3D — Deep Space Mission Control Design Theme
 
-> v1.0.0 Design System Reference
+> v3.0.0 Design System Reference — "Deep Space Mission Control" Redesign
 
 ## World-Building Concept
 
-**Core Metaphor:** The academic knowledge space is a universe.
+**Core Metaphor:** The academic knowledge space is a universe explored from a mission control HUD.
 
 | Academic Concept | Cosmic Metaphor | Visual Treatment |
 |-----------------|-----------------|------------------|
 | Paper | Star | GLSL shader sphere with twinkle + glow sprite |
 | Cluster | Nebula | Gaussian particle cloud (THREE.Points) |
-| Citation edge | Light Stream | TubeGeometry with UV-offset flow shader |
-| Similarity edge | Gravity Wave | TubeGeometry with sinusoidal wave shader |
+| Citation edge | Light Stream | Directional particles (4 cyan per edge) |
+| Similarity edge | Gravity Wave | Dashed line with opacity |
 | Search | Warp Jump | Star Z-acceleration + scale/blur/fade |
-| Landing | Deep Space | Three.js starfield (3000 stars + Milky Way) |
-| UI Panels | HUD / Hologram | Scanline overlays, corner brackets, monospace |
+| Landing | Mission Briefing | Deep Field starfield + HUD-framed panels |
+| Explore | Mission Control | Collapsible sidebar + drawer overlay |
+| UI Panels | HUD / Hologram | Angular frames, corner brackets, monospace |
+
+## Design Direction
+
+### "Deep Space Mission Control"
+- Pure black (#000000) void background with realistic Deep Field starfield
+- HUD-style angular panels with corner bracket accents
+- JetBrains Mono monospace typography throughout UI chrome
+- Cyan (#00E5FF) as primary system accent with purple (#6c5ce7) secondary
+- Mission-control language: "INITIATE SCAN", "SECTOR SCANNER", "RESEARCH ASSISTANT"
+- Professional but atmospheric — academic utility through space exploration metaphor
 
 ## Color Palette
 
-### Core Colors
+### CSS Custom Properties (`:root`)
 
-| Token | Hex | Usage |
-|-------|-----|-------|
-| `--background` | `#050510` | Deep space black — all page backgrounds |
-| `--surface` | `#0a0f1e` | Panel backgrounds, input fields |
-| `--surface-hover` | `#111833` | Hover states on surfaces |
-| `--border` | `#1a2555` | Blue-tinted borders everywhere |
-| `--text-primary` | `#E8EAF6` | Primary text (17:1 contrast AAA) |
-| `--text-secondary` | `#7B8CDE` | Secondary text, labels |
-| `--accent` / `cosmic-glow` | `#00E5FF` | Primary cyan accent (12:1 AA+) |
-| `cosmic-nebula` | `#6c5ce7` | Purple nebula accent |
-| `cosmic-star` | `#a29bfe` | Star lavender accent |
-| `accent-warm` | `#fd79a8` | Warm pink accent |
+```css
+/* Core */
+--void: #000000;              /* True black background */
+--background: #000000;        /* Page backgrounds */
+--surface: #060a14;           /* Panel innards */
+--surface-hover: #0c1220;     /* Hover states */
+--border: #141e38;            /* Default borders */
 
-### Star Color Map (Field → Stellar Temperature) — v1.0.1
+/* Text */
+--text-primary: #E8EAF6;     /* Primary text (17:1 AAA) */
+--text-secondary: #7B8CDE;   /* Secondary text, labels */
+--text-muted: #4a5580;        /* Muted text, HUD labels */
 
-> **Design principle:** Maximum hue separation so researchers can instantly distinguish fields at a glance.
+/* Accent */
+--accent: #00E5FF;            /* Primary cyan (12:1 AA+) */
+--accent-nebula: #6c5ce7;     /* Purple secondary */
+--accent-star: #a29bfe;       /* Lavender tertiary */
+--accent-warm: #fd79a8;       /* Warm pink accent */
+--accent-gold: #FFD700;       /* Gold accent */
 
-| Academic Field | Core Color | Glow Color | Stellar Type |
-|---------------|-----------|-----------|-------------|
-| Computer Science | `#4DA6FF` | `#2979FF` | Blue Giant |
-| Engineering | `#B388FF` | `#7C4DFF` | Vivid Purple |
-| Mathematics | `#18FFFF` | `#00E5FF` | Cyan Dwarf |
-| Medicine / Health | `#FF5252` | `#D50000` | Red Supergiant |
-| Biology / Life Sciences | `#69F0AE` | `#00E676` | Green Nebula Star |
-| Physics | `#EA80FC` | `#D500F9` | Magenta Exotic |
-| Chemistry | `#FF80AB` | `#FF4081` | Pink Giant |
-| Economics | `#FFD740` | `#FFC400` | Gold Dwarf |
-| Sociology | `#FFAB40` | `#FF9100` | K-type Orange |
-| Business | `#FF9100` | `#FF6D00` | Vivid Orange |
-| Psychology | `#A7FFEB` | `#64FFDA` | Light Teal |
-| Environmental | `#76FF03` | `#64DD17` | Vivid Lime |
-| Arts & Humanities | `#FFF176` | `#FFEE58` | Yellow Dwarf |
+/* HUD System */
+--hud-border: rgba(0, 229, 255, 0.12);      /* Panel borders */
+--hud-border-active: rgba(0, 229, 255, 0.35); /* Active borders */
+--hud-bg: rgba(4, 8, 18, 0.88);              /* Panel background */
+--hud-glow: rgba(0, 229, 255, 0.06);         /* Subtle glow */
 
-## CSS Utility Classes
+/* Field of Study Spectrum */
+--field-cs: #4FC3F7;          /* Computer Science */
+--field-medicine: #66BB6A;    /* Medicine/Health */
+--field-physics: #AB47BC;     /* Physics */
+--field-biology: #FFA726;     /* Biology */
+--field-social: #EF5350;      /* Social Science */
+--field-engineering: #26C6DA;  /* Engineering */
+--field-math: #7E57C2;        /* Mathematics */
+--field-chemistry: #FF7043;    /* Chemistry */
+```
 
-### Glass Panels
-- `.glass` — `rgba(5,5,16,0.85)` + `blur(16px)` + cyan border `rgba(0,229,255,0.08)`
-- `.glass-strong` — `rgba(5,5,16,0.92)` + `blur(24px)` + cyan border `rgba(0,229,255,0.12)`
+### Tailwind Config Colors
 
-### HUD System
-- `.hud-panel` — Cosmic panel with `::before` top energy line (cyan gradient), inner glow shadow, cosmic surface background
-- `.hud-button` — Semi-transparent cyan-tinted button with glow hover, uppercase font-mono tracking-wider
-- `.hud-scanline::after` — Repeating-linear-gradient scanline overlay (2px lines)
-- `.cosmic-glow` — Multi-layered text-shadow (cyan + purple glow) for headings
+All CSS custom property values are mirrored in `tailwind.config.ts` for utility class usage:
+- `bg-void`, `bg-surface`, `bg-surface-hover`
+- `text-text-primary`, `text-text-secondary`, `text-text-muted`
+- `text-accent`, `border-accent`, etc.
+- `text-field-cs`, `text-field-medicine`, etc.
+- `bg-hud-bg`, `border-hud-border`
 
-### Animations
+## Typography
+
+| Usage | Font | Weight | Tracking |
+|-------|------|--------|----------|
+| Body text | Inter / system-ui | 400 | Normal |
+| HUD labels | JetBrains Mono | 500 | 0.12em |
+| HUD values | JetBrains Mono | 600 | Normal |
+| HUD buttons | JetBrains Mono | 500 | 0.08em |
+| Panel headers | JetBrains Mono | 500 | 0.12em, uppercase |
+
+JetBrains Mono loaded via Google Fonts in `layout.tsx`.
+
+## HUD Design System — CSS Classes
+
+### Panel Classes
+
+| Class | Description | Visual |
+|-------|-------------|--------|
+| `.hud-panel` | Full HUD panel with corner brackets | Angular frame, top edge glow, corner bracket pseudo-elements |
+| `.hud-panel-clean` | Panel without corner brackets | Same background/border as `.hud-panel`, no pseudo-elements |
+| `.glass` | Frosted glass panel | `rgba(4,8,18,0.85)` + `blur(16px)` + cyan border |
+| `.glass-strong` | Heavy frosted glass | `rgba(4,8,18,0.92)` + `blur(24px)` + stronger border |
+
+### `.hud-panel` Detail
+
+```
+Background:  var(--hud-bg) = rgba(4, 8, 18, 0.88)
+Backdrop:    blur(20px)
+Border:      1px solid var(--hud-border) = rgba(0, 229, 255, 0.12)
+Box-shadow:  inset 0 1px 0 rgba(0,229,255,0.04), 0 0 40px rgba(0,229,255,0.02)
+
+::before     Top edge glow line (centered gradient, 76% width)
+::after      Corner brackets (12px marks at all 4 corners via gradient backgrounds)
+```
+
+### Interactive Classes
+
+| Class | Description | States |
+|-------|-------------|--------|
+| `.hud-button` | Primary HUD button | Cyan border/text, glow on hover, scale(0.98) on active |
+| `.hud-button-ghost` | Ghost/secondary button | Transparent bg, subtle border, cyan on hover |
+
+### Text & Data Classes
+
+| Class | Description | Specs |
+|-------|-------------|-------|
+| `.hud-label` | Data label | 10px, mono, uppercase, 0.12em tracking, muted color |
+| `.hud-value` | Data value | 13px, mono, semibold, primary color |
+| `.cosmic-glow` | Glowing heading text | Multi-layer text-shadow (cyan + purple) |
+
+### Utility Classes
+
+| Class | Description |
+|-------|-------------|
+| `.hud-divider` | Horizontal section divider (centered gradient line) |
+| `.hud-scanline` | Scanline overlay effect (2px repeating gradient) |
+| `.hud-status` | Status indicator dot (6px, cyan glow) |
+| `.hud-status-warn` | Warning status (orange) |
+| `.hud-status-error` | Error status (red) |
+
+## Animations
 
 | Class | Keyframe | Duration | Effect |
 |-------|----------|----------|--------|
@@ -75,6 +147,19 @@
 | `animate-radar-sweep` | `radar-sweep` | 2s infinite | Rotation — loading states |
 | `animate-border-glow` | `border-glow` | 2s infinite | Border-color pulse — active elements |
 | `animate-drift` | `drift` | 20s infinite | Translate oscillation — CSS starfield |
+| `animate-typing-cursor` | `typing-cursor` | 1s step-end | Cursor blink — input prompts |
+| `animate-fade-in` | `fade-in` | 0.4s | Y+8px entry — element appear |
+| `animate-pulse-glow` | `pulse-glow` | 2s infinite | Box-shadow pulse — focus states |
+
+### Tailwind-Only Animations
+
+| Name | Duration | Effect |
+|------|----------|--------|
+| `twinkle` | 4s infinite | Opacity 0.3→1→0.3 — star shimmer |
+| `twinkle-slow` | 6s infinite | Slower variant |
+| `scan-line` | 8s linear | translateY sweep — scanning effect |
+| `pulse-ring` | 2s ease-out | Scale 0.8→2 + fade — ring pulse |
+| `data-stream` | 1.5s linear | Background position scroll — data flow |
 
 ## Component Architecture
 
@@ -82,9 +167,10 @@
 
 | Component | Purpose | Tech |
 |-----------|---------|------|
-| `StarfieldBackground` | Landing page starfield | Three.js Points (3000+1500), mouse parallax, `triggerWarp()` via forwardRef. Dynamic import with `ssr: false` |
-| `CosmicStarfield` | Auth/Dashboard starfield | CSS-only 3 radial-gradient layers + drift animations. Lighter than WebGL |
-| `HudPanel` | Reusable panel wrapper | `.hud-panel .hud-scanline` + optional title/icon + pulsing dot |
+| `StarfieldBackground` | Landing/explore starfield | Three.js Points (3000+1500), power-law brightness, mouse parallax, `triggerWarp()` via forwardRef. Dynamic import `ssr: false` |
+| `DeepFieldBackground` | Alternative starfield | Canvas 2D, power-law brightness distribution, 3 star layers, CSS animation. Lighter than WebGL |
+| `CosmicStarfield` | Auth/Dashboard starfield | CSS-only circular gradient layers + drift animations |
+| `HudPanel` | Reusable panel wrapper | `.hud-panel` + variants (default/clean/status) + optional title/icon + pulsing dot |
 | `RadarLoader` | Loading indicator | 3 concentric rings with conic-gradient sweep + center dot |
 
 ### 3D Cosmic Rendering (`components/graph/cosmic/`)
@@ -94,54 +180,139 @@
 | `cosmicConstants.ts` | `STAR_COLOR_MAP`, `getTwinkleRate()`, `getStarColors()`, GLSL vertex/fragment shaders |
 | `cosmicTextures.ts` | Cached canvas-generated textures: radial glow, corona (OA ring), 6-pointed flare |
 | `CosmicAnimationManager.ts` | Singleton rAF loop — updates all `uTime` uniforms, animates supernova/binary/flare |
-| `starNodeRenderer.ts` | `createStarNode()` → THREE.Group with shader core, glow sprite, flare, corona, supernova, binary |
-| `nebulaClusterRenderer.ts` | `createNebulaCluster()` → THREE.Points with Gaussian distribution, shimmer shader |
-| `lightStreamEdgeRenderer.ts` | `createLightStreamEdge()` → TubeGeometry + flow shader, `createSimpleEdge()` LOD fallback |
+| `starNodeRenderer.ts` | `createStarNode()` -> THREE.Group with shader core, glow sprite, flare, corona, supernova, binary |
+| `nebulaClusterRenderer.ts` | `createNebulaCluster()` -> THREE.Points with Gaussian distribution, shimmer shader |
 
-> **Note:** TubeGeometry light stream edges (`lightStreamEdgeRenderer.ts`) are not currently active. Citation flow is rendered via `linkDirectionalParticles` (4 cyan particles per edge). The file has been removed as dead code in v1.1.1.
+## Layout Architecture
 
-### Star Node Layers
+### Explore Page (`/explore/seed`)
 
-| Layer | Condition | Visual |
-|-------|-----------|--------|
-| Core sphere | Always | ShaderMaterial with twinkle + fresnel rim glow |
-| Glow sprite | Always | Additive-blend radial gradient texture (opacity ×0.9, scale ×6) |
-| Lens flare | `isSelected` | 6-pointed star sprite (rotating) |
-| Corona | `is_open_access` | Green additive-blend ring sprite |
-| Supernova burst | Top 10% citations | Pulsing ring (opacity 0.4, scale 1.0-1.8) + 12 orbiting particles (size 1.2) |
-| Binary star | `is_bridge` | 2 small companion spheres orbiting main star |
-| Bloom halo | `isSelected + showBloom` | Larger transparent sphere |
-
-### Twinkle Rate Formula
 ```
-twinkleRate = 1.5 + ((year - minYear) / (maxYear - minYear)) * 4.5
++--------------------------------------------------+
+| HUD Top Bar (status indicators, title)           |
++--------+-----------------------------------------+
+|        |                                         |
+| Left   |          3D Graph Canvas                |
+| Side   |         (flex: 1, full area)            |
+| bar    |                                         |
+| 48px   |                    +--------------------+
+| or     |                    | Right Drawer       |
+| 300px  |                    | 480px overlay      |
+|        |                    | (absolute, z-30)   |
+|        |                    +--------------------+
+|        |                                         |
++--------+-----------------------------------------+
+| HUD Status Bar (paper count, cluster count)      |
++--------------------------------------------------+
 ```
-Oldest papers twinkle slowly (1.5Hz), newest papers twinkle rapidly (6.0Hz).
+
+#### Left Sidebar
+- **Collapsed:** 48px icon-only with tooltips
+- **Expanded:** 300px with full tab content
+- **Tabs:** Clusters (Layers), Search (ScanSearch), Chat (MessageCircle)
+- **Persistence:** `localStorage('seed-left-collapsed')`
+- **Animation:** framer-motion spring layout transition
+
+#### Right Drawer Panel
+- **Width:** 480px fixed
+- **Position:** Absolute overlay (no graph push)
+- **Backdrop:** `bg-black/30` click-to-dismiss
+- **Z-index:** Backdrop z-20, Panel z-30
+- **Animation:** framer-motion x-slide + AnimatePresence
+
+#### Z-Index Hierarchy
+| Layer | Z-Index | Element |
+|-------|---------|---------|
+| Background | 0 | Starfield, Deep Field |
+| Graph Canvas | - | 3D scene (flex area) |
+| Sidebar | 10 | Left collapsible panel |
+| Graph Controls | 10 | Floating toggle buttons |
+| Drawer Backdrop | 20 | Semi-transparent overlay |
+| Drawer Panel | 30 | Paper detail panel |
+| Toasts | 50 | Notifications |
+
+## Panel Internal Design
+
+### PaperDetailPanel (Right Drawer)
+- Header with paper title, year badge, open access indicator
+- Sections separated by `.hud-divider` gradient lines
+- Statistics grid: `.hud-label` + `.hud-value` pairs in 2-column grid
+- Authors list with affiliation badges
+- Abstract with `.hud-panel-clean` wrapper
+- Action buttons: `.hud-button` for primary, `.hud-button-ghost` for secondary
+
+### ClusterPanel (Left Sidebar — Clusters Tab)
+- Header: "SECTOR SCANNER" with `.hud-label`
+- Cluster list with color dots, density bars, edge counts
+- Selected cluster detail: Topics tags, Statistics grid, Paper list
+- Eye/Focus/Chevron action buttons per cluster
+- framer-motion AnimatePresence for detail expansion
+
+### GapSpotterPanel (Left Sidebar — Search Tab)
+- Header: "GAP SPOTTER" with `.hud-label`
+- Gap cards: `.hud-panel-clean` wrapper with strength bar
+- Bridge papers list with score percentages
+- Frontier papers section with purple accent theme
+
+### SeedChatPanel (Left Sidebar — Chat Tab)
+- Header: "RESEARCH ASSISTANT" with `.hud-label`
+- Message bubbles: `.hud-panel-clean` wrapper
+  - User: cyan-tinted bg, right-aligned, rounded-tr-sm
+  - Assistant: default bg, left-aligned, rounded-tl-sm
+- Suggestion buttons: `.hud-button-ghost`
+- Follow-up buttons: `.hud-button-ghost` with "+" prefix
+- Input area: `.hud-panel-clean` wrapper, transparent textarea
+- Send button: `.hud-button`
+
+### GraphControls (Floating)
+- Vertical button column, top-right
+- Active state: cyan bg/border with glow shadow
+- Inactive: dark bg, muted text, hover highlights
+- Separator between toggles and utility buttons
+
+## Panel Naming Convention
+
+| Component | Cosmic Name | HUD Label Style |
+|-----------|-------------|-----------------|
+| SearchBar | Navigation Console | `.hud-label text-[#00E5FF]/60` |
+| ClusterPanel | Sector Scanner | `.hud-label text-[#00E5FF]/60` |
+| PaperDetailPanel | Object Scanner | `.hud-label text-[#00E5FF]/40` |
+| GraphControls | Ship Controls | Icon-only, title attribute |
+| GraphLegend | Star Chart | `.hud-label text-[#00E5FF]/60` |
+| SeedChatPanel | Research Assistant | `.hud-label text-[#00E5FF]/60` |
+| GapSpotterPanel | Gap Spotter | `.hud-label text-[#00E5FF]/60` |
 
 ## Page-Level Theme Mapping
 
 | Page | Cosmic Name | Key Elements |
 |------|-------------|-------------|
-| `/` (Landing) | Cosmic Entry | StarfieldBackground, warp transition, HUD input panels |
-| `/explore` | Mission Control | Arrival animation (scale+blur), RadarLoader, "AWAITING SCAN VECTOR" |
-| `/explore/seed` | Origin Point Mode | RadarLoader, "BUILDING CITATION NETWORK...", cosmic-nebula accents |
-| `/auth` | Station Access | CosmicStarfield, scanline overlay, "INITIATE ACCESS" / "REGISTER CREW" |
-| `/dashboard` | Command Center | CosmicStarfield, "STATION CONFIGURATION", "DETECTED SIGNALS", "MISSION ARCHIVES" |
+| `/` (Landing) | Mission Briefing | Deep Field starfield, HUD-framed feature panels, "INITIATE SCAN" CTA, "KNOWN TARGETS" example chips |
+| `/explore` | Mission Control | Arrival animation, RadarLoader, "AWAITING SCAN VECTOR" |
+| `/explore/seed` | Origin Point Mode | Collapsible sidebar, drawer overlay, HUD top/status bars |
 
-## Panel Naming Convention
+### Landing Page Sections
+- **Hero:** "NAVIGATE THE TOPOLOGY OF KNOWLEDGE" with cosmic-glow, `.hud-panel` frame
+- **DOI Input:** Coordinate entry console (scanline, mono font, `INITIATE SCAN` button)
+- **Feature Cards:** Mission Briefing panels
+  - "GRAVITATIONAL MAPPING" (citation topology)
+  - "NEBULA CLASSIFICATION" (semantic clusters)
+  - "TEMPORAL ARCHAEOLOGY" (time depth on Z)
+- **Known Targets:** Example paper chips as mission coordinates
 
-| Component | Cosmic Name | Header Style |
-|-----------|-------------|-------------|
-| SearchBar | Navigation Console | `font-mono uppercase tracking-wider` |
-| ClusterPanel | Sector Scanner | `font-mono uppercase tracking-widest text-cosmic-glow/60` |
-| PaperDetailPanel | Object Scanner | `font-mono uppercase text-cosmic-glow/40` |
-| GraphControls | Ship Controls | Circular cyan-glow toggles |
-| GraphLegend | Star Chart | `font-mono uppercase tracking-widest text-cosmic-glow/60` |
-| ChatPanel | Comm Channel | `font-mono uppercase tracking-widest text-cosmic-glow/60` |
-| LLMSettingsModal | Comm Relay Config | `font-mono uppercase tracking-widest` |
-| TrendPanel | Trend Analysis | `font-mono uppercase tracking-widest text-cosmic-glow/60` |
-| GapPanel | Gap Analysis | `font-mono uppercase tracking-widest text-cosmic-glow/60` |
-| WatchQueryPanel | Surveillance Probes | `font-mono uppercase tracking-widest text-cosmic-glow/60` |
+## Star Color Map (Field -> Stellar Temperature)
+
+| Academic Field | Core Color | Tailwind Token |
+|---------------|-----------|----------------|
+| Computer Science | `#4FC3F7` | `field-cs` |
+| Medicine / Health | `#66BB6A` | `field-medicine` |
+| Physics | `#AB47BC` | `field-physics` |
+| Biology / Life Sciences | `#FFA726` | `field-biology` |
+| Social Science | `#EF5350` | `field-social` |
+| Engineering | `#26C6DA` | `field-engineering` |
+| Mathematics | `#7E57C2` | `field-math` |
+| Chemistry | `#FF7043` | `field-chemistry` |
+| Earth Sciences | `#8D6E63` | `field-earth` |
+| Humanities | `#EC407A` | `field-humanities` |
 
 ## Performance Budget (200 nodes)
 
@@ -161,7 +332,7 @@ Target: 60fps with safe margin (~16% frame budget used).
 ## Fallback System
 
 The `showCosmicTheme` toggle in Zustand (default: `true`) provides a complete fallback:
-- `true`: Star nodes, nebula clusters, light stream edges, cosmic colors
+- `true`: Star nodes, nebula clusters, cosmic colors, HUD panels
 - `false`: Original MeshPhongMaterial nodes, convex hull clusters, simple line edges
 
 Both branches preserve all labels, badges, and interactive behaviors identically.
@@ -170,13 +341,17 @@ Both branches preserve all labels, badges, and interactive behaviors identically
 
 | Pair | Contrast Ratio | Level |
 |------|---------------|-------|
-| `#E8EAF6` on `#050510` | 17:1 | AAA |
-| `#00E5FF` on `#050510` | 12:1 | AA+ |
-| `#7B8CDE` on `#050510` | 6.5:1 | AA |
+| `#E8EAF6` on `#000000` | 18.6:1 | AAA |
+| `#00E5FF` on `#000000` | 12.7:1 | AA+ |
+| `#7B8CDE` on `#000000` | 6.5:1 | AA |
+| `#4a5580` on `#000000` | 3.2:1 | AA (large text) |
 
-## Mobile Considerations
+## Technology Constraints (Pinned)
 
-- StarfieldBackground: 1500 stars (vs 3000), 800 Milky Way (vs 1500), DPR capped at 1.5
-- Parallax disabled on touch devices
-- CosmicStarfield (CSS-only) used on auth/dashboard for lighter weight
-- Font sizes and panel layouts remain responsive via existing Tailwind breakpoints
+| Package | Version | Constraint |
+|---------|---------|-----------|
+| Three.js | 0.152.2 | Fixed, ESM compatible |
+| react-force-graph-3d | 1.21.3 | Fixed |
+| framer-motion | ^12.0.0 | Layout animations |
+| Next.js | 14 | App Router |
+| TypeScript | strict | Full type safety |
