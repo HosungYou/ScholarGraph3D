@@ -9,8 +9,8 @@ import {
   Calendar,
   FileText,
   Trash2,
-  ExternalLink,
-  Loader2,
+  ArrowRight,
+  Search,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import type { SavedGraph } from '@/types';
@@ -49,8 +49,8 @@ export default function SavedGraphs() {
 
   if (!user) {
     return (
-      <div className="text-center py-12">
-        <p className="text-text-secondary">
+      <div className="text-center py-16">
+        <p className="text-neutral-500 text-sm font-mono">
           Sign in to view your saved graphs
         </p>
       </div>
@@ -59,32 +59,34 @@ export default function SavedGraphs() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-6 h-6 text-cosmic-glow animate-spin" />
+      <div className="flex items-center justify-center py-16">
+        <div className="w-5 h-5 border-2 border-[#D4AF37]/30 border-t-[#D4AF37] rounded-full animate-spin" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="text-center py-12">
-        <p className="text-accent-red text-sm">Failed to load saved graphs</p>
+      <div className="text-center py-16">
+        <p className="text-red-400/80 text-xs font-mono">Failed to load saved graphs</p>
+        <p className="text-neutral-700 text-[10px] font-mono mt-2">Please try again later</p>
       </div>
     );
   }
 
   if (!graphs || graphs.length === 0) {
     return (
-      <div className="hud-panel text-center py-12 px-6">
-        <Network className="w-12 h-12 text-[#999999]/30 mx-auto mb-4" />
-        <p className="text-[#999999] mb-2">No saved graphs yet</p>
-        <p className="text-sm text-[#999999]/50 mb-4">
-          Search for papers and save your explorations
+      <div className="text-center py-20 px-6">
+        <Network className="w-10 h-10 text-neutral-800 mx-auto mb-6" />
+        <p className="text-neutral-400 font-serif text-xl mb-2">No explorations yet</p>
+        <p className="text-neutral-600 text-sm font-mono mb-8 max-w-sm mx-auto">
+          Search for papers and save your exploration graphs to revisit them later.
         </p>
         <button
           onClick={() => router.push('/')}
-          className="px-4 py-2 hud-button text-sm uppercase font-mono"
+          className="inline-flex items-center gap-2 px-6 py-3 bg-[#D4AF37] text-black text-xs font-mono font-semibold uppercase tracking-widest hover:bg-[#E5C04B] transition-colors rounded-lg"
         >
+          <Search className="w-3.5 h-3.5" />
           Start Exploring
         </button>
       </div>
@@ -92,49 +94,54 @@ export default function SavedGraphs() {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
+      <div className="flex items-center justify-between mb-4">
+        <span className="text-[10px] font-mono text-neutral-600 uppercase tracking-wider">
+          {graphs.length} saved {graphs.length === 1 ? 'graph' : 'graphs'}
+        </span>
+      </div>
+
       {graphs.map((graph, i) => (
         <motion.div
           key={graph.id}
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: i * 0.05 }}
-          className="hud-panel p-4 hover:border-cosmic-glow/20 transition-colors group"
+          onClick={() => handleLoad(graph)}
+          className="group cursor-pointer rounded-lg p-5 bg-neutral-950 border border-neutral-800 hover:border-neutral-600 transition-all duration-300"
         >
           <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <h3 className="text-sm font-medium text-white mb-1">
+            <div className="flex-1 min-w-0">
+              <h3 className="text-sm font-medium text-white group-hover:text-[#D4AF37] transition-colors leading-snug truncate">
                 {graph.name}
               </h3>
-              <div className="flex items-center gap-3 text-xs text-[#999999] font-mono">
-                <span className="flex items-center gap-1">
+              <div className="flex items-center gap-4 mt-2 text-[11px] text-neutral-600 font-mono">
+                <span className="flex items-center gap-1.5">
                   <FileText className="w-3 h-3" />
                   {graph.paper_count} papers
                 </span>
-                <span className="flex items-center gap-1">
+                <span className="flex items-center gap-1.5">
                   <Calendar className="w-3 h-3" />
                   {new Date(graph.created_at).toLocaleDateString()}
                 </span>
               </div>
-              <div className="mt-1 text-xs text-[#999999]/50 font-mono">
-                Query: &ldquo;{graph.seed_query}&rdquo;
-              </div>
+              {graph.seed_query && (
+                <div className="mt-2 text-[11px] text-neutral-700 font-mono truncate">
+                  &ldquo;{graph.seed_query}&rdquo;
+                </div>
+              )}
             </div>
-            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="flex items-center gap-2 ml-4 flex-shrink-0">
               <button
-                onClick={() => handleLoad(graph)}
-                title="Open graph"
-                className="p-1.5 rounded-lg hover:bg-cosmic-glow/10 text-[#999999] hover:text-cosmic-glow transition-colors"
-              >
-                <ExternalLink className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => handleDelete(graph.id)}
+                onClick={(e) => { e.stopPropagation(); handleDelete(graph.id); }}
                 title="Delete graph"
-                className="p-1.5 rounded-lg hover:bg-accent-red/10 text-[#999999] hover:text-accent-red transition-colors"
+                className="p-2 rounded-lg text-neutral-700 hover:text-red-400 hover:bg-red-400/5 transition-all opacity-0 group-hover:opacity-100"
               >
                 <Trash2 className="w-4 h-4" />
               </button>
+              <div className="p-2 rounded-lg text-neutral-700 group-hover:text-[#D4AF37] transition-all">
+                <ArrowRight className="w-4 h-4" />
+              </div>
             </div>
           </div>
         </motion.div>

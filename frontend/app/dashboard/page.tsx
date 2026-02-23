@@ -4,11 +4,12 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import SavedGraphs from '@/components/dashboard/SavedGraphs';
+import CosmicStarfield from '@/components/cosmic/CosmicStarfield';
+import { motion } from 'framer-motion';
 import {
   Search,
   LogOut,
   User,
-  Compass,
 } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -23,73 +24,88 @@ export default function DashboardPage() {
 
   if (isLoading || !user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-black">
+        <div className="w-6 h-6 border-2 border-[#D4AF37]/40 border-t-[#D4AF37] rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b border-[#1A1A1A] glass-strong">
-        <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="flex flex-col">
-              <a href="/" className="text-lg font-bold text-accent">
-                SG3D
-              </a>
-              <span className="text-xs font-mono text-cosmic-glow/60 uppercase tracking-widest">COMMAND CENTER</span>
-            </div>
-            <span className="text-text-secondary/40">|</span>
-            <div className="flex items-center gap-1.5">
-              <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-cosmic-pulse" />
-              <span className="text-[10px] font-mono text-text-secondary/50">ONLINE</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 text-sm text-text-secondary">
-              <User className="w-4 h-4" />
-              <span>{user.email}</span>
-            </div>
-            <button
-              onClick={() => router.push('/')}
-              className="p-2 rounded-lg hover:bg-surface-hover text-text-secondary hover:text-text-primary transition-colors"
-              title="New exploration"
-            >
-              <Search className="w-4 h-4" />
-            </button>
-            <button
-              onClick={async () => {
-                await signOut();
-                router.push('/');
-              }}
-              className="p-2 rounded-lg hover:bg-accent-red/10 text-text-secondary hover:text-accent-red transition-colors"
-              title="Sign out"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
-          </div>
+    <div className="min-h-screen relative bg-black text-white">
+      <CosmicStarfield />
+
+      {/* Navigation — matching landing page */}
+      <nav className="relative z-10 flex items-center justify-between px-8 md:px-16 py-6 border-b border-neutral-900">
+        <div className="flex items-center gap-3">
+          <a href="/" className="font-serif text-2xl tracking-tight text-white hover:text-[#D4AF37] transition-colors">
+            SG3D
+          </a>
+          <span className="text-[10px] font-mono text-neutral-600 tracking-wider">v3.0</span>
         </div>
-      </header>
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-2 text-xs font-mono text-neutral-500">
+            <User className="w-3.5 h-3.5" />
+            <span>{user.email}</span>
+          </div>
+          <button
+            onClick={() => router.push('/')}
+            className="text-xs font-mono text-neutral-500 hover:text-white transition-colors tracking-wider uppercase"
+            title="New exploration"
+          >
+            <Search className="w-4 h-4" />
+          </button>
+          <button
+            onClick={async () => {
+              await signOut();
+              router.push('/');
+            }}
+            className="text-xs font-mono text-neutral-500 hover:text-red-400 transition-colors tracking-wider uppercase"
+            title="Sign out"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
+        </div>
+      </nav>
 
       {/* Content */}
-      <main className="max-w-5xl mx-auto px-6 py-8 space-y-10">
-        {/* Saved Graphs Section */}
-        <section>
-          <div className="mb-6">
-            <h1 className="text-2xl font-bold text-text-primary flex items-center gap-2 mb-1">
-              <Compass className="w-6 h-6 text-cosmic-glow" />
-              MY SEED EXPLORATIONS
-            </h1>
-            <p className="text-sm text-text-secondary">
-              Resume your previous exploration missions
-            </p>
-          </div>
+      <main className="relative z-10 max-w-5xl mx-auto px-8 md:px-16 py-16">
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <h1 className="font-serif text-4xl md:text-5xl tracking-tight mb-3">
+            Your<br />
+            <span className="text-neutral-400">Explorations.</span>
+          </h1>
+          <p className="text-neutral-500 text-sm leading-relaxed max-w-md mb-12">
+            Resume previous seed paper explorations or start a new journey through the universe of knowledge.
+          </p>
+        </motion.div>
 
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.2 }}
+        >
           <SavedGraphs />
-        </section>
+        </motion.div>
       </main>
+
+      {/* Footer */}
+      <footer className="relative z-10 max-w-5xl mx-auto px-8 md:px-16 py-10 border-t border-neutral-900">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <span className="font-serif text-lg text-white">ScholarGraph3D</span>
+            <span className="text-[10px] font-mono text-neutral-700">&copy; 2025</span>
+          </div>
+          <div className="flex items-center gap-6 text-[10px] font-mono text-neutral-600">
+            <a href="/" className="hover:text-white transition-colors uppercase tracking-wider">
+              Search
+            </a>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
