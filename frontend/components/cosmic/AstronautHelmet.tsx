@@ -199,13 +199,11 @@ export default function AstronautHelmet({ size = 400, className = '' }: Astronau
 
     animate();
 
-    // Cleanup
+    // Cleanup — dispose resources before renderer to prevent dispatchEvent crashes
     return () => {
       cancelAnimationFrame(frameId);
-      renderer.dispose();
-      if (container.contains(renderer.domElement)) {
-        container.removeChild(renderer.domElement);
-      }
+
+      // Dispose geometries and materials first
       domeGeometry.dispose();
       domeMaterial.dispose();
       visorGeometry.dispose();
@@ -221,6 +219,16 @@ export default function AstronautHelmet({ size = 400, className = '' }: Astronau
       envSphereGeo.dispose();
       envSphereMat.dispose();
       cubeRenderTarget.dispose();
+
+      // Clear scenes and dispose renderer last
+      scene.clear();
+      starBgScene.clear();
+      renderer.dispose();
+
+      if (container.contains(renderer.domElement)) {
+        container.removeChild(renderer.domElement);
+      }
+      rendererRef.current = null;
     };
   }, [size]);
 

@@ -3,6 +3,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from '@/lib/auth-context';
 import { useState } from 'react';
+import { applyThreeJsSafetyPatch } from '@/lib/three-safety';
+
+// Apply Three.js safety patch before any Three.js component loads.
+// This prevents TypeError crashes during SPA navigation dispose cycles.
+applyThreeJsSafetyPatch();
 
 export default function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(

@@ -16,6 +16,8 @@ const StarfieldBackground = forwardRef<StarfieldBackgroundRef>((_, ref) => {
   const mouseRef = useRef({ x: 0, y: 0 });
   const frameRef = useRef<number>(0);
   const isWarpingRef = useRef(false);
+  const warpFrameRef = useRef<number>(0);
+  const disposedRef = useRef(false);
 
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
   const starCount = isMobile ? 2000 : 4000;
@@ -144,20 +146,38 @@ const StarfieldBackground = forwardRef<StarfieldBackgroundRef>((_, ref) => {
     window.addEventListener('resize', onResize);
 
     return () => {
+      disposedRef.current = true;
       cancelAnimationFrame(frameRef.current);
+      cancelAnimationFrame(warpFrameRef.current);
       window.removeEventListener('pointermove', onMouseMove);
       window.removeEventListener('resize', onResize);
+
+      // Dispose all Three.js resources before renderer
+      starGeo.dispose();
+      starMat.dispose();
+      mwGeo.dispose();
+      mwMat.dispose();
+      scene.clear();
       renderer.dispose();
+
       if (containerRef.current && renderer.domElement.parentNode) {
         containerRef.current.removeChild(renderer.domElement);
       }
+
+      rendererRef.current = null;
+      sceneRef.current = null;
+      cameraRef.current = null;
+      starsRef.current = null;
     };
   }, []);
 
   useImperativeHandle(ref, () => ({
     triggerWarp: () => {
       return new Promise<void>((resolve) => {
-        if (isWarpingRef.current || !starsRef.current) { resolve(); return; }
+        if (isWarpingRef.current || !starsRef.current || disposedRef.current) {
+          resolve();
+          return;
+        }
         isWarpingRef.current = true;
         const starPositions = starsRef.current.geometry.attributes.position;
         const startTime = performance.now();
@@ -167,6 +187,12 @@ const StarfieldBackground = forwardRef<StarfieldBackgroundRef>((_, ref) => {
           originalZ[i] = starPositions.getZ(i);
         }
         const warpAnimate = () => {
+          // Bail out if component was unmounted during warp
+          if (disposedRef.current) {
+            isWarpingRef.current = false;
+            resolve();
+            return;
+          }
           const elapsed = performance.now() - startTime;
           const progress = Math.min(1, elapsed / duration);
           const eased = progress * progress;
@@ -175,7 +201,7 @@ const StarfieldBackground = forwardRef<StarfieldBackgroundRef>((_, ref) => {
           }
           starPositions.needsUpdate = true;
           if (progress < 1) {
-            requestAnimationFrame(warpAnimate);
+            warpFrameRef.current = requestAnimationFrame(warpAnimate);
           } else {
             for (let i = 0; i < starPositions.count; i++) {
               starPositions.setZ(i, originalZ[i]);
@@ -185,7 +211,7 @@ const StarfieldBackground = forwardRef<StarfieldBackgroundRef>((_, ref) => {
             resolve();
           }
         };
-        requestAnimationFrame(warpAnimate);
+        warpFrameRef.current = requestAnimationFrame(warpAnimate);
       });
     },
   }));

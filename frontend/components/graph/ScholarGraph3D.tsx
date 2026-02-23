@@ -18,23 +18,8 @@ import { createNebulaCluster } from './cosmic/nebulaClusterRenderer';
 import CosmicAnimationManager from './cosmic/CosmicAnimationManager';
 import { getStarColors } from './cosmic/cosmicConstants';
 
-// Monkey-patch Three.js dispose methods to prevent crashes from three-forcegraph's
-// auto-disposal (deallocate/emptyObject). The library calls .dispose() on objects
-// whose WebGL resources may already be cleaned up, causing TypeError in dispatchEvent.
-if (typeof window !== 'undefined') {
-  const origGeoDispose = THREE.BufferGeometry.prototype.dispose;
-  THREE.BufferGeometry.prototype.dispose = function () {
-    try { origGeoDispose.call(this); } catch { /* WebGL state already cleaned */ }
-  };
-  const origMatDispose = THREE.Material.prototype.dispose;
-  THREE.Material.prototype.dispose = function () {
-    try { origMatDispose.call(this); } catch { /* WebGL state already cleaned */ }
-  };
-  const origTexDispose = THREE.Texture.prototype.dispose;
-  THREE.Texture.prototype.dispose = function () {
-    try { origTexDispose.call(this); } catch { /* WebGL state already cleaned */ }
-  };
-}
+// Three.js dispose safety is handled globally via lib/three-safety.ts
+// (imported in providers.tsx before any Three.js component loads)
 
 const ForceGraph3D = dynamic(() => import('react-force-graph-3d'), {
   ssr: false,
