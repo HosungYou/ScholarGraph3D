@@ -192,6 +192,19 @@ Seed explore returns: `{ nodes: Paper[], edges: GraphEdge[], clusters: Cluster[]
 - Particle count: `min(250, max(50, nodeCount * 20))`
 - AdditiveBlending, shimmer shader, distance-based alpha falloff
 
+### Three.js Disposal Safety (CRITICAL)
+- **Global safety patch** lives in `lib/three-safety.ts`, imported by `providers.tsx` at app root
+- NEVER add local monkey-patches in individual components — all Three.js safety goes through `lib/three-safety.ts`
+- Every Three.js component cleanup MUST follow this order:
+  1. Set a `disposedRef = true` flag to guard async callbacks (rAF, Promises)
+  2. Cancel ALL `requestAnimationFrame` IDs (main loop + any sub-animations like warp)
+  3. Dispose geometries and materials BEFORE `renderer.dispose()`
+  4. Call `scene.clear()` to release child references
+  5. Call `renderer.dispose()` last
+  6. Null all refs to prevent stale access
+- Three.js components with async animations (rAF inside Promises, setTimeout callbacks) MUST check `disposedRef` at the start of every frame
+- SPA navigation unmounts components mid-animation — never assume cleanup runs after animations complete
+
 ### Important Constraints
 - Three.js MUST stay at 0.152.2 (ESM compatibility)
 - S2 API: 1 RPS authenticated, 0.3 RPS unauthenticated (auto-detected), non-commercial license
@@ -230,6 +243,7 @@ Key state slices:
 | PHILOSOPHY | docs/PHILOSOPHY.md |
 | TECH_PROOF | docs/TECH_PROOF.md |
 | DESIGN_THEME | docs/DESIGN_THEME.md |
+| RELEASE_v3.0.2 | docs/RELEASE_v3.0.2.md |
 | RELEASE_v3.0.1 | docs/RELEASE_v3.0.1.md |
 | RELEASE_v3.0.0 | docs/RELEASE_v3.0.0.md |
 | RELEASE_v2.0.2 | docs/RELEASE_v2.0.2.md |
