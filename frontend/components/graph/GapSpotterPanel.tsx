@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import { useGraphStore } from '@/hooks/useGraphStore';
-import { Radar, Lightbulb, Waypoints, Sparkles } from 'lucide-react';
+import { Radar, Waypoints, Sparkles } from 'lucide-react';
 import type { StructuralGap } from '@/types';
 
 export default function GapSpotterPanel() {
@@ -213,32 +213,6 @@ function GapCard({ gap, onMouseEnter, onMouseLeave }: GapCardProps) {
           </div>
         )}
 
-        {/* Research questions */}
-        {gap.research_questions.length > 0 && (
-          <div>
-            <div className="flex items-center gap-1 mb-1">
-              <Lightbulb className="w-3 h-3 text-[#a29bfe]/60" />
-              <span className="text-[9px] font-mono uppercase tracking-wider text-[#7B8CDE]/40">
-                Research Questions
-              </span>
-            </div>
-            <div className="space-y-1">
-              {gap.research_questions.slice(0, 2).map((q, i) => (
-                <p
-                  key={i}
-                  className="text-[10px] font-mono text-[#a29bfe]/60 leading-relaxed pl-2 border-l border-[#a29bfe]/20"
-                >
-                  {q}
-                </p>
-              ))}
-              {gap.research_questions.length > 2 && (
-                <p className="text-[9px] font-mono text-[#7B8CDE]/30 pl-2">
-                  +{gap.research_questions.length - 2} more questions
-                </p>
-              )}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

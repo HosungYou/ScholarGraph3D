@@ -235,7 +235,7 @@ export const api = {
         include_references: options?.include_references ?? true,
         include_citations: options?.include_citations ?? true,
       }),
-    }, 60000),
+    }, 30000),
 };
 
 export default api;

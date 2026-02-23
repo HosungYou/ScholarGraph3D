@@ -30,7 +30,7 @@ router = APIRouter()
 
 class SeedExploreRequest(BaseModel):
     paper_id: str = Field(..., description="S2 paper ID or DOI (e.g., 'DOI:10.1234/...')")
-    depth: int = Field(default=1, ge=1, le=2, description="Expansion depth (1=direct, 2=two hops)")
+    depth: int = Field(default=1, ge=1, le=1, description="Expansion depth (1=direct only)")
     max_papers: int = Field(default=50, ge=10, le=200, description="Maximum papers to include")
     include_references: bool = Field(default=True)
     include_citations: bool = Field(default=True)
@@ -125,22 +125,21 @@ async def seed_explore(request: SeedExploreRequest):
 
     Pipeline:
     1. Fetch seed paper details + embedding
-    2. Fetch references and citations (depth 1)
-    3. Optionally fetch depth-2 connections
-    4. Fetch embeddings for all papers
-    5. UMAP 3D reduction
-    6. HDBSCAN clustering
-    7. Similarity edges
-    8. Return graph
+    2. Fetch references and citations (depth 1, parallel)
+    3. Fetch embeddings for all papers
+    4. UMAP 3D reduction
+    5. HDBSCAN clustering + Similarity edges (parallel)
+    6. Citation intents + Gap detection (parallel)
+    7. Return graph
     """
     start_time = time.time()
 
     try:
-        return await asyncio.wait_for(_seed_explore_pipeline(request, start_time), timeout=55)
+        return await asyncio.wait_for(_seed_explore_pipeline(request, start_time), timeout=25)
     except asyncio.TimeoutError:
         raise HTTPException(
             status_code=504,
-            detail="Seed exploration timed out after 55 seconds. Try reducing depth or max_papers.",
+            detail="Seed exploration timed out after 25 seconds. Try reducing max_papers.",
         )
 
 
@@ -159,55 +158,48 @@ async def _seed_explore_pipeline(request: SeedExploreRequest, start_time: float)
     if not seed_paper:
         raise HTTPException(status_code=404, detail="Seed paper not found in Semantic Scholar")
 
+    logger.info(f"[timing] fetch_seed: {time.time() - start_time:.2f}s")
+
     # Track all papers by s2_paper_id to avoid duplicates
     papers_map: Dict[str, Any] = {seed_paper.paper_id: seed_paper}
     # Track citation relationships: (citing_id, cited_id)
     citation_pairs: Set[tuple] = set()
 
-    # 2. Fetch depth-1 references and citations
-    if request.include_references:
-        try:
-            refs = await s2_client.get_references(seed_paper.paper_id, limit=100)
-            for ref in refs:
-                if ref.paper_id and ref.paper_id not in papers_map:
-                    papers_map[ref.paper_id] = ref
-                if ref.paper_id:
-                    citation_pairs.add((seed_paper.paper_id, ref.paper_id))
-        except Exception as e:
-            logger.warning(f"Failed to fetch references: {e}")
+    # 2. Fetch depth-1 references and citations IN PARALLEL
+    async def _fetch_refs():
+        if not request.include_references:
+            return []
+        return await s2_client.get_references(seed_paper.paper_id, limit=100)
 
-    if request.include_citations:
-        try:
-            cits = await s2_client.get_citations(seed_paper.paper_id, limit=100)
-            for cit in cits:
-                if cit.paper_id and cit.paper_id not in papers_map:
-                    papers_map[cit.paper_id] = cit
-                if cit.paper_id:
-                    citation_pairs.add((cit.paper_id, seed_paper.paper_id))
-        except Exception as e:
-            logger.warning(f"Failed to fetch citations: {e}")
+    async def _fetch_cites():
+        if not request.include_citations:
+            return []
+        return await s2_client.get_citations(seed_paper.paper_id, limit=100)
 
-    # 3. Depth-2 expansion (optional, for connected papers)
-    if request.depth >= 2 and len(papers_map) < request.max_papers:
-        depth1_ids = [pid for pid in papers_map.keys() if pid != seed_paper.paper_id]
-        # Sample up to 10 papers for depth-2 to limit API calls
-        sample_ids = depth1_ids[:10]
+    refs_result, cites_result = await asyncio.gather(
+        _fetch_refs(), _fetch_cites(), return_exceptions=True
+    )
 
-        async def _fetch_depth2(pid: str):
-            try:
-                refs = await s2_client.get_references(pid, limit=20)
-                return (pid, refs)
-            except Exception:
-                return (pid, [])
+    if isinstance(refs_result, Exception):
+        logger.warning(f"Failed to fetch references: {refs_result}")
+        refs_result = []
+    if isinstance(cites_result, Exception):
+        logger.warning(f"Failed to fetch citations: {cites_result}")
+        cites_result = []
 
-        d2_tasks = [_fetch_depth2(pid) for pid in sample_ids]
-        d2_results = await asyncio.gather(*d2_tasks)
-        for parent_pid, d2_refs in d2_results:
-            for ref in d2_refs:
-                if ref.paper_id and ref.paper_id not in papers_map and len(papers_map) < request.max_papers:
-                    papers_map[ref.paper_id] = ref
-                if ref.paper_id:
-                    citation_pairs.add((parent_pid, ref.paper_id))
+    for ref in refs_result:
+        if ref.paper_id and ref.paper_id not in papers_map:
+            papers_map[ref.paper_id] = ref
+        if ref.paper_id:
+            citation_pairs.add((seed_paper.paper_id, ref.paper_id))
+
+    for cit in cites_result:
+        if cit.paper_id and cit.paper_id not in papers_map:
+            papers_map[cit.paper_id] = cit
+        if cit.paper_id:
+            citation_pairs.add((cit.paper_id, seed_paper.paper_id))
+
+    logger.info(f"[timing] fetch_refs_cites: {time.time() - start_time:.2f}s")
 
     # Trim to max_papers (keep seed + highest cited)
     if len(papers_map) > request.max_papers:
@@ -218,7 +210,7 @@ async def _seed_explore_pipeline(request: SeedExploreRequest, start_time: float)
         kept = [seed_paper] + others[:request.max_papers - 1]
         papers_map = {p.paper_id: p for p in kept}
 
-    # 4. Fetch embeddings for papers that don't have them
+    # 3. Fetch embeddings for papers that don't have them
     papers_needing_embeddings = [
         pid for pid, p in papers_map.items() if p.embedding is None
     ]
@@ -232,6 +224,8 @@ async def _seed_explore_pipeline(request: SeedExploreRequest, start_time: float)
                     papers_map[ep.paper_id].embedding = ep.embedding
         except Exception as e:
             logger.warning(f"Embedding fetch failed: {e}")
+
+    logger.info(f"[timing] fetch_embeddings: {time.time() - start_time:.2f}s")
 
     # Build ordered list and filter for embeddings
     all_papers = list(papers_map.values())
@@ -249,18 +243,27 @@ async def _seed_explore_pipeline(request: SeedExploreRequest, start_time: float)
         paper_ids = [p.paper_id for p in papers_with_emb]
         s2_to_node = {p.paper_id: p.paper_id for p in papers_with_emb}
 
-        # 5. UMAP 3D with temporal Z-axis (Z = publication year)
+        # 4. UMAP 3D with temporal Z-axis (Z = publication year)
         reducer = EmbeddingReducer()
         years = [p.year for p in papers_with_emb]
         coords_3d = await asyncio.to_thread(
             lambda: reducer.reduce_to_3d(embeddings, years=years, use_temporal_z=True)
         )
 
-        # 6. HDBSCAN clustering on high-dim embeddings (avoids double-distortion bug)
+        logger.info(f"[timing] umap: {time.time() - start_time:.2f}s")
+
+        # 5. HDBSCAN clustering + Similarity edges (parallel)
         # v0.7.0: pass 768-dim embeddings; clusterer internally reduces to 50D UMAP
         clusterer = PaperClusterer()
         min_cluster = max(3, min(5, len(papers_with_emb) // 5))
-        cluster_labels = await asyncio.to_thread(clusterer.cluster, embeddings, min_cluster)
+        sim_computer = SimilarityComputer()
+
+        cluster_task = asyncio.to_thread(clusterer.cluster, embeddings, min_cluster)
+        sim_task = asyncio.to_thread(sim_computer.compute_edges, embeddings, paper_ids, 0.7)
+        cluster_labels, sim_edges = await asyncio.gather(cluster_task, sim_task)
+
+        logger.info(f"[timing] hdbscan_and_similarity: {time.time() - start_time:.2f}s")
+
         paper_dicts = [{
             "title": p.title,
             "abstract": p.abstract or "",
@@ -282,12 +285,6 @@ async def _seed_explore_pipeline(request: SeedExploreRequest, start_time: float)
             if label_counts.get(base_label, 0) > 1 and "(" not in info["label"]:
                 info["label"] = f"{base_label} (1)"
         hulls = clusterer.compute_hulls(coords_3d, cluster_labels)
-
-        # 7. Similarity edges
-        sim_computer = SimilarityComputer()
-        sim_edges = await asyncio.to_thread(
-            sim_computer.compute_edges, embeddings, paper_ids, 0.7
-        )
 
         # Build nodes
         for i, paper in enumerate(papers_with_emb):
@@ -344,33 +341,6 @@ async def _seed_explore_pipeline(request: SeedExploreRequest, start_time: float)
 
         logger.info(f"Citation edges: {matched} matched, {unmatched} unmatched (pairs={len(citation_pairs)}, s2_to_node={len(s2_to_node)})")
 
-        # Fetch real citation intents from S2 (best-effort, non-blocking)
-        try:
-            intent_service = CitationIntentService()
-            # Get intents for the seed paper (covers most edges)
-            seed_intents = await intent_service.get_basic_intents(
-                seed_paper.paper_id, s2_client
-            )
-            # Build lookup: (citing_s2_id, cited_s2_id) -> intent
-            intent_lookup: Dict[tuple, str] = {}
-            for ci in seed_intents:
-                intent_lookup[(ci["citing_id"], ci["cited_id"])] = ci.get("intent", "background")
-
-            # Apply intents to citation edges
-            updated_count = 0
-            for (citing_id, cited_id), edge in citation_edge_map.items():
-                intent = intent_lookup.get((citing_id, cited_id))
-                if not intent:
-                    # Try reverse lookup (cited paper's citations)
-                    intent = intent_lookup.get((cited_id, citing_id))
-                if intent:
-                    edge.intent = intent
-                    updated_count += 1
-
-            logger.info(f"Updated {updated_count}/{len(citation_edge_map)} citation edges with S2 intents")
-        except Exception as e:
-            logger.warning(f"Citation intent fetch failed (non-fatal): {e}")
-
         # Cluster info
         for cid, info in cluster_meta.items():
             hull_verts = hulls.get(cid, [])
@@ -394,6 +364,73 @@ async def _seed_explore_pipeline(request: SeedExploreRequest, start_time: float)
             node.cluster_id = -1
             node.cluster_label = "Unclustered"
             nodes.append(node)
+
+        # 6. Citation intents + Gap detection (parallel — both independent)
+        async def _fetch_intents():
+            try:
+                intent_service = CitationIntentService()
+                seed_intents = await intent_service.get_basic_intents(
+                    seed_paper.paper_id, s2_client
+                )
+                intent_lookup: Dict[tuple, str] = {}
+                for ci in seed_intents:
+                    intent_lookup[(ci["citing_id"], ci["cited_id"])] = ci.get("intent", "background")
+
+                updated_count = 0
+                for (citing_id, cited_id), edge in citation_edge_map.items():
+                    intent = intent_lookup.get((citing_id, cited_id))
+                    if not intent:
+                        intent = intent_lookup.get((cited_id, citing_id))
+                    if intent:
+                        edge.intent = intent
+                        updated_count += 1
+
+                logger.info(f"Updated {updated_count}/{len(citation_edge_map)} citation edges with S2 intents")
+            except Exception as e:
+                logger.warning(f"Citation intent fetch failed (non-fatal): {e}")
+
+        async def _detect_gaps():
+            gaps: List[SeedGapInfo] = []
+            if len(clusters_info) >= 2 and len(nodes) >= 5:
+                try:
+                    gap_detector = GapDetector()
+                    gap_papers = [{
+                        "id": n.id,
+                        "title": n.title,
+                        "cluster_id": n.cluster_id,
+                        "embedding": next(
+                            (p.embedding for p in papers_with_emb if p.paper_id == n.id),
+                            None
+                        ),
+                    } for n in nodes]
+                    gap_clusters = [{"id": c.id, "label": c.label, "paper_count": c.paper_count} for c in clusters_info]
+                    gap_edges = [{"source": e.source, "target": e.target, "type": e.type, "weight": e.weight} for e in edges]
+
+                    gap_result = await asyncio.to_thread(
+                        gap_detector.detect_gaps, gap_papers, gap_clusters, gap_edges
+                    )
+
+                    for gap in gap_result.gaps[:10]:  # Limit to top 10 gaps
+                        gaps.append(SeedGapInfo(
+                            gap_id=gap.gap_id,
+                            cluster_a=gap.cluster_a,
+                            cluster_b=gap.cluster_b,
+                            gap_strength=gap.gap_strength,
+                            bridge_papers=gap.bridge_papers,
+                            potential_edges=gap.potential_edges,
+                            research_questions=[],
+                        ))
+
+                    logger.info(f"Gap detection: {len(gaps)} gaps found")
+                except Exception as e:
+                    logger.warning(f"Gap detection failed (non-fatal): {e}")
+            return gaps
+
+        intent_task = _fetch_intents()
+        gap_task = _detect_gaps()
+        _, gaps_info = await asyncio.gather(intent_task, gap_task)
+
+        logger.info(f"[timing] intents_and_gaps: {time.time() - start_time:.2f}s")
 
     else:
         # Not enough for graph — arrange in spiral
@@ -419,87 +456,11 @@ async def _seed_explore_pipeline(request: SeedExploreRequest, start_time: float)
                     source=src, target=tgt, type="citation", weight=0.8,
                 ))
 
-    # 9. Gap detection
-    gaps_info: List[SeedGapInfo] = []
+        gaps_info = []
+
+    # 8. Frontier detection — papers with many unexplored connections
     frontier_ids: List[str] = []
-
-    if len(clusters_info) >= 2 and len(nodes) >= 5:
-        try:
-            gap_detector = GapDetector()
-            gap_papers = [{
-                "id": n.id,
-                "title": n.title,
-                "cluster_id": n.cluster_id,
-                "embedding": next(
-                    (p.embedding for p in papers_with_emb if p.paper_id == n.id),
-                    None
-                ),
-            } for n in nodes]
-            gap_clusters = [{"id": c.id, "label": c.label, "paper_count": c.paper_count} for c in clusters_info]
-            gap_edges = [{"source": e.source, "target": e.target, "type": e.type, "weight": e.weight} for e in edges]
-
-            gap_result = await asyncio.to_thread(
-                gap_detector.detect_gaps, gap_papers, gap_clusters, gap_edges
-            )
-
-            for gap in gap_result.gaps[:10]:  # Limit to top 10 gaps
-                gaps_info.append(SeedGapInfo(
-                    gap_id=gap.gap_id,
-                    cluster_a=gap.cluster_a,
-                    cluster_b=gap.cluster_b,
-                    gap_strength=gap.gap_strength,
-                    bridge_papers=gap.bridge_papers,
-                    potential_edges=gap.potential_edges,
-                    research_questions=[],
-                ))
-
-            # Generate research questions via Groq (best-effort)
-            try:
-                from config import settings
-                if settings.groq_api_key and gaps_info:
-                    from llm.groq_provider import GroqProvider
-                    groq = GroqProvider(api_key=settings.groq_api_key)
-                    try:
-                        top_gaps = gaps_info[:3]
-                        gap_descriptions = []
-                        for g in top_gaps:
-                            gap_descriptions.append(
-                                f"Gap between '{g.cluster_a.get('label', '')}' "
-                                f"({g.cluster_a.get('paper_count', 0)} papers) and "
-                                f"'{g.cluster_b.get('label', '')}' "
-                                f"({g.cluster_b.get('paper_count', 0)} papers), "
-                                f"strength: {g.gap_strength:.2f}"
-                            )
-
-                        prompt = (
-                            f"You are a research advisor analyzing a citation network about '{seed_paper.title}'. "
-                            f"The following structural gaps exist between paper clusters:\n\n"
-                            + "\n".join(f"{i+1}. {d}" for i, d in enumerate(gap_descriptions))
-                            + "\n\nFor each gap, suggest 2 specific research questions that could bridge it. "
-                            "Return ONLY the questions, numbered like '1a. ...', '1b. ...', '2a. ...', etc."
-                        )
-                        resp = await groq.generate(prompt, max_tokens=500, temperature=0.7)
-                        if resp and resp.content:
-                            lines = [l.strip() for l in resp.content.strip().split("\n") if l.strip()]
-                            for line in lines:
-                                # Parse "1a. question" format
-                                if len(line) >= 3 and line[0].isdigit():
-                                    gap_idx = int(line[0]) - 1
-                                    question = line[3:].strip() if len(line) > 3 else line
-                                    if 0 <= gap_idx < len(top_gaps):
-                                        top_gaps[gap_idx].research_questions.append(question)
-                    finally:
-                        await groq.close()
-            except Exception as e:
-                logger.warning(f"Gap research question generation failed (non-fatal): {e}")
-
-            logger.info(f"Gap detection: {len(gaps_info)} gaps found")
-        except Exception as e:
-            logger.warning(f"Gap detection failed (non-fatal): {e}")
-
-    # 10. Frontier detection — papers with many unexplored connections
     if nodes:
-        node_ids_in_graph = {n.id for n in nodes}
         for n in nodes:
             paper_obj = papers_map.get(n.id)
             if paper_obj:
@@ -511,6 +472,8 @@ async def _seed_explore_pipeline(request: SeedExploreRequest, start_time: float)
                         frontier_ids.append(n.id)
 
     elapsed = time.time() - start_time
+    logger.info(f"[timing] total: {elapsed:.2f}s")
+
     meta = {
         "query": f"seed:{request.paper_id}",
         "total": len(nodes),
@@ -521,7 +484,7 @@ async def _seed_explore_pipeline(request: SeedExploreRequest, start_time: float)
         "clusters": len([c for c in clusters_info if c.id != -1]),
         "gaps": len(gaps_info),
         "frontier_papers": len(frontier_ids),
-        "depth": request.depth,
+        "depth": 1,
         "elapsed_seconds": round(elapsed, 2),
         "oa_credits_used": 0,
     }

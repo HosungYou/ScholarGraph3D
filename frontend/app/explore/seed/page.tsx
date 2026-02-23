@@ -36,13 +36,6 @@ function SeedExploreContent() {
     setFrontierIds,
   } = useGraphStore();
 
-  const [depthValue, setDepthValue] = useState<number>(depth);
-
-  const handleDepthChange = useCallback((newDepth: number) => {
-    setDepthValue(newDepth);
-    router.push(`/explore/seed?paper_id=${encodeURIComponent(paperId)}&depth=${newDepth}`);
-  }, [paperId, router]);
-
   const graphRef = useRef<ScholarGraph3DRef>(null);
   const [expandError, setExpandError] = useState<string | null>(null);
   const [isExpanding, setIsExpanding] = useState(false);
@@ -180,7 +173,7 @@ function SeedExploreContent() {
 
     const fetchPromise = graphId
       ? api.loadGraph(graphId)
-      : api.seedExplore(paperId, { depth: depthValue, max_papers: 80 });
+      : api.seedExplore(paperId, { depth: 1, max_papers: 80 });
 
     fetchPromise
       .then((data) => {
@@ -218,7 +211,7 @@ function SeedExploreContent() {
         setError(err instanceof Error ? err.message : 'Failed to build seed graph');
       })
       .finally(() => setLoading(false));
-  }, [paperId, graphId, depthValue, setGraphData, setLoading, setError, setCitationIntents, setGaps, setFrontierIds, autoSave]);
+  }, [paperId, graphId, setGraphData, setLoading, setError, setCitationIntents, setGaps, setFrontierIds, autoSave]);
 
   // Camera control events
   useEffect(() => {
@@ -526,22 +519,6 @@ function SeedExploreContent() {
               </div>
               <div className="text-[10px] text-[#7B8CDE]/50">
                 Double-click a node to expand its citations
-              </div>
-              <div className="flex items-center gap-2 mt-1.5 pt-1.5 border-t border-[#1a2555]/30">
-                <span className="text-[10px] text-[#7B8CDE]/50">Depth:</span>
-                {[1, 2, 3].map(d => (
-                  <button
-                    key={d}
-                    onClick={() => handleDepthChange(d)}
-                    className={`px-2 py-0.5 rounded text-[10px] font-mono transition-colors ${
-                      depthValue === d
-                        ? 'bg-[#00E5FF]/20 text-[#00E5FF] border border-[#00E5FF]/40'
-                        : 'text-[#7B8CDE]/50 hover:text-[#7B8CDE] border border-[#1a2555]/30'
-                    }`}
-                  >
-                    {d}
-                  </button>
-                ))}
               </div>
             </div>
           )}
