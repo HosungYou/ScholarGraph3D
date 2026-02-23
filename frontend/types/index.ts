@@ -11,8 +11,7 @@ export interface Topic {
 
 export interface Paper {
   id: string;
-  s2_paper_id?: string;     // was s2_id
-  oa_work_id?: string;      // was oa_id
+  s2_paper_id?: string;
   doi?: string;
   title: string;
   authors: Author[];

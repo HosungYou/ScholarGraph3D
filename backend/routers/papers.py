@@ -26,7 +26,6 @@ router = APIRouter()
 class PaperDetail(BaseModel):
     id: Optional[str] = None
     s2_paper_id: Optional[str] = None
-    oa_work_id: Optional[str] = None
     doi: Optional[str] = None
     title: str
     abstract: Optional[str] = None
@@ -252,11 +251,11 @@ async def get_paper(paper_id: str, db: Database = Depends(get_db)):
         try:
             row = await db.fetchrow(
                 """
-                SELECT id, s2_paper_id, oa_work_id, doi, title, abstract,
+                SELECT id, s2_paper_id, doi, title, abstract,
                        year, venue, citation_count, fields_of_study, tldr,
                        is_open_access, oa_url, authors
                 FROM papers
-                WHERE id::text = $1 OR s2_paper_id = $1 OR oa_work_id = $1
+                WHERE id::text = $1 OR s2_paper_id = $1
                 LIMIT 1
                 """,
                 paper_id,
@@ -265,7 +264,6 @@ async def get_paper(paper_id: str, db: Database = Depends(get_db)):
                 return PaperDetail(
                     id=str(row["id"]),
                     s2_paper_id=row["s2_paper_id"],
-                    oa_work_id=row["oa_work_id"],
                     doi=row["doi"],
                     title=row["title"],
                     abstract=row["abstract"],

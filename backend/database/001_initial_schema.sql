@@ -3,7 +3,8 @@
 
 CREATE EXTENSION IF NOT EXISTS vector;
 
--- Papers table: unified paper metadata from OpenAlex + Semantic Scholar
+-- Papers table: paper metadata from Semantic Scholar (v2.0+)
+-- NOTE: oa_work_id and oa_topics columns removed in migration 004
 CREATE TABLE papers (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     s2_paper_id TEXT UNIQUE,
