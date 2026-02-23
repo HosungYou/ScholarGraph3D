@@ -17,7 +17,7 @@ v2.0 is a major simplification from v1.x — keyword search, multi-provider LLM,
 | 3D Rendering | react-force-graph-3d + Three.js 0.152.2 | Pin Three.js version (ESM compat) |
 | Backend | FastAPI + Python 3.11 | Async with asyncpg |
 | Database | PostgreSQL + pgvector (Supabase) | 768-dim SPECTER2 vectors |
-| Cache | Redis (Upstash) | 24h cache, graceful no-op if unavailable |
+| Cache | Redis (Upstash) | seed-explore 24h, refs/cites 7d, embeddings 30d, graceful no-op |
 | Auth | Supabase Auth | JWT, Google/GitHub OAuth |
 | LLM | Groq (llama-3.3-70b) | Seed chat + research question generation |
 
@@ -63,10 +63,10 @@ backend/
 │   ├── analytics.py         # Request analytics middleware
 │   └── rate_limiter.py      # Rate limiting middleware
 ├── integrations/
-│   ├── semantic_scholar.py  # S2 API client (1 RPS, rate limiting)
+│   ├── semantic_scholar.py  # S2 API client (semaphore rate limiter, auto-detect RPS)
 │   └── crossref.py          # CrossRef DOI lookup
 ├── graph/
-│   ├── embedding_reducer.py   # UMAP 3D (768→3 dims)
+│   ├── embedding_reducer.py   # UMAP reduction (768→50D intermediate→3D)
 │   ├── clusterer.py           # HDBSCAN + cluster labeling
 │   ├── similarity.py          # Cosine similarity edges (>0.7)
 │   ├── bridge_detector.py     # Cross-cluster bridge node detection (top-5%)
@@ -194,9 +194,10 @@ Seed explore returns: `{ nodes: Paper[], edges: GraphEdge[], clusters: Cluster[]
 
 ### Important Constraints
 - Three.js MUST stay at 0.152.2 (ESM compatibility)
-- S2 API: 1 RPS authenticated, non-commercial license
+- S2 API: 1 RPS authenticated, 0.3 RPS unauthenticated (auto-detected), non-commercial license
 - pgvector: 768-dim SPECTER2 vectors, ivfflat index with 100 lists
 - HDBSCAN min_cluster_size=5; UMAP n_neighbors=15 (50D intermediate) / 10 (3D visualization)
+- UMAP pipeline: 768→50D (once), then 50D→3D for viz + 50D direct to HDBSCAN (no double computation)
 - HDBSCAN runs on 50-dim intermediate UMAP embeddings (NOT 3D coords)
 - Z-axis = publication year (semantic topology on X/Y, time depth on Z)
 - Backend: 1 uvicorn worker (async handles concurrency; CPU ops via asyncio.to_thread)
