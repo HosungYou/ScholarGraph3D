@@ -40,3 +40,12 @@ coverage/
 .pytest_cache/
 htmlcov/
 .vercel
+
+# OMC (oh-my-claudecode)
+.omc/
+frontend/.omc/
+backend/.omc/
+
+# Build artifacts
+frontend/tsconfig.tsbuildinfo
+frontend/next-env.d.ts

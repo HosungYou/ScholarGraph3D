@@ -3,10 +3,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, FileText, HelpCircle, GitBranch, Layers, Clock } from 'lucide-react';
+import { Search, FileText, GitBranch, Layers, Clock } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api';
-import type { UserProfile } from '@/types';
 import dynamic from 'next/dynamic';
 import type { StarfieldBackgroundRef } from '@/components/cosmic/StarfieldBackground';
 
@@ -15,7 +14,7 @@ const StarfieldBackground = dynamic(
   { ssr: false }
 );
 
-type InputMode = 'doi' | 'keyword' | 'question';
+type InputMode = 'doi' | 'natural';
 
 const DOI_PATTERN = /10\.\d{4,}\/\S+/;
 
@@ -39,22 +38,16 @@ const EXAMPLE_QUERIES = [
 export default function LandingPage() {
   const [activeMode, setActiveMode] = useState<InputMode>('doi');
   const [inputValue, setInputValue] = useState('');
-  const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [isLoadingDoi, setIsLoadingDoi] = useState(false);
   const [doiError, setDoiError] = useState<string | null>(null);
-  const [isLoadingScaffold, setIsLoadingScaffold] = useState(false);
-  const [scaffoldAngles, setScaffoldAngles] = useState<{
-    label: string;
-    query: string;
-    type: string;
-  }[] | null>(null);
+  const [isLoadingNatural, setIsLoadingNatural] = useState(false);
+  const [naturalResults, setNaturalResults] = useState<any[] | null>(null);
   const router = useRouter();
 
   const starfieldRef = useRef<StarfieldBackgroundRef>(null);
   const [isWarping, setIsWarping] = useState(false);
 
   const { user } = useAuth();
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
 
   useEffect(() => {
     if (user && window.location.hash.includes('access_token')) {
@@ -62,55 +55,13 @@ export default function LandingPage() {
     }
   }, [user, router]);
 
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem('sg3d-recent-searches');
-      if (saved) setRecentSearches(JSON.parse(saved));
-    } catch {}
-  }, []);
-
-  useEffect(() => {
-    if (user) {
-      api.getUserProfile().then(setUserProfile).catch(() => {});
-    }
-  }, [user]);
-
-  const saveRecentSearch = (q: string) => {
-    try {
-      const updated = [q, ...recentSearches.filter((s) => s !== q)].slice(0, 5);
-      setRecentSearches(updated);
-      localStorage.setItem('sg3d-recent-searches', JSON.stringify(updated));
-    } catch {}
-  };
-
-  const handleKeywordSearch = (q: string) => {
-    if (!q.trim()) return;
-    // Auto-detect DOIs entered in keyword mode
-    if (looksLikeDoi(q)) {
-      setActiveMode('doi');
-      setInputValue(q.trim());
-      handleDOILookup(q.trim());
-      return;
-    }
-    saveRecentSearch(q.trim());
-    router.push(`/explore?q=${encodeURIComponent(q.trim())}`);
-  };
-
   const handleDOILookup = async (doi: string) => {
     if (!doi.trim()) return;
     setIsLoadingDoi(true);
     setDoiError(null);
 
     try {
-      const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-      const resp = await fetch(
-        `${API_BASE}/api/papers/by-doi?doi=${encodeURIComponent(doi.trim())}`,
-      );
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({}));
-        throw new Error(err.detail || `HTTP ${resp.status}`);
-      }
-      const data = await resp.json();
+      const data = await api.getPaperByDOI(doi.trim());
       if (data.paper_id) {
         router.push(`/explore/seed?paper_id=${encodeURIComponent(data.paper_id)}`);
       } else {
@@ -124,77 +75,47 @@ export default function LandingPage() {
     }
   };
 
-  const handleQuestionSubmit = async (question: string) => {
-    if (!question.trim()) return;
-    setIsLoadingScaffold(true);
-    setScaffoldAngles(null);
+  const handleNaturalSearch = async (query: string) => {
+    if (!query.trim()) return;
+
+    // Auto-detect DOIs in natural mode
+    if (looksLikeDoi(query)) {
+      setActiveMode('doi');
+      setInputValue(query.trim());
+      handleDOILookup(query.trim());
+      return;
+    }
+
+    setIsLoadingNatural(true);
+    setNaturalResults(null);
 
     try {
-      const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-      const resp = await fetch(`${API_BASE}/api/analysis/scaffold-angles`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: question.trim() }),
-      });
-
-      if (resp.ok) {
-        const data = await resp.json();
-        setScaffoldAngles(data.angles);
-      } else {
-        const q = question.trim();
-        setScaffoldAngles([
-          { label: '🔭 Broad Survey', query: `${q} survey review`, type: 'broad' },
-          { label: '🎯 Focused Study', query: `${q} empirical study`, type: 'narrow' },
-          { label: '🔬 Methodology', query: `${q} methodology systematic`, type: 'method' },
-          { label: '📐 Theory', query: `${q} theoretical framework`, type: 'theory' },
-          { label: '👥 Population', query: `${q} specific context`, type: 'population' },
-        ]);
-      }
-    } catch {
-      const q = question.trim();
-      setScaffoldAngles([
-        { label: '🔭 Broad Survey', query: `${q} survey review`, type: 'broad' },
-        { label: '🎯 Focused Study', query: `${q} empirical study`, type: 'narrow' },
-        { label: '🔬 Methodology', query: `${q} methodology systematic`, type: 'method' },
-        { label: '📐 Theory', query: `${q} theoretical framework`, type: 'theory' },
-        { label: '👥 Population', query: `${q} specific context`, type: 'population' },
-      ]);
+      const data = await api.searchPapers(query.trim());
+      setNaturalResults(data.papers || []);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setDoiError(`Search failed: ${msg}`);
     } finally {
-      setIsLoadingScaffold(false);
+      setIsLoadingNatural(false);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setDoiError(null);
-
     if (isWarping) return;
 
-    // For keyword and question modes, trigger warp before navigation
-    if (activeMode === 'keyword' && inputValue.trim()) {
-      if (looksLikeDoi(inputValue)) {
-        setActiveMode('doi');
-        setInputValue(inputValue.trim());
-        handleDOILookup(inputValue.trim());
-        return;
-      }
-      setIsWarping(true);
-      starfieldRef.current?.triggerWarp();
-      saveRecentSearch(inputValue.trim());
-      setTimeout(() => {
-        router.push(`/explore?q=${encodeURIComponent(inputValue.trim())}`);
-      }, 600);
-      return;
+    if (activeMode === 'doi') {
+      handleDOILookup(inputValue);
+    } else if (activeMode === 'natural') {
+      handleNaturalSearch(inputValue);
     }
-
-    if (activeMode === 'doi') handleDOILookup(inputValue);
-    else if (activeMode === 'question') handleQuestionSubmit(inputValue);
   };
 
   const switchMode = (mode: InputMode) => {
     setActiveMode(mode);
     setInputValue('');
-    setScaffoldAngles(null);
+    setNaturalResults(null);
     setDoiError(null);
   };
 
@@ -227,7 +148,7 @@ export default function LandingPage() {
           </p>
         </motion.div>
 
-        {/* Primary: Seed Paper Input */}
+        {/* Input Modes */}
         <AnimatePresence mode="wait">
           {activeMode === 'doi' && (
             <motion.div
@@ -280,13 +201,13 @@ export default function LandingPage() {
                       {isLoadingDoi && (
                         <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                       )}
-                      {isLoadingDoi ? 'Finding…' : 'EXPLORE'}
+                      {isLoadingDoi ? 'Finding...' : 'EXPLORE'}
                     </button>
                   </div>
                 </div>
                 <div className="flex items-center justify-between mt-2 px-1">
                   <p className="text-xs text-text-secondary/40">
-                    Enter a paper's DOI or URL → explore its full citation universe in 3D
+                    Enter a paper{"'"}s DOI or URL &rarr; explore its full citation universe in 3D
                   </p>
                   {doiError && (
                     <p className="text-xs text-red-400/80">{doiError}</p>
@@ -311,9 +232,9 @@ export default function LandingPage() {
             </motion.div>
           )}
 
-          {activeMode === 'keyword' && (
+          {activeMode === 'natural' && (
             <motion.div
-              key="keyword"
+              key="natural"
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
@@ -328,120 +249,114 @@ export default function LandingPage() {
                     <input
                       type="text"
                       value={inputValue}
-                      onChange={(e) => setInputValue(e.target.value)}
-                      placeholder="transformer architecture, AI in healthcare, CRISPR…"
+                      onChange={(e) => {
+                        setInputValue(e.target.value);
+                        setNaturalResults(null);
+                        setDoiError(null);
+                      }}
+                      placeholder="Describe your research topic or question..."
                       className="flex-1 bg-transparent px-4 py-5 text-base text-text-primary placeholder:text-text-secondary/40 outline-none"
                       autoFocus
                     />
                     <button
                       type="submit"
-                      disabled={!inputValue.trim()}
-                      className="px-8 py-5 hud-button uppercase font-mono tracking-wider disabled:opacity-40 disabled:cursor-not-allowed"
+                      disabled={!inputValue.trim() || isLoadingNatural}
+                      className="px-8 py-5 hud-button uppercase font-mono tracking-wider disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
                     >
-                      SCAN
+                      {isLoadingNatural && (
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      )}
+                      {isLoadingNatural ? 'Searching...' : 'FIND PAPERS'}
                     </button>
                   </div>
                 </div>
                 <p className="text-xs text-text-secondary/40 mt-2 px-1">
-                  Explore the full landscape of papers in this research area
+                  Search by topic, question, or keywords &rarr; select a paper &rarr; explore its citation universe
                 </p>
+                {doiError && (
+                  <p className="text-xs text-red-400/80 mt-1 px-1">{doiError}</p>
+                )}
               </form>
 
               {/* Quick examples */}
-              <div className="mt-3 flex flex-wrap gap-2">
-                {EXAMPLE_QUERIES.map((ex) => (
-                  <button
-                    key={ex.label}
-                    onClick={() => handleKeywordSearch(ex.label)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface/60 hover:bg-surface border border-cosmic-glow/10 hover:border-cosmic-glow/30 text-xs text-text-secondary hover:text-cosmic-glow transition-all"
-                  >
-                    {ex.label}
-                    <span className="ml-0.5 text-text-secondary/30">{ex.field}</span>
-                  </button>
-                ))}
-              </div>
-            </motion.div>
-          )}
-
-          {activeMode === 'question' && (
-            <motion.div
-              key="question"
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.3 }}
-              className="mb-5"
-            >
-              <form onSubmit={handleSubmit}>
-                <div className="relative group">
-                  <div className="absolute -inset-0.5 bg-gradient-to-r from-accent-purple/20 to-accent-green/20 rounded-2xl blur opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-500" />
-                  <div className="relative flex items-center hud-panel rounded-2xl overflow-hidden">
-                    <HelpCircle className="w-5 h-5 text-text-secondary ml-5 flex-shrink-0" />
-                    <input
-                      type="text"
-                      value={inputValue}
-                      onChange={(e) => {
-                        setInputValue(e.target.value);
-                        if (scaffoldAngles) setScaffoldAngles(null);
-                      }}
-                      placeholder="How does AI affect doctor-patient relationships?"
-                      className="flex-1 bg-transparent px-4 py-5 text-base text-text-primary placeholder:text-text-secondary/40 outline-none"
-                      autoFocus
-                    />
+              {!naturalResults && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {EXAMPLE_QUERIES.map((ex) => (
                     <button
-                      type="submit"
-                      disabled={!inputValue.trim() || isLoadingScaffold}
-                      className="px-8 py-5 hud-button uppercase font-mono tracking-wider disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+                      key={ex.label}
+                      onClick={() => {
+                        setInputValue(ex.label);
+                        handleNaturalSearch(ex.label);
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface/60 hover:bg-surface border border-cosmic-glow/10 hover:border-cosmic-glow/30 text-xs text-text-secondary hover:text-cosmic-glow transition-all"
                     >
-                      {isLoadingScaffold && (
-                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      )}
-                      {scaffoldAngles ? 'NEW QUESTION' : 'ANALYZE'}
+                      {ex.label}
+                      <span className="ml-0.5 text-text-secondary/30">{ex.field}</span>
                     </button>
-                  </div>
+                  ))}
                 </div>
-                <p className="text-xs text-text-secondary/40 mt-2 px-1">
-                  AI analyzes your question and suggests 5 exploration angles
-                </p>
-              </form>
+              )}
 
-              {/* Scaffold angles */}
+              {/* Paper Selection Cards */}
               <AnimatePresence>
-                {scaffoldAngles && (
+                {naturalResults && naturalResults.length > 0 && (
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
-                    className="mt-4 hud-panel rounded-2xl p-4"
+                    className="mt-4 flex flex-col gap-2 max-h-[400px] overflow-y-auto"
                   >
-                    <p className="text-xs text-text-secondary/60 mb-3 font-medium">
-                      Choose your exploration angle:
+                    <p className="text-xs text-text-secondary/50 px-1">
+                      Select a seed paper to explore:
                     </p>
-                    <div className="flex flex-col gap-2">
-                      {scaffoldAngles.map((angle, i) => (
-                        <button
-                          key={i}
-                          onClick={() => {
-                            saveRecentSearch(angle.query);
-                            router.push(`/explore?q=${encodeURIComponent(angle.query)}`);
-                          }}
-                          className="flex items-center gap-3 px-4 py-3 rounded-xl text-left bg-surface/60 hover:bg-surface border border-cosmic-glow/10 hover:border-cosmic-glow/30 transition-all group"
-                        >
-                          <span className="text-sm font-medium text-text-primary group-hover:text-cosmic-glow transition-colors">
-                            {angle.label}
-                          </span>
-                          <span className="text-xs text-text-secondary/40 ml-auto font-mono">
-                            {angle.query}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                    <button
-                      onClick={() => setScaffoldAngles(null)}
-                      className="mt-3 text-xs text-text-secondary/30 hover:text-text-secondary transition-colors"
-                    >
-                      ✕ Dismiss
-                    </button>
+                    {naturalResults.map((paper: any) => (
+                      <button
+                        key={paper.paper_id}
+                        onClick={() => {
+                          setIsWarping(true);
+                          starfieldRef.current?.triggerWarp();
+                          setTimeout(() => {
+                            router.push(`/explore/seed?paper_id=${encodeURIComponent(paper.paper_id)}`);
+                          }, 600);
+                        }}
+                        className="text-left hud-panel rounded-xl p-4 hover:border-cosmic-glow/30 transition-all group"
+                      >
+                        <h3 className="text-sm font-medium text-text-primary group-hover:text-cosmic-glow transition-colors leading-snug">
+                          {paper.title}
+                        </h3>
+                        <div className="flex items-center gap-3 mt-1.5 text-xs text-text-secondary/50">
+                          {paper.authors?.slice(0, 3).map((a: any) => a.name || a).join(', ')}
+                          {paper.authors?.length > 3 && ' et al.'}
+                          {paper.year && <span>&middot; {paper.year}</span>}
+                          {paper.citation_count > 0 && (
+                            <span>&middot; {paper.citation_count} citations</span>
+                          )}
+                        </div>
+                        {paper.abstract_snippet && (
+                          <p className="text-xs text-text-secondary/40 mt-1 line-clamp-2">
+                            {paper.abstract_snippet}
+                          </p>
+                        )}
+                        {paper.fields?.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {paper.fields.slice(0, 3).map((f: string) => (
+                              <span key={f} className="px-1.5 py-0.5 text-[10px] rounded bg-accent/10 text-accent/70">
+                                {f}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+                {naturalResults && naturalResults.length === 0 && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="mt-4 text-center text-sm text-text-secondary/50 py-6"
+                  >
+                    No papers found. Try a different query.
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -449,20 +364,17 @@ export default function LandingPage() {
           )}
         </AnimatePresence>
 
-        {/* Mode switcher — HUD segmented controls */}
+        {/* Mode switcher */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.3 }}
           className="flex items-center justify-center gap-1 mb-8"
         >
-          {(
-            [
-              { mode: 'doi' as InputMode, icon: FileText, label: 'Seed Paper' },
-              { mode: 'keyword' as InputMode, icon: Search, label: 'Topic Search' },
-              { mode: 'question' as InputMode, icon: HelpCircle, label: 'Research Question' },
-            ] as const
-          ).map(({ mode, icon: Icon, label }) => (
+          {([
+            { mode: 'doi' as InputMode, icon: FileText, label: 'Seed Paper' },
+            { mode: 'natural' as InputMode, icon: Search, label: 'Find Papers' },
+          ]).map(({ mode, icon: Icon, label }) => (
             <button
               key={mode}
               onClick={() => switchMode(mode)}
@@ -477,51 +389,6 @@ export default function LandingPage() {
             </button>
           ))}
         </motion.div>
-
-        {/* Continue Exploring — logged-in users */}
-        {user && (userProfile?.research_interests?.length || recentSearches.length > 0) && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.4 }}
-            className="mb-8 hud-panel rounded-2xl p-4"
-          >
-            <p className="text-xs text-text-secondary/50 mb-3 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-cosmic-glow inline-block" />
-              Continue exploring
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {userProfile?.research_interests?.slice(0, 3).map((interest) => (
-                <button
-                  key={interest}
-                  onClick={() => handleKeywordSearch(interest)}
-                  className="px-3 py-1.5 bg-cosmic-nebula/20 hover:bg-cosmic-nebula/30 border border-cosmic-nebula/30 rounded-full text-xs text-cosmic-star hover:text-cosmic-star transition-all"
-                >
-                  {interest}
-                </button>
-              ))}
-              {recentSearches.slice(0, 3).map((s) => (
-                <button
-                  key={s}
-                  onClick={() => handleKeywordSearch(s)}
-                  className="px-3 py-1.5 bg-surface/60 hover:bg-surface border border-border/30 rounded-full text-xs text-text-secondary hover:text-text-primary transition-all"
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-            <div className="mt-2 flex items-center justify-between">
-              <span className="text-[10px] text-text-secondary/30">
-                {userProfile
-                  ? `${userProfile.total_searches} searches · ${userProfile.total_papers_viewed} papers viewed`
-                  : ''}
-              </span>
-              <a href="/dashboard" className="text-[10px] text-cosmic-glow/60 hover:text-cosmic-glow transition-colors">
-                Dashboard →
-              </a>
-            </div>
-          </motion.div>
-        )}
 
         {/* Philosophy strip */}
         <motion.div
@@ -572,7 +439,7 @@ export default function LandingPage() {
           <a href={user ? '/dashboard' : '/auth'} className="hover:text-accent transition-colors">
             {user ? 'My Account' : 'Sign In'}
           </a>
-          <span className="mx-3">·</span>
+          <span className="mx-3">&middot;</span>
           <a href="/dashboard" className="hover:text-accent transition-colors">
             Dashboard
           </a>

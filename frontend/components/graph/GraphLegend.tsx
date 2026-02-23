@@ -8,7 +8,7 @@ import { STAR_COLOR_MAP } from './cosmic/cosmicConstants';
 export default function GraphLegend() {
   const [collapsed, setCollapsed] = useState(false);
   const [guideCollapsed, setGuideCollapsed] = useState(true);
-  const { showEnhancedIntents } = useGraphStore();
+
 
   const LEGEND_FIELDS = [
     'Computer Science',
@@ -114,7 +114,7 @@ export default function GraphLegend() {
           </div>
         </div>
 
-        {showEnhancedIntents && (
+        {(
           <div className="mt-1 pt-1 border-t border-[#1a2555]/10">
             <div className="text-[10px] text-[#7B8CDE]/50 mb-0.5">Enhanced</div>
             <div className="flex flex-col gap-0.5">
@@ -209,6 +209,14 @@ export default function GraphLegend() {
                 <span>▼ old</span>
               </div>
               <span>Z-axis = publication year</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full border-2 border-[#FF4444]/60 flex-shrink-0" />
+              <span>Red ring = frontier node</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-0.5 bg-[#FFD700] flex-shrink-0 rounded-full" />
+              <span>Gold = citation path</span>
             </div>
           </div>
         )}

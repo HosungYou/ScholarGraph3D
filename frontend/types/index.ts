@@ -31,6 +31,7 @@ export interface Paper {
   is_open_access: boolean;
   oa_url?: string;
   is_bridge?: boolean;
+  frontier_score?: number;  // 0-1: how many unexplored connections
 }
 
 export interface GraphEdge {
@@ -57,6 +58,8 @@ export interface GraphData {
   nodes: Paper[];
   edges: GraphEdge[];
   clusters: Cluster[];
+  gaps?: StructuralGap[];
+  frontier_ids?: string[];
   meta: {
     total: number;
     query: string;
@@ -90,32 +93,21 @@ export const FIELD_COLORS: Record<string, string> = {
   'Other': '#95A5A6',
 };
 
-// ─── Phase 2: Trend Analysis ────────────────────────────────────────
+// ─── Paper Search (NL → Selection) ───────────────────────────────────
 
-export interface ClusterTrend {
-  cluster_id: number;
-  cluster_label: string;
-  classification: 'emerging' | 'stable' | 'declining';
-  paper_count: number;
-  year_range: [number, number];
-  year_distribution: Record<number, number>;
-  trend_strength: number;
-  velocity: number;
-  representative_papers: string[];
+export interface PaperSearchResult {
+  paper_id: string;
+  title: string;
+  authors: { name: string }[];
+  year: number;
+  citation_count: number;
+  abstract_snippet?: string;
+  fields: string[];
+  doi?: string;
+  venue?: string;
 }
 
-export interface TrendAnalysis {
-  emerging: ClusterTrend[];
-  stable: ClusterTrend[];
-  declining: ClusterTrend[];
-  summary: {
-    total_papers: number;
-    year_range: [number, number];
-    cluster_count: number;
-  };
-}
-
-// ─── Phase 2: Gap Analysis ──────────────────────────────────────────
+// ─── Gap Analysis ────────────────────────────────────────────────────
 
 export interface StructuralGap {
   gap_id: string;
@@ -132,55 +124,7 @@ export interface GapAnalysis {
   summary: { total_gaps: number; avg_gap_strength: number };
 }
 
-// ─── Phase 2: Chat ──────────────────────────────────────────────────
-
-export interface ChatMessage {
-  role: 'user' | 'assistant';
-  content: string;
-  citations?: { paper_id: string; title: string; index: number }[];
-  highlighted_papers?: string[];
-  timestamp: string;
-}
-
-export interface ChatResponse {
-  answer: string;
-  citations: { paper_id: string; title: string; index: number }[];
-  highlighted_papers: string[];
-  suggested_followups: string[];
-}
-
-// ─── Phase 2: LLM Settings ─────────────────────────────────────────
-
-export interface LLMSettings {
-  provider: 'openai' | 'anthropic' | 'google' | 'groq';
-  api_key: string;
-  model?: string;
-}
-
-export const TREND_COLORS: Record<string, string> = {
-  emerging: '#2ECC71',
-  stable: '#4A90D9',
-  declining: '#E74C3C',
-};
-
-// ─── Phase 3: Watch Queries ─────────────────────────────────────────
-
-export interface WatchQuery {
-  id: string;
-  query: string;
-  filters: {
-    year_min?: number;
-    year_max?: number;
-    field?: string;
-    venue?: string;
-  };
-  notify_email: boolean;
-  last_checked?: string;
-  new_paper_count?: number;
-  created_at: string;
-}
-
-// ─── Phase 3: Citation Intent (Enhanced) ────────────────────────────
+// ─── Citation Intent (Enhanced) ──────────────────────────────────────
 
 export interface CitationIntent {
   citing_id: string;
@@ -199,87 +143,3 @@ export const ENHANCED_INTENT_COLORS: Record<string, string> = {
   applies: '#9B59B6',      // purple
   compares: '#F39C12',     // orange
 };
-
-// ─── Phase 3: Literature Review ─────────────────────────────────────
-
-export interface LitReviewSection {
-  heading: string;
-  content: string;
-  paper_refs: string[];
-}
-
-export interface LitReview {
-  title: string;
-  sections: LitReviewSection[];
-  references: string[];
-  markdown: string;
-  metadata: {
-    paper_count: number;
-    cluster_count: number;
-    generation_time: number;
-  };
-}
-
-// ─── Phase 4: Conceptual Edges ──────────────────────────────────────
-
-export type ConceptualEdgeType =
-  | 'methodology_shared'
-  | 'theory_shared'
-  | 'claim_supports'
-  | 'claim_contradicts'
-  | 'context_shared'
-  | 'similarity_shared';
-
-export interface ConceptualEdge {
-  source: string;
-  target: string;
-  relation_type: ConceptualEdgeType;
-  weight: number;
-  explanation: string;
-  color: string;
-}
-
-// ─── Phase 5: Personalization ────────────────────────────────────────
-
-export interface UserProfile {
-  user_id: string;
-  display_name?: string;
-  avatar_url?: string;
-  research_interests: string[];
-  preferred_fields: string[];
-  default_year_min?: number;
-  default_year_max?: number;
-  default_min_citations: number;
-  preferred_result_count: number;
-  total_searches: number;
-  total_papers_viewed: number;
-  last_active_at?: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface Recommendation {
-  id: string;
-  paper_id: string;
-  score: number;
-  explanation?: string;
-  reason_tags: string[];
-  is_dismissed: boolean;
-  generated_at: string;
-  expires_at: string;
-  // Paper fields (joined)
-  title?: string;
-  authors?: Author[];
-  year?: number;
-  venue?: string;
-  citation_count?: number;
-  abstract?: string;
-  tldr?: string;
-  fields?: string[];
-}
-
-export interface InteractionEvent {
-  paper_id: string;
-  action: 'view' | 'save_graph' | 'expand_citations' | 'chat_mention' | 'lit_review';
-  session_id?: string;
-}

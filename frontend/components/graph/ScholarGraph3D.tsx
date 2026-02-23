@@ -149,7 +149,6 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     showClusterHulls,
     showLabels,
     citationIntents,
-    showEnhancedIntents,
     showBloom,
     showOARings,
     showCitationAura,
@@ -157,15 +156,12 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     showGapOverlay,
     hiddenClusterIds,
     bridgeNodeIds,
-    conceptualEdges,
-    showConceptualEdges,
     showTimeline,
     selectPaper,
-    setHoveredPaper,
-    toggleMultiSelect,
     highlightedPaperIds,
     showCosmicTheme,
     expandedFromMap,
+    activePath,
   } = useGraphStore();
 
   const lastClickRef = useRef<{ nodeId: string; timestamp: number } | null>(
@@ -297,7 +293,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       if (ci) {
         isInfluential = ci.is_influential;
         intentContext = ci.context;
-        if (showEnhancedIntents && ci.enhanced_intent) {
+        if (ci.enhanced_intent) {
           intentColor = ENHANCED_INTENT_COLORS[ci.enhanced_intent];
           intentLabel = ci.enhanced_intent;
         } else if (ci.basic_intent) {
@@ -350,34 +346,8 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         });
     }
 
-    // Conceptual relationship edges (Phase 4)
-    if (showConceptualEdges && conceptualEdges.length > 0) {
-      const existingPairs = new Set(
-        links.map((l) => {
-          const s = typeof l.source === 'string' ? l.source : (l.source as ForceGraphNode).id;
-          const t = typeof l.target === 'string' ? l.target : (l.target as ForceGraphNode).id;
-          return `${s}-${t}`;
-        })
-      );
-
-      conceptualEdges.forEach((ce) => {
-        if (!existingPairs.has(`${ce.source}-${ce.target}`)) {
-          links.push({
-            source: ce.source,
-            target: ce.target,
-            color: ce.color,
-            width: Math.max(0.5, ce.weight * 1.5),
-            edgeType: 'similarity' as const,
-            dashed: false,
-            intentLabel: ce.relation_type.replace(/_/g, ' '),
-            intentContext: ce.explanation,
-          });
-        }
-      });
-    }
-
     return { nodes, links };
-  }, [graphData, yearRange, showCitationEdges, showSimilarityEdges, citationIntents, showEnhancedIntents, hiddenClusterIds, showGhostEdges, conceptualEdges, showConceptualEdges]);
+  }, [graphData, yearRange, showCitationEdges, showSimilarityEdges, citationIntents, hiddenClusterIds, showGhostEdges]);
 
   // Node rendering
   const nodeThreeObject = useCallback(
@@ -454,6 +424,22 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
           const newGlow = new THREE.Mesh(newGlowGeo, newGlowMat);
           newGlow.userData.isNewNodeGlow = true;
           group.add(newGlow);
+        }
+
+        // Frontier node indicator (red pulse ring for frontier_score > 0.7)
+        if ((node.paper.frontier_score ?? 0) > 0.7) {
+          const frontierRingGeo = new THREE.RingGeometry(node.val * 1.6, node.val * 1.9, 32);
+          const frontierRingMat = new THREE.MeshBasicMaterial({
+            color: 0xFF4444,
+            transparent: true,
+            opacity: 0.5,
+            side: THREE.DoubleSide,
+            depthWrite: false,
+          });
+          const frontierRing = new THREE.Mesh(frontierRingGeo, frontierRingMat);
+          frontierRing.rotation.x = Math.PI / 2;
+          frontierRing.userData.isFrontierRing = true;
+          group.add(frontierRing);
         }
 
         // Centrality-based label: show only top 20% OR highlighted/selected
@@ -751,15 +737,41 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     return Math.max(0.5, link.width || 0.5);
   }, []);
 
+  // Build active path edge set for fast lookup
+  const activePathEdgeSet = useMemo(() => {
+    if (!activePath || activePath.length < 2) return null;
+    const set = new Set<string>();
+    for (let i = 0; i < activePath.length - 1; i++) {
+      set.add(`${activePath[i]}-${activePath[i + 1]}`);
+      set.add(`${activePath[i + 1]}-${activePath[i]}`);
+    }
+    return set;
+  }, [activePath]);
+
   // Link color
   const linkColor = useCallback(
     (linkData: unknown) => {
       const link = linkData as ForceGraphLink;
 
+      const sourceId =
+        typeof link.source === 'string'
+          ? link.source
+          : (link.source as ForceGraphNode).id;
+      const targetId =
+        typeof link.target === 'string'
+          ? link.target
+          : (link.target as ForceGraphNode).id;
+
+      // Active path highlighting: gold path edges, dim everything else
+      if (activePathEdgeSet) {
+        if (activePathEdgeSet.has(`${sourceId}-${targetId}`)) {
+          return '#FFD700';
+        }
+        return '#050510'; // dim non-path edges
+      }
+
       // Highlight recently expanded edges
       if (expandedEdgeIdsRef.current.size > 0) {
-        const sourceId = typeof link.source === 'string' ? link.source : (link.source as ForceGraphNode).id;
-        const targetId = typeof link.target === 'string' ? link.target : (link.target as ForceGraphNode).id;
         if (expandedEdgeIdsRef.current.has(`${sourceId}-${targetId}`) ||
             expandedEdgeIdsRef.current.has(`${targetId}-${sourceId}`)) {
           return '#00E5FF';
@@ -785,21 +797,12 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
           : link.color || '#00E5FF80';  // citation = cyan (semi-transparent)
       }
 
-      const sourceId =
-        typeof link.source === 'string'
-          ? link.source
-          : (link.source as ForceGraphNode).id;
-      const targetId =
-        typeof link.target === 'string'
-          ? link.target
-          : (link.target as ForceGraphNode).id;
-
       if (highlightSet.has(sourceId) && highlightSet.has(targetId)) {
         return link.color || '#00E5FF';
       }
       return '#050510'; // near-invisible on dark background
     },
-    [selectedPaper, highlightSet, fgRef]
+    [selectedPaper, highlightSet, fgRef, activePathEdgeSet]
   );
 
   // Custom dashed link rendering for similarity edges
@@ -878,11 +881,6 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       justClickedNodeRef.current = true;
       setTimeout(() => { justClickedNodeRef.current = false; }, 150);
 
-      if (event.shiftKey) {
-        toggleMultiSelect(node.paper);
-        return;
-      }
-
       // Double-click: expand paper
       if (
         lastClickRef.current &&
@@ -911,7 +909,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       lastClickRef.current = { nodeId: node.id, timestamp: now };
       selectPaper(node.paper);
     },
-    [selectPaper, toggleMultiSelect]
+    [selectPaper]
   );
 
   // Hover handler
@@ -924,13 +922,9 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         if (containerRef.current) {
           containerRef.current.style.cursor = newId ? 'pointer' : 'default';
         }
-        if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
-        hoverTimeoutRef.current = setTimeout(() => {
-          setHoveredPaper(node?.paper || null);
-        }, 50);
       }
     },
-    [setHoveredPaper]
+    []
   );
 
   // Background click

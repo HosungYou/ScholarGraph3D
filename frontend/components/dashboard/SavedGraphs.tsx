@@ -38,7 +38,7 @@ export default function SavedGraphs() {
   });
 
   const handleLoad = (graph: SavedGraph) => {
-    router.push(`/explore?graph_id=${graph.id}`);
+    router.push(`/explore/seed?graph_id=${graph.id}&paper_id=${encodeURIComponent(graph.seed_query || '')}`);
   };
 
   const handleDelete = (id: string) => {

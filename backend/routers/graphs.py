@@ -4,6 +4,7 @@ Graphs router for ScholarGraph3D.
 CRUD for user-saved graph states. All endpoints require authentication.
 """
 
+import json
 import logging
 from typing import Any, Dict, List, Optional
 from uuid import UUID
@@ -26,12 +27,14 @@ class GraphCreate(BaseModel):
     seed_query: Optional[str] = None
     paper_ids: List[str] = []
     layout_state: Optional[Dict[str, Any]] = None
+    graph_data: Optional[Dict[str, Any]] = None
 
 
 class GraphUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=200)
     paper_ids: Optional[List[str]] = None
     layout_state: Optional[Dict[str, Any]] = None
+    graph_data: Optional[Dict[str, Any]] = None
 
 
 class GraphSummary(BaseModel):
@@ -46,6 +49,18 @@ class GraphSummary(BaseModel):
 class GraphDetail(GraphSummary):
     paper_ids: List[str] = []
     layout_state: Optional[Dict[str, Any]] = None
+    graph_data: Optional[Dict[str, Any]] = None
+
+
+# ==================== Helpers ====================
+
+def _paper_count_from_graph_data(graph_data: Any) -> int:
+    """Extract paper count from graph_data JSONB if available."""
+    if isinstance(graph_data, dict):
+        nodes = graph_data.get("nodes")
+        if isinstance(nodes, list):
+            return len(nodes)
+    return 0
 
 
 # ==================== Endpoints ====================
@@ -61,7 +76,7 @@ async def list_graphs(
 
     rows = await db.fetch(
         """
-        SELECT id, name, seed_query, paper_ids, created_at, updated_at
+        SELECT id, name, seed_query, paper_ids, graph_data, created_at, updated_at
         FROM user_graphs
         WHERE user_id = $1
         ORDER BY updated_at DESC
@@ -69,17 +84,26 @@ async def list_graphs(
         UUID(user.id),
     )
 
-    return [
-        GraphSummary(
-            id=str(row["id"]),
-            name=row["name"],
-            seed_query=row["seed_query"],
-            paper_count=len(row["paper_ids"]) if row["paper_ids"] else 0,
-            created_at=row["created_at"].isoformat(),
-            updated_at=row["updated_at"].isoformat(),
+    results = []
+    for row in rows:
+        # Prefer paper count from graph_data.nodes; fall back to paper_ids array
+        graph_data = row["graph_data"]
+        if graph_data is not None:
+            paper_count = _paper_count_from_graph_data(graph_data)
+        else:
+            paper_count = len(row["paper_ids"]) if row["paper_ids"] else 0
+
+        results.append(
+            GraphSummary(
+                id=str(row["id"]),
+                name=row["name"],
+                seed_query=row["seed_query"],
+                paper_count=paper_count,
+                created_at=row["created_at"].isoformat(),
+                updated_at=row["updated_at"].isoformat(),
+            )
         )
-        for row in rows
-    ]
+    return results
 
 
 @router.post("/api/graphs", response_model=GraphDetail, status_code=201)
@@ -92,26 +116,37 @@ async def create_graph(
     if not db.is_connected:
         raise HTTPException(status_code=503, detail="Database not available")
 
+    # Serialize graph_data to JSON string for asyncpg JSONB parameter
+    graph_data_json = json.dumps(request.graph_data) if request.graph_data is not None else None
+
     row = await db.fetchrow(
         """
-        INSERT INTO user_graphs (user_id, name, seed_query, paper_ids, layout_state)
-        VALUES ($1, $2, $3, $4, $5)
-        RETURNING id, name, seed_query, paper_ids, layout_state, created_at, updated_at
+        INSERT INTO user_graphs (user_id, name, seed_query, paper_ids, layout_state, graph_data)
+        VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+        RETURNING id, name, seed_query, paper_ids, layout_state, graph_data, created_at, updated_at
         """,
         UUID(user.id),
         request.name,
         request.seed_query,
         request.paper_ids,
         request.layout_state,
+        graph_data_json,
     )
+
+    graph_data = row["graph_data"]
+    if graph_data is not None:
+        paper_count = _paper_count_from_graph_data(graph_data)
+    else:
+        paper_count = len(row["paper_ids"]) if row["paper_ids"] else 0
 
     return GraphDetail(
         id=str(row["id"]),
         name=row["name"],
         seed_query=row["seed_query"],
         paper_ids=row["paper_ids"] or [],
-        paper_count=len(row["paper_ids"]) if row["paper_ids"] else 0,
+        paper_count=paper_count,
         layout_state=row["layout_state"],
+        graph_data=graph_data,
         created_at=row["created_at"].isoformat(),
         updated_at=row["updated_at"].isoformat(),
     )
@@ -129,7 +164,7 @@ async def get_graph(
 
     row = await db.fetchrow(
         """
-        SELECT id, name, seed_query, paper_ids, layout_state, created_at, updated_at
+        SELECT id, name, seed_query, paper_ids, layout_state, graph_data, created_at, updated_at
         FROM user_graphs
         WHERE id = $1 AND user_id = $2
         """,
@@ -140,13 +175,20 @@ async def get_graph(
     if not row:
         raise HTTPException(status_code=404, detail="Graph not found")
 
+    graph_data = row["graph_data"]
+    if graph_data is not None:
+        paper_count = _paper_count_from_graph_data(graph_data)
+    else:
+        paper_count = len(row["paper_ids"]) if row["paper_ids"] else 0
+
     return GraphDetail(
         id=str(row["id"]),
         name=row["name"],
         seed_query=row["seed_query"],
         paper_ids=row["paper_ids"] or [],
-        paper_count=len(row["paper_ids"]) if row["paper_ids"] else 0,
+        paper_count=paper_count,
         layout_state=row["layout_state"],
+        graph_data=graph_data,
         created_at=row["created_at"].isoformat(),
         updated_at=row["updated_at"].isoformat(),
     )
@@ -192,6 +234,11 @@ async def update_graph(
         params.append(request.layout_state)
         param_idx += 1
 
+    if request.graph_data is not None:
+        updates.append(f"graph_data = ${param_idx}::jsonb")
+        params.append(json.dumps(request.graph_data))
+        param_idx += 1
+
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")
 
@@ -201,19 +248,26 @@ async def update_graph(
         UPDATE user_graphs
         SET {', '.join(updates)}
         WHERE id = ${param_idx} AND user_id = ${param_idx + 1}
-        RETURNING id, name, seed_query, paper_ids, layout_state, created_at, updated_at
+        RETURNING id, name, seed_query, paper_ids, layout_state, graph_data, created_at, updated_at
     """
     params.extend([UUID(graph_id), UUID(user.id)])
 
     row = await db.fetchrow(query, *params)
+
+    graph_data = row["graph_data"]
+    if graph_data is not None:
+        paper_count = _paper_count_from_graph_data(graph_data)
+    else:
+        paper_count = len(row["paper_ids"]) if row["paper_ids"] else 0
 
     return GraphDetail(
         id=str(row["id"]),
         name=row["name"],
         seed_query=row["seed_query"],
         paper_ids=row["paper_ids"] or [],
-        paper_count=len(row["paper_ids"]) if row["paper_ids"] else 0,
+        paper_count=paper_count,
         layout_state=row["layout_state"],
+        graph_data=graph_data,
         created_at=row["created_at"].isoformat(),
         updated_at=row["updated_at"].isoformat(),
     )

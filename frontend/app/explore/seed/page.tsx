@@ -10,8 +10,10 @@ import PaperDetailPanel from '@/components/graph/PaperDetailPanel';
 import ClusterPanel from '@/components/graph/ClusterPanel';
 import GraphControls from '@/components/graph/GraphControls';
 import RadarLoader from '@/components/cosmic/RadarLoader';
-import type { Paper, CitationIntent } from '@/types';
-import { Search, ArrowLeft, Network, GitBranch, Layers, Share2 } from 'lucide-react';
+import SeedChatPanel from '@/components/graph/SeedChatPanel';
+import GapSpotterPanel from '@/components/graph/GapSpotterPanel';
+import type { Paper, CitationIntent, GraphData, StructuralGap } from '@/types';
+import { Search, ArrowLeft, Network, GitBranch, Layers, Share2, CheckCircle, MessageCircle, ScanSearch } from 'lucide-react';
 
 function SeedExploreContent() {
   const searchParams = useSearchParams();
@@ -28,12 +30,27 @@ function SeedExploreContent() {
     setLoading,
     setError,
     setCitationIntents,
+    activeTab,
+    setActiveTab,
+    setGaps,
+    setFrontierIds,
   } = useGraphStore();
+
+  const [depthValue, setDepthValue] = useState<number>(depth);
+
+  const handleDepthChange = useCallback((newDepth: number) => {
+    setDepthValue(newDepth);
+    router.push(`/explore/seed?paper_id=${encodeURIComponent(paperId)}&depth=${newDepth}`);
+  }, [paperId, router]);
 
   const graphRef = useRef<ScholarGraph3DRef>(null);
   const [expandError, setExpandError] = useState<string | null>(null);
   const [isExpanding, setIsExpanding] = useState(false);
   const [expandSuccess, setExpandSuccess] = useState<string | null>(null);
+  const [savedIndicator, setSavedIndicator] = useState(false);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoSaveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const savedGraphIdRef = useRef<string | null>(null);
   const [seedMeta, setSeedMeta] = useState<{
     seed_title?: string;
     seed_paper_id?: string;
@@ -41,6 +58,58 @@ function SeedExploreContent() {
     citation_edges?: number;
     similarity_edges?: number;
   } | null>(null);
+
+  // Auto-save helpers
+  const showSavedIndicator = useCallback(() => {
+    setSavedIndicator(true);
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => setSavedIndicator(false), 2000);
+  }, []);
+
+  const autoSave = useCallback(async (data: GraphData, seedTitle?: string) => {
+    try {
+      const name = seedTitle
+        ? `Seed: ${seedTitle.slice(0, 80)}`
+        : `Seed: ${paperId}`;
+
+      if (savedGraphIdRef.current) {
+        // Update existing saved graph
+        await api.saveGraph({
+          name,
+          seed_query: paperId,
+          graph_data: data,
+        });
+      } else {
+        const saved = await api.saveGraph({
+          name,
+          seed_query: paperId,
+          graph_data: data,
+        });
+        savedGraphIdRef.current = saved.id;
+      }
+      showSavedIndicator();
+    } catch (err) {
+      // Auto-save failures are silent — don't interrupt the user
+      if (process.env.NODE_ENV === 'development') {
+        console.debug('[AutoSave] Failed:', err);
+      }
+    }
+  }, [paperId, showSavedIndicator]);
+
+  const scheduleDebouncedSave = useCallback((data: GraphData, seedTitle?: string) => {
+    if (autoSaveDebounceRef.current) clearTimeout(autoSaveDebounceRef.current);
+    autoSaveDebounceRef.current = setTimeout(() => {
+      autoSave(data, seedTitle);
+    }, 2000);
+  }, [autoSave]);
+
+  // Cleanup timers on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      if (autoSaveDebounceRef.current) clearTimeout(autoSaveDebounceRef.current);
+    };
+  }, []);
 
   // Panel resize — left
   const [leftPanelWidth, setLeftPanelWidth] = useState(() => {
@@ -100,16 +169,24 @@ function SeedExploreContent() {
     window.addEventListener('mouseup', onMouseUp);
   }, [rightPanelWidth]);
 
-  // Fetch seed graph
+  // Load saved graph if graph_id is present
+  const graphId = searchParams.get('graph_id');
+
+  // Fetch seed graph (or load saved graph)
   useEffect(() => {
-    if (!paperId) return;
+    if (!paperId && !graphId) return;
     setLoading(true);
     setError(null);
 
-    api.seedExplore(paperId, { depth, max_papers: 80 })
+    const fetchPromise = graphId
+      ? api.loadGraph(graphId)
+      : api.seedExplore(paperId, { depth: depthValue, max_papers: 80 });
+
+    fetchPromise
       .then((data) => {
         setGraphData(data);
-        setSeedMeta(data.meta as any);
+        const meta = data.meta as any;
+        setSeedMeta(meta);
 
         // Extract citation intents from edges for ScholarGraph3D coloring
         const intents: CitationIntent[] = data.edges
@@ -123,13 +200,25 @@ function SeedExploreContent() {
         if (intents.length > 0) {
           setCitationIntents(intents);
         }
+
+        // Extract gaps and frontier data from response
+        const responseAny = data as any;
+        if (responseAny.gaps && Array.isArray(responseAny.gaps)) {
+          setGaps(responseAny.gaps);
+        }
+        if (responseAny.frontier_ids && Array.isArray(responseAny.frontier_ids)) {
+          setFrontierIds(responseAny.frontier_ids);
+        }
+
+        // Auto-save after initial load
+        autoSave(data, meta?.seed_title);
       })
       .catch((err) => {
         console.error('Seed explore failed:', err);
         setError(err instanceof Error ? err.message : 'Failed to build seed graph');
       })
       .finally(() => setLoading(false));
-  }, [paperId, depth, setGraphData, setLoading, setError, setCitationIntents]);
+  }, [paperId, graphId, depthValue, setGraphData, setLoading, setError, setCitationIntents, setGaps, setFrontierIds, autoSave]);
 
   // Camera control events
   useEffect(() => {
@@ -225,6 +314,12 @@ function SeedExploreContent() {
           } else {
             setExpandSuccess(`${count} papers added`);
           }
+
+          // Debounced auto-save after expand
+          const currentGraphData = useGraphStore.getState().graphData;
+          if (currentGraphData) {
+            scheduleDebouncedSave(currentGraphData, seedMeta?.seed_title);
+          }
         } else {
           setExpandSuccess('No new papers found');
         }
@@ -237,7 +332,7 @@ function SeedExploreContent() {
         setIsExpanding(false);
       }
     },
-    [graphData]
+    [graphData, scheduleDebouncedSave, seedMeta]
   );
 
   // Double-click expand
@@ -279,12 +374,27 @@ function SeedExploreContent() {
           )}
 
           <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
+            <AnimatePresence>
+              {savedIndicator && (
+                <motion.div
+                  key="saved-indicator"
+                  initial={{ opacity: 0, scale: 0.85 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.85 }}
+                  transition={{ duration: 0.2 }}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-mono text-green-400 border border-green-700/40 bg-green-900/20"
+                >
+                  <CheckCircle className="w-3.5 h-3.5" />
+                  Saved
+                </motion.div>
+              )}
+            </AnimatePresence>
             <button
-              onClick={() => router.push('/explore')}
+              onClick={() => router.push('/dashboard')}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium font-mono uppercase tracking-wider bg-[#0a0f1e] text-[#7B8CDE] hover:text-[#E8EAF6] hover:bg-[#111833] border border-[#1a2555]"
             >
               <Search className="w-3.5 h-3.5" />
-              Keyword Search
+              My Graphs
             </button>
             <button
               onClick={() => router.push('/')}
@@ -304,18 +414,54 @@ function SeedExploreContent() {
         animate={{ scale: 1, filter: 'blur(0px)' }}
         transition={{ duration: 0.5 }}
       >
-        {/* Left panel: clusters */}
+        {/* Left panel: tabbed */}
         <div
           style={{ width: leftPanelWidth }}
           className="flex-shrink-0 border-r border-border/30 glass flex flex-col relative"
         >
-          <div className="p-3 border-b border-[#1a2555]/30">
-            <h3 className="text-[10px] font-mono uppercase tracking-widest text-[#00E5FF]/60">
-              SECTOR SCANNER
-            </h3>
+          {/* Tab header */}
+          <div className="flex-shrink-0 border-b border-[#1a2555]/30">
+            <div className="flex">
+              <button
+                onClick={() => setActiveTab('clusters')}
+                className={`flex items-center gap-1.5 px-3 py-2.5 text-[10px] font-mono uppercase tracking-widest transition-colors ${
+                  activeTab === 'clusters'
+                    ? 'text-[#00E5FF] border-b-2 border-[#00E5FF]'
+                    : 'text-[#7B8CDE]/50 hover:text-[#7B8CDE]'
+                }`}
+              >
+                <Layers className="w-3 h-3" />
+                CLUSTERS
+              </button>
+              <button
+                onClick={() => setActiveTab('gaps')}
+                className={`flex items-center gap-1.5 px-3 py-2.5 text-[10px] font-mono uppercase tracking-widest transition-colors ${
+                  activeTab === 'gaps'
+                    ? 'text-[#00E5FF] border-b-2 border-[#00E5FF]'
+                    : 'text-[#7B8CDE]/50 hover:text-[#7B8CDE]'
+                }`}
+              >
+                <ScanSearch className="w-3 h-3" />
+                GAPS
+              </button>
+              <button
+                onClick={() => setActiveTab('chat')}
+                className={`flex items-center gap-1.5 px-3 py-2.5 text-[10px] font-mono uppercase tracking-widest transition-colors ${
+                  activeTab === 'chat'
+                    ? 'text-[#00E5FF] border-b-2 border-[#00E5FF]'
+                    : 'text-[#7B8CDE]/50 hover:text-[#7B8CDE]'
+                }`}
+              >
+                <MessageCircle className="w-3 h-3" />
+                CHAT
+              </button>
+            </div>
           </div>
-          <div className="flex-1 overflow-y-auto">
-            <ClusterPanel />
+          {/* Tab content */}
+          <div className="flex-1 overflow-y-auto min-h-0">
+            {activeTab === 'clusters' && <ClusterPanel />}
+            {activeTab === 'gaps' && <GapSpotterPanel />}
+            {activeTab === 'chat' && <SeedChatPanel />}
           </div>
           {/* Resize handle */}
           <div
@@ -380,6 +526,22 @@ function SeedExploreContent() {
               </div>
               <div className="text-[10px] text-[#7B8CDE]/50">
                 Double-click a node to expand its citations
+              </div>
+              <div className="flex items-center gap-2 mt-1.5 pt-1.5 border-t border-[#1a2555]/30">
+                <span className="text-[10px] text-[#7B8CDE]/50">Depth:</span>
+                {[1, 2, 3].map(d => (
+                  <button
+                    key={d}
+                    onClick={() => handleDepthChange(d)}
+                    className={`px-2 py-0.5 rounded text-[10px] font-mono transition-colors ${
+                      depthValue === d
+                        ? 'bg-[#00E5FF]/20 text-[#00E5FF] border border-[#00E5FF]/40'
+                        : 'text-[#7B8CDE]/50 hover:text-[#7B8CDE] border border-[#1a2555]/30'
+                    }`}
+                  >
+                    {d}
+                  </button>
+                ))}
               </div>
             </div>
           )}

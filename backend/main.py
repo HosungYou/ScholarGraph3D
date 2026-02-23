@@ -17,11 +17,10 @@ from database import db, init_db, close_db
 from integrations.semantic_scholar import init_s2_client, close_s2_client
 from auth.supabase_client import supabase_client
 from auth.middleware import AuthMiddleware
-from routers import search, papers, graphs, analysis, chat, watch, lit_review
-from routers.natural_search import router as natural_search_router
-from routers.search_stream import router as search_stream_router
-from routers.personalization import router as personalization_router
+from routers import papers, graphs
 from routers.seed_explore import router as seed_explore_router
+from routers.paper_search import router as paper_search_router
+from routers.seed_chat import router as seed_chat_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -75,18 +74,6 @@ async def lifespan(app: FastAPI):
 
     # Log API configuration
     logger.info(f"  S2 API Key: {'configured' if settings.s2_api_key else 'not set (unauthenticated)'}")
-    logger.info(f"  OA Email: {settings.oa_email or 'not set (no polite pool)'}")
-    logger.info(f"  OA API Key: {'configured' if settings.oa_api_key else 'not set (free tier)'}")
-
-    # Preload SPECTER2 adhoc_query adapter for GraphRAG ANN search (v0.7.0)
-    # Avoids cold-start latency on first chat/RAG query
-    import asyncio as _asyncio
-    try:
-        from graph.graph_rag import _get_specter2_model
-        await _asyncio.to_thread(_get_specter2_model, "adhoc_query")
-        logger.info("  SPECTER2 adhoc_query adapter: preloaded")
-    except Exception as e:
-        logger.warning(f"  SPECTER2 preload skipped (will load on first request): {e}")
 
     yield
 
@@ -99,7 +86,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="ScholarGraph3D API",
     description="3D academic paper graph visualization with SPECTER2 embeddings",
-    version="0.1.0",
+    version="2.0.0",
     lifespan=lifespan,
 )
 
@@ -131,17 +118,11 @@ app.add_middleware(
 
 # ==================== Routers ====================
 
-app.include_router(search.router, tags=["Search"])
 app.include_router(papers.router, tags=["Papers"])
 app.include_router(graphs.router, tags=["Graphs"])
-app.include_router(analysis.router, tags=["Analysis"])
-app.include_router(chat.router, tags=["Chat"])
-app.include_router(watch.router, tags=["Watch"])
-app.include_router(lit_review.router, tags=["Literature Review"])
-app.include_router(natural_search_router, tags=["Natural Language Search"])
-app.include_router(search_stream_router)
-app.include_router(personalization_router, tags=["Personalization"])
 app.include_router(seed_explore_router, tags=["Seed Explore"])
+app.include_router(paper_search_router, tags=["Paper Search"])
+app.include_router(seed_chat_router, tags=["Seed Chat"])
 
 
 # ==================== Health Endpoints ====================
@@ -152,7 +133,7 @@ async def root():
     return {
         "status": "healthy",
         "service": "ScholarGraph3D",
-        "version": "0.1.0",
+        "version": "2.0.0",
     }
 
 

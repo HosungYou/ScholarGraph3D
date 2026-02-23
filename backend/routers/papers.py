@@ -87,6 +87,7 @@ class StableExpandNode(BaseModel):
     initial_y: float = 0.0
     initial_z: float = 0.0
     cluster_id: int = -1
+    frontier_score: float = 0.0  # 0-1: how many unexplored connections this paper has
 
 
 class StableExpandRequest(BaseModel):
@@ -123,11 +124,6 @@ def _s2_to_citation_paper(paper: SemanticScholarPaper) -> CitationPaper:
     )
 
 
-def _create_s2_client() -> SemanticScholarClient:
-    """Get the shared S2 client singleton. Do NOT close — it's shared."""
-    return get_s2_client()
-
-
 # ==================== Endpoints ====================
 
 @router.get("/api/papers/by-doi")
@@ -161,7 +157,7 @@ async def get_paper_by_doi(
     # often doesn't index these by DOI but does index by ArXiv ID.
     arxiv_match = re.match(r'10\.48550/arXiv\.(.+)', doi_clean, re.IGNORECASE)
 
-    s2_client = _create_s2_client()
+    s2_client = get_s2_client()
 
     try:
         paper = None
@@ -286,7 +282,7 @@ async def get_paper(paper_id: str, db: Database = Depends(get_db)):
             logger.warning(f"DB lookup failed for paper {paper_id}: {e}")
 
     # Fallback to S2 API
-    client = _create_s2_client()
+    client = get_s2_client()
     paper = await client.get_paper(paper_id)
     if not paper:
         raise HTTPException(status_code=404, detail="Paper not found")
@@ -313,7 +309,7 @@ async def get_paper_citations(
     limit: int = Query(default=50, ge=1, le=500),
 ):
     """Get papers that cite this paper."""
-    client = _create_s2_client()
+    client = get_s2_client()
     citations = await client.get_citations(paper_id, limit=limit)
     return [_s2_to_citation_paper(p) for p in citations]
 
@@ -324,7 +320,7 @@ async def get_paper_references(
     limit: int = Query(default=50, ge=1, le=500),
 ):
     """Get papers referenced by this paper."""
-    client = _create_s2_client()
+    client = get_s2_client()
     references = await client.get_references(paper_id, limit=limit)
     return [_s2_to_citation_paper(p) for p in references]
 
@@ -341,7 +337,7 @@ async def expand_paper(
     Gracefully handles partial S2 failures — if one direction (refs or cites)
     fails, the other is still returned rather than 404-ing the whole request.
     """
-    client = _create_s2_client()
+    client = get_s2_client()
     refs: list = []
     cites: list = []
 
@@ -377,7 +373,7 @@ async def expand_paper_stable(
     from graph.incremental_layout import place_new_paper, assign_cluster, compute_cluster_centroids
     import numpy as np
 
-    client = _create_s2_client()
+    client = get_s2_client()
     refs: list = []
     cites: list = []
 
@@ -463,14 +459,13 @@ async def expand_paper_stable(
             cluster_id=cluster_id,
         ))
 
-    # Build edges connecting the expanded paper to its references/citations
+    # Build citation edges connecting the expanded paper to its references/citations
     ref_ids = {p.paper_id for p in refs}
     cite_ids = {p.paper_id for p in cites}
 
     edges = []
     for node in stable_nodes:
         if node.paper_id in ref_ids:
-            # This paper is referenced BY the expanded paper → citation edge
             edges.append({
                 "source": paper_id,
                 "target": node.paper_id,
@@ -478,13 +473,52 @@ async def expand_paper_stable(
                 "type": "citation",
             })
         if node.paper_id in cite_ids:
-            # This paper CITES the expanded paper → citation edge
             edges.append({
                 "source": node.paper_id,
                 "target": paper_id,
                 "weight": 0.5,
                 "type": "citation",
             })
+
+    # Compute similarity edges between new papers (using embeddings)
+    new_embeddings = []
+    new_ids = []
+    for paper in all_papers:
+        emb = getattr(paper, 'embedding', None)
+        if emb:
+            new_embeddings.append(emb)
+            new_ids.append(paper.paper_id)
+
+    if len(new_embeddings) >= 2:
+        try:
+            from graph.similarity import SimilarityComputer
+            sim_computer = SimilarityComputer()
+            emb_array = np.array(new_embeddings)
+            sim_edges = sim_computer.compute_edges(
+                emb_array, new_ids, threshold=0.7, max_edges_per_node=5
+            )
+            for se in sim_edges:
+                edges.append({
+                    "source": se["source"],
+                    "target": se["target"],
+                    "weight": float(se.get("similarity", 0.7)),
+                    "type": "similarity",
+                })
+        except Exception as e:
+            logger.warning(f"Similarity computation failed during expand: {e}")
+
+    # Compute frontier scores: papers with many unexplored connections
+    existing_ids = {n.id for n in request.existing_nodes}
+    all_known_ids = existing_ids | {n.paper_id for n in stable_nodes}
+    for node in stable_nodes:
+        paper_obj = next((p for p in all_papers if p.paper_id == node.paper_id), None)
+        if paper_obj:
+            total_connections = (paper_obj.reference_count or 0) + (paper_obj.citation_count or 0)
+            # Count how many of this paper's connections are already in the graph
+            in_graph = sum(1 for e in edges if e["source"] == node.paper_id or e["target"] == node.paper_id)
+            if total_connections > 0:
+                explored_ratio = in_graph / min(total_connections, 50)  # cap to avoid tiny fractions
+                node.frontier_score = round(max(0.0, min(1.0, 1.0 - explored_ratio)), 3)
 
     error_parts = []
     if refs_error:
@@ -538,7 +572,7 @@ async def get_citation_intents(
     Enhanced mode (premium): Uses LLM to classify intents more granularly
     (supports, contradicts, extends, applies, compares). Requires provider + api_key.
     """
-    s2_client = _create_s2_client()
+    s2_client = get_s2_client()
     svc = CitationIntentService()
 
     # Get basic S2 intents
@@ -547,24 +581,27 @@ async def get_citation_intents(
     if not intents:
         return []
 
-    # Optionally enhance with LLM
+    # Enhanced intents via Groq (single provider)
     if enhanced:
-        if not provider or not api_key:
-            raise HTTPException(
-                status_code=400,
-                detail="provider and api_key are required when enhanced=true",
-            )
-
         try:
-            from llm.user_provider import create_provider_from_request
+            from config import settings
+            from llm.groq_provider import GroqProvider
 
-            llm_provider = create_provider_from_request(provider=provider, api_key=api_key)
+            if not settings.groq_api_key:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Groq API key not configured on server for enhanced intents",
+                )
+            groq = GroqProvider(api_key=settings.groq_api_key)
             try:
-                intents = await svc.enhance_intents_with_llm(intents, llm_provider)
+                intents = await svc.enhance_intents_with_llm(intents, groq)
             finally:
-                await llm_provider.close()
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+                await groq.close()
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.warning(f"Enhanced intent classification failed: {e}")
+            # Fall back to basic intents (already populated)
 
     return [
         CitationIntent(

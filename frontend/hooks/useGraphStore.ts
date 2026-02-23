@@ -4,45 +4,19 @@ import type {
   GraphEdge,
   Cluster,
   GraphData,
-  TrendAnalysis,
-  GapAnalysis,
-  ChatMessage,
-  LLMSettings,
-  WatchQuery,
   CitationIntent,
-  LitReview,
-  ConceptualEdge,
+  StructuralGap,
 } from '@/types';
 
 interface GraphStore {
   graphData: GraphData | null;
   selectedPaper: Paper | null;
   selectedCluster: Cluster | null;
-  multiSelected: Paper[];
-  hoveredPaper: Paper | null;
   isLoading: boolean;
   error: string | null;
 
-  // Phase 2 state
-  trendAnalysis: TrendAnalysis | null;
-  gapAnalysis: GapAnalysis | null;
-  chatMessages: ChatMessage[];
-  llmSettings: LLMSettings | null;
-  activeTab: 'clusters' | 'trends' | 'gaps' | 'chat' | 'watch';
+  activeTab: 'clusters' | 'gaps' | 'chat';
   highlightedPaperIds: Set<string>;
-
-  // Phase 3 state
-  watchQueries: WatchQuery[];
-  citationIntents: CitationIntent[];
-  litReview: LitReview | null;
-  showEnhancedIntents: boolean;
-
-  // Phase 4: Conceptual edges + Timeline
-  conceptualEdges: ConceptualEdge[];
-  showConceptualEdges: boolean;
-  showTimeline: boolean;
-  isAnalyzingRelations: boolean;
-  relationAnalysisProgress: { done: number; total: number } | null;
 
   // Phase 1.5: Visual enhancement state
   showBloom: boolean;
@@ -53,8 +27,29 @@ interface GraphStore {
   hiddenClusterIds: Set<number>;
   bridgeNodeIds: Set<string>;
 
+  // Citation intents for edge coloring
+  citationIntents: CitationIntent[];
+  setCitationIntents: (intents: CitationIntent[]) => void;
+
   // v1.1.0: Expansion tracking
   expandedFromMap: Map<string, string>;
+
+  // Phase 3: Gap Spotter
+  gaps: StructuralGap[];
+  frontierIds: string[];
+  setGaps: (gaps: StructuralGap[]) => void;
+  setFrontierIds: (ids: string[]) => void;
+
+  // Phase 4: Timeline
+  showTimeline: boolean;
+
+  // Phase 5: Citation Path Finder
+  pathStart: string | null;
+  pathEnd: string | null;
+  activePath: string[] | null;
+  setPathStart: (id: string | null) => void;
+  setPathEnd: (id: string | null) => void;
+  setActivePath: (path: string[] | null) => void;
 
   // Visibility toggles
   showCitationEdges: boolean;
@@ -67,9 +62,6 @@ interface GraphStore {
   setGraphData: (data: GraphData) => void;
   selectPaper: (paper: Paper | null) => void;
   selectCluster: (cluster: Cluster | null) => void;
-  setHoveredPaper: (paper: Paper | null) => void;
-  toggleMultiSelect: (paper: Paper) => void;
-  clearMultiSelect: () => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
 
@@ -80,23 +72,10 @@ interface GraphStore {
   toggleLabels: () => void;
   toggleCosmicTheme: () => void;
 
-  // Phase 2 actions
-  setTrendAnalysis: (trends: TrendAnalysis | null) => void;
-  setGapAnalysis: (gaps: GapAnalysis | null) => void;
-  addChatMessage: (message: ChatMessage) => void;
-  clearChat: () => void;
-  setLLMSettings: (settings: LLMSettings | null) => void;
-  setActiveTab: (tab: 'clusters' | 'trends' | 'gaps' | 'chat' | 'watch') => void;
+  setActiveTab: (tab: 'clusters' | 'gaps' | 'chat') => void;
   setHighlightedPaperIds: (ids: Set<string>) => void;
   clearHighlightedPaperIds: () => void;
 
-  // Phase 3 actions
-  setWatchQueries: (queries: WatchQuery[]) => void;
-  addWatchQuery: (query: WatchQuery) => void;
-  removeWatchQuery: (id: string) => void;
-  setCitationIntents: (intents: CitationIntent[]) => void;
-  setLitReview: (review: LitReview | null) => void;
-  setShowEnhancedIntents: (show: boolean) => void;
   toggleBloom: () => void;
   toggleOARings: () => void;
   toggleCitationAura: () => void;
@@ -107,37 +86,19 @@ interface GraphStore {
   addNodesStable: (nodes: Paper[], edges: GraphEdge[]) => void;
   setExpandedFromMap: (map: Map<string, string>) => void;
 
-  // Phase 4 actions
-  addConceptualEdges: (edges: ConceptualEdge[]) => void;
-  clearConceptualEdges: () => void;
-  toggleConceptualEdges: () => void;
   toggleTimeline: () => void;
-  setIsAnalyzingRelations: (v: boolean) => void;
-  setRelationAnalysisProgress: (v: { done: number; total: number } | null) => void;
 }
 
 export const useGraphStore = create<GraphStore>((set, get) => ({
   graphData: null,
   selectedPaper: null,
   selectedCluster: null,
-  multiSelected: [],
-  hoveredPaper: null,
   isLoading: false,
   error: null,
 
-  // Phase 2
-  trendAnalysis: null,
-  gapAnalysis: null,
-  chatMessages: [],
-  llmSettings: null,
   activeTab: 'clusters',
   highlightedPaperIds: new Set<string>(),
 
-  // Phase 3
-  watchQueries: [],
-  citationIntents: [],
-  litReview: null,
-  showEnhancedIntents: false,
   showBloom: false,
   showOARings: false,
   showCitationAura: false,
@@ -145,14 +106,23 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
   showGapOverlay: true,
   hiddenClusterIds: new Set<number>(),
   bridgeNodeIds: new Set<string>(),
+  citationIntents: [],
+  setCitationIntents: (intents: CitationIntent[]) => set({ citationIntents: intents }),
   expandedFromMap: new Map<string, string>(),
 
-  // Phase 4
-  conceptualEdges: [],
-  showConceptualEdges: true,
+  gaps: [],
+  frontierIds: [],
+  setGaps: (gaps: StructuralGap[]) => set({ gaps }),
+  setFrontierIds: (ids: string[]) => set({ frontierIds: ids }),
+
   showTimeline: false,
-  isAnalyzingRelations: false,
-  relationAnalysisProgress: null,
+
+  pathStart: null,
+  pathEnd: null,
+  activePath: null,
+  setPathStart: (id) => set({ pathStart: id }),
+  setPathEnd: (id) => set({ pathEnd: id }),
+  setActivePath: (path) => set({ activePath: path }),
 
   showCitationEdges: true,
   showSimilarityEdges: true,
@@ -160,25 +130,11 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
   showLabels: true,
   showCosmicTheme: true,
 
-  setGraphData: (data) => set({ graphData: data, error: null, conceptualEdges: [] }),
+  setGraphData: (data) => set({ graphData: data, error: null }),
 
   selectPaper: (paper) => set({ selectedPaper: paper }),
 
   selectCluster: (cluster) => set({ selectedCluster: cluster }),
-
-  setHoveredPaper: (paper) => set({ hoveredPaper: paper }),
-
-  toggleMultiSelect: (paper) => {
-    const { multiSelected } = get();
-    const exists = multiSelected.find((p) => p.id === paper.id);
-    if (exists) {
-      set({ multiSelected: multiSelected.filter((p) => p.id !== paper.id) });
-    } else {
-      set({ multiSelected: [...multiSelected, paper] });
-    }
-  },
-
-  clearMultiSelect: () => set({ multiSelected: [] }),
 
   setLoading: (loading) => set({ isLoading: loading }),
 
@@ -193,29 +149,10 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
   toggleLabels: () => set((s) => ({ showLabels: !s.showLabels })),
   toggleCosmicTheme: () => set((s) => ({ showCosmicTheme: !s.showCosmicTheme })),
 
-  // Phase 2 actions
-  setTrendAnalysis: (trends) => set({ trendAnalysis: trends }),
-  setGapAnalysis: (gaps) => set({ gapAnalysis: gaps }),
-  addChatMessage: (message) =>
-    set((s) => ({ chatMessages: [...s.chatMessages, message] })),
-  clearChat: () => set({ chatMessages: [] }),
-  setLLMSettings: (settings) => set({ llmSettings: settings }),
   setActiveTab: (tab) => set({ activeTab: tab }),
   setHighlightedPaperIds: (ids) => set({ highlightedPaperIds: ids }),
   clearHighlightedPaperIds: () =>
     set({ highlightedPaperIds: new Set<string>() }),
-
-  // Phase 3 actions
-  setWatchQueries: (queries) => set({ watchQueries: queries }),
-  addWatchQuery: (query) =>
-    set((s) => ({ watchQueries: [...s.watchQueries, query] })),
-  removeWatchQuery: (id) =>
-    set((s) => ({
-      watchQueries: s.watchQueries.filter((q) => q.id !== id),
-    })),
-  setCitationIntents: (intents) => set({ citationIntents: intents }),
-  setLitReview: (review) => set({ litReview: review }),
-  setShowEnhancedIntents: (show) => set({ showEnhancedIntents: show }),
 
   toggleBloom: () => set((s) => ({ showBloom: !s.showBloom })),
   toggleOARings: () => set((s) => ({ showOARings: !s.showOARings })),
@@ -236,28 +173,8 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
   setBridgeNodeIds: (ids: Set<string>) => set({ bridgeNodeIds: ids }),
   setExpandedFromMap: (map: Map<string, string>) => set({ expandedFromMap: map }),
 
-  // Phase 4 actions
-  addConceptualEdges: (edges) =>
-    set((s) => ({
-      conceptualEdges: [
-        ...s.conceptualEdges,
-        ...edges.filter(
-          (e) => !s.conceptualEdges.some((c) => c.source === e.source && c.target === e.target)
-        ),
-      ],
-    })),
-
-  clearConceptualEdges: () => set({ conceptualEdges: [] }),
-
-  toggleConceptualEdges: () =>
-    set((s) => ({ showConceptualEdges: !s.showConceptualEdges })),
-
   toggleTimeline: () =>
     set((s) => ({ showTimeline: !s.showTimeline })),
-
-  setIsAnalyzingRelations: (v) => set({ isAnalyzingRelations: v }),
-
-  setRelationAnalysisProgress: (v) => set({ relationAnalysisProgress: v }),
 
   addNodesStable: (newNodes: Paper[], newEdges: GraphEdge[]) => {
     const { graphData } = get();

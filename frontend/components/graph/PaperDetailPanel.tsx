@@ -13,11 +13,15 @@ import {
   Network,
   Cpu,
   Loader2,
+  RouteIcon,
+  Download,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import type { Paper } from '@/types';
 import { FIELD_COLORS } from '@/types';
 import { useGraphStore } from '@/hooks/useGraphStore';
+import { findCitationPath } from '@/lib/utils';
+import { toBibtex, toRIS, downloadFile } from '@/lib/export';
 
 interface PaperDetailPanelProps {
   paper: Paper;
@@ -33,7 +37,16 @@ export default function PaperDetailPanel({
   isExpanding = false,
 }: PaperDetailPanelProps) {
   const [showFullAbstract, setShowFullAbstract] = useState(false);
-  const { graphData, conceptualEdges, expandedFromMap } = useGraphStore();
+  const {
+    graphData,
+    expandedFromMap,
+    pathStart,
+    pathEnd,
+    activePath,
+    setPathStart,
+    setPathEnd,
+    setActivePath,
+  } = useGraphStore();
 
   // Compute relationship summary
   const relationshipSummary = React.useMemo(() => {
@@ -48,11 +61,8 @@ export default function PaperDetailPanel({
       (e) => e.type === 'similarity' && (e.source === paper.id || e.target === paper.id)
     ).length;
     const isBridge = paper.is_bridge;
-    const conceptualCount = conceptualEdges.filter(
-      (e) => e.source === paper.id || e.target === paper.id
-    ).length;
-    return { incomingCitations, outgoingCitations, similarEdges, isBridge, conceptualCount };
-  }, [graphData, paper, conceptualEdges]);
+    return { incomingCitations, outgoingCitations, similarEdges, isBridge, conceptualCount: 0 };
+  }, [graphData, paper]);
 
   // Find expansion parent paper
   const parentPaper = React.useMemo(() => {
@@ -336,6 +346,84 @@ export default function PaperDetailPanel({
             </>
           )}
         </button>
+
+        {/* Citation Path Finder */}
+        <div className="border border-[#1a2555]/30 rounded-lg p-3 bg-[#0a0f1e]">
+          <div className="text-xs font-mono uppercase tracking-wider text-[#7B8CDE]/60 mb-2 flex items-center gap-1.5">
+            <RouteIcon className="w-3 h-3" />
+            Citation Path Finder
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <button
+              onClick={() => {
+                if (pathStart === paper.id) {
+                  setPathStart(null);
+                } else {
+                  setPathStart(paper.id);
+                  setActivePath(null);
+                }
+              }}
+              className={`flex items-center justify-center gap-2 w-full px-3 py-2 rounded-lg text-xs font-mono transition-colors border ${
+                pathStart === paper.id
+                  ? 'bg-[#00E5FF]/20 text-[#00E5FF] border-[#00E5FF]/40'
+                  : 'bg-[#111833] hover:bg-[#1a2555] text-[#7B8CDE] border-[#1a2555]/30'
+              }`}
+            >
+              {pathStart === paper.id ? 'PATH START SET' : 'SET AS PATH START'}
+            </button>
+            <button
+              onClick={() => {
+                if (pathEnd === paper.id) {
+                  setPathEnd(null);
+                } else {
+                  setPathEnd(paper.id);
+                  setActivePath(null);
+                }
+              }}
+              className={`flex items-center justify-center gap-2 w-full px-3 py-2 rounded-lg text-xs font-mono transition-colors border ${
+                pathEnd === paper.id
+                  ? 'bg-[#FFD700]/20 text-[#FFD700] border-[#FFD700]/40'
+                  : 'bg-[#111833] hover:bg-[#1a2555] text-[#7B8CDE] border-[#1a2555]/30'
+              }`}
+            >
+              {pathEnd === paper.id ? 'PATH END SET' : 'SET AS PATH END'}
+            </button>
+            {pathStart && pathEnd && pathStart !== paper.id && pathEnd !== paper.id && (
+              <div className="text-xs text-[#7B8CDE]/50 text-center font-mono">
+                Start + End selected — open either paper to find path
+              </div>
+            )}
+            {pathStart && pathEnd && (pathStart === paper.id || pathEnd === paper.id) && pathStart !== pathEnd && (
+              <button
+                onClick={() => {
+                  if (!graphData) return;
+                  const path = findCitationPath(pathStart!, pathEnd!, graphData.edges);
+                  setActivePath(path);
+                }}
+                className="flex items-center justify-center gap-2 w-full px-3 py-2 bg-[#FFD700]/15 hover:bg-[#FFD700]/25 text-[#FFD700] rounded-lg text-xs font-mono transition-colors border border-[#FFD700]/30"
+              >
+                <RouteIcon className="w-3 h-3" />
+                FIND PATH
+              </button>
+            )}
+            {activePath && (
+              <div className="text-xs font-mono text-center">
+                {activePath.length > 0 ? (
+                  <span className="text-[#FFD700]">Path: {activePath.length} nodes</span>
+                ) : (
+                  <span className="text-red-400">No path found</span>
+                )}
+                <button
+                  onClick={() => { setActivePath(null); setPathStart(null); setPathEnd(null); }}
+                  className="ml-2 text-[#7B8CDE]/50 hover:text-[#7B8CDE] transition-colors"
+                >
+                  clear
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
         {paper.oa_url && (
           <a
             href={paper.oa_url}
@@ -358,6 +446,24 @@ export default function PaperDetailPanel({
             DOI: {paper.doi}
           </a>
         )}
+
+        {/* Export buttons */}
+        <div className="flex gap-2">
+          <button
+            onClick={() => downloadFile(toBibtex(paper), `${paper.id}.bib`, 'text/plain')}
+            className="flex items-center justify-center gap-1.5 flex-1 px-3 py-2 bg-[#0a0f1e] hover:bg-[#111833] text-[#7B8CDE] rounded-lg text-xs font-mono transition-colors border border-[#1a2555]/30"
+          >
+            <Download className="w-3 h-3" />
+            BibTeX
+          </button>
+          <button
+            onClick={() => downloadFile(toRIS(paper), `${paper.id}.ris`, 'text/plain')}
+            className="flex items-center justify-center gap-1.5 flex-1 px-3 py-2 bg-[#0a0f1e] hover:bg-[#111833] text-[#7B8CDE] rounded-lg text-xs font-mono transition-colors border border-[#1a2555]/30"
+          >
+            <Download className="w-3 h-3" />
+            RIS
+          </button>
+        </div>
       </div>
     </div>
   );

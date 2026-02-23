@@ -20,6 +20,7 @@ from graph.clusterer import PaperClusterer
 from graph.embedding_reducer import EmbeddingReducer
 from graph.similarity import SimilarityComputer
 from graph.bridge_detector import detect_bridge_nodes
+from graph.gap_detector import GapDetector
 from integrations.semantic_scholar import get_s2_client, SemanticScholarRateLimitError
 from services.citation_intent import CitationIntentService
 
@@ -77,10 +78,22 @@ class SeedClusterInfo(BaseModel):
     hull_points: List[List[float]] = []
 
 
+class SeedGapInfo(BaseModel):
+    gap_id: str
+    cluster_a: Dict[str, Any]
+    cluster_b: Dict[str, Any]
+    gap_strength: float
+    bridge_papers: List[Dict[str, Any]] = []
+    potential_edges: List[Dict[str, Any]] = []
+    research_questions: List[str] = []
+
+
 class SeedGraphResponse(BaseModel):
     nodes: List[SeedGraphNode]
     edges: List[SeedGraphEdge]
     clusters: List[SeedClusterInfo]
+    gaps: List[SeedGapInfo] = []
+    frontier_ids: List[str] = []
     meta: Dict[str, Any] = {}
 
 
@@ -122,6 +135,17 @@ async def seed_explore(request: SeedExploreRequest):
     """
     start_time = time.time()
 
+    try:
+        return await asyncio.wait_for(_seed_explore_pipeline(request, start_time), timeout=55)
+    except asyncio.TimeoutError:
+        raise HTTPException(
+            status_code=504,
+            detail="Seed exploration timed out after 55 seconds. Try reducing depth or max_papers.",
+        )
+
+
+async def _seed_explore_pipeline(request: SeedExploreRequest, start_time: float) -> SeedGraphResponse:
+    """Inner pipeline for seed_explore — wrapped by asyncio.wait_for for timeout enforcement."""
     s2_client = get_s2_client()
 
     # 1. Fetch seed paper
@@ -168,18 +192,22 @@ async def seed_explore(request: SeedExploreRequest):
         depth1_ids = [pid for pid in papers_map.keys() if pid != seed_paper.paper_id]
         # Sample up to 10 papers for depth-2 to limit API calls
         sample_ids = depth1_ids[:10]
-        for pid in sample_ids:
-            if len(papers_map) >= request.max_papers:
-                break
+
+        async def _fetch_depth2(pid: str):
             try:
-                d2_refs = await s2_client.get_references(pid, limit=20)
-                for ref in d2_refs:
-                    if ref.paper_id and ref.paper_id not in papers_map and len(papers_map) < request.max_papers:
-                        papers_map[ref.paper_id] = ref
-                    if ref.paper_id:
-                        citation_pairs.add((pid, ref.paper_id))
+                refs = await s2_client.get_references(pid, limit=20)
+                return (pid, refs)
             except Exception:
-                continue
+                return (pid, [])
+
+        d2_tasks = [_fetch_depth2(pid) for pid in sample_ids]
+        d2_results = await asyncio.gather(*d2_tasks)
+        for parent_pid, d2_refs in d2_results:
+            for ref in d2_refs:
+                if ref.paper_id and ref.paper_id not in papers_map and len(papers_map) < request.max_papers:
+                    papers_map[ref.paper_id] = ref
+                if ref.paper_id:
+                    citation_pairs.add((parent_pid, ref.paper_id))
 
     # Trim to max_papers (keep seed + highest cited)
     if len(papers_map) > request.max_papers:
@@ -391,6 +419,97 @@ async def seed_explore(request: SeedExploreRequest):
                     source=src, target=tgt, type="citation", weight=0.8,
                 ))
 
+    # 9. Gap detection
+    gaps_info: List[SeedGapInfo] = []
+    frontier_ids: List[str] = []
+
+    if len(clusters_info) >= 2 and len(nodes) >= 5:
+        try:
+            gap_detector = GapDetector()
+            gap_papers = [{
+                "id": n.id,
+                "title": n.title,
+                "cluster_id": n.cluster_id,
+                "embedding": next(
+                    (p.embedding for p in papers_with_emb if p.paper_id == n.id),
+                    None
+                ),
+            } for n in nodes]
+            gap_clusters = [{"id": c.id, "label": c.label, "paper_count": c.paper_count} for c in clusters_info]
+            gap_edges = [{"source": e.source, "target": e.target, "type": e.type, "weight": e.weight} for e in edges]
+
+            gap_result = await asyncio.to_thread(
+                gap_detector.detect_gaps, gap_papers, gap_clusters, gap_edges
+            )
+
+            for gap in gap_result.gaps[:10]:  # Limit to top 10 gaps
+                gaps_info.append(SeedGapInfo(
+                    gap_id=gap.gap_id,
+                    cluster_a=gap.cluster_a,
+                    cluster_b=gap.cluster_b,
+                    gap_strength=gap.gap_strength,
+                    bridge_papers=gap.bridge_papers,
+                    potential_edges=gap.potential_edges,
+                    research_questions=[],
+                ))
+
+            # Generate research questions via Groq (best-effort)
+            try:
+                from config import settings
+                if settings.groq_api_key and gaps_info:
+                    from llm.groq_provider import GroqProvider
+                    groq = GroqProvider(api_key=settings.groq_api_key)
+                    try:
+                        top_gaps = gaps_info[:3]
+                        gap_descriptions = []
+                        for g in top_gaps:
+                            gap_descriptions.append(
+                                f"Gap between '{g.cluster_a.get('label', '')}' "
+                                f"({g.cluster_a.get('paper_count', 0)} papers) and "
+                                f"'{g.cluster_b.get('label', '')}' "
+                                f"({g.cluster_b.get('paper_count', 0)} papers), "
+                                f"strength: {g.gap_strength:.2f}"
+                            )
+
+                        prompt = (
+                            f"You are a research advisor analyzing a citation network about '{seed_paper.title}'. "
+                            f"The following structural gaps exist between paper clusters:\n\n"
+                            + "\n".join(f"{i+1}. {d}" for i, d in enumerate(gap_descriptions))
+                            + "\n\nFor each gap, suggest 2 specific research questions that could bridge it. "
+                            "Return ONLY the questions, numbered like '1a. ...', '1b. ...', '2a. ...', etc."
+                        )
+                        resp = await groq.generate(prompt, max_tokens=500, temperature=0.7)
+                        if resp and resp.content:
+                            lines = [l.strip() for l in resp.content.strip().split("\n") if l.strip()]
+                            for line in lines:
+                                # Parse "1a. question" format
+                                if len(line) >= 3 and line[0].isdigit():
+                                    gap_idx = int(line[0]) - 1
+                                    question = line[3:].strip() if len(line) > 3 else line
+                                    if 0 <= gap_idx < len(top_gaps):
+                                        top_gaps[gap_idx].research_questions.append(question)
+                    finally:
+                        await groq.close()
+            except Exception as e:
+                logger.warning(f"Gap research question generation failed (non-fatal): {e}")
+
+            logger.info(f"Gap detection: {len(gaps_info)} gaps found")
+        except Exception as e:
+            logger.warning(f"Gap detection failed (non-fatal): {e}")
+
+    # 10. Frontier detection — papers with many unexplored connections
+    if nodes:
+        node_ids_in_graph = {n.id for n in nodes}
+        for n in nodes:
+            paper_obj = papers_map.get(n.id)
+            if paper_obj:
+                total_conns = (paper_obj.reference_count or 0) + (paper_obj.citation_count or 0)
+                in_graph = sum(1 for e in edges if e.source == n.id or e.target == n.id)
+                if total_conns > 5:
+                    explored_ratio = in_graph / min(total_conns, 50)
+                    if explored_ratio < 0.3:
+                        frontier_ids.append(n.id)
+
     elapsed = time.time() - start_time
     meta = {
         "query": f"seed:{request.paper_id}",
@@ -400,9 +519,14 @@ async def seed_explore(request: SeedExploreRequest):
         "citation_edges": len([e for e in edges if e.type == "citation"]),
         "similarity_edges": len([e for e in edges if e.type == "similarity"]),
         "clusters": len([c for c in clusters_info if c.id != -1]),
+        "gaps": len(gaps_info),
+        "frontier_papers": len(frontier_ids),
         "depth": request.depth,
         "elapsed_seconds": round(elapsed, 2),
         "oa_credits_used": 0,
     }
 
-    return SeedGraphResponse(nodes=nodes, edges=edges, clusters=clusters_info, meta=meta)
+    return SeedGraphResponse(
+        nodes=nodes, edges=edges, clusters=clusters_info,
+        gaps=gaps_info, frontier_ids=frontier_ids, meta=meta,
+    )
