@@ -5,8 +5,7 @@ Provides:
 - event_loop: session-scoped asyncio loop
 - mock_db: AsyncMock database (asyncpg-compatible)
 - mock_s2_client: AsyncMock SemanticScholarClient
-- mock_oa_client: AsyncMock OpenAlexClient
-- sample_s2_paper / sample_oa_work: realistic fixture objects
+- sample_s2_paper: realistic fixture object
 - sample_embeddings: (10, 768) numpy array
 - test_client: httpx AsyncClient with ASGITransport
 """
@@ -83,103 +82,10 @@ def mock_s2_client():
     client.get_specter2_embeddings = AsyncMock(return_value=[])
     client.get_papers_batch = AsyncMock(return_value=[])
     client.close = AsyncMock()
-    # credit_tracker not needed on S2 client (it's on OA)
-    return client
-
-
-@pytest.fixture
-def mock_oa_client():
-    """
-    AsyncMock OpenAlexClient.
-
-    Default returns empty list. Tests override search_works.return_value.
-    credit_tracker is a MagicMock so can_spend/track don't block.
-    """
-    client = AsyncMock()
-    client.search_works = AsyncMock(return_value=[])
-    client.get_work = AsyncMock(return_value=None)
-    client.get_works_batch = AsyncMock(return_value=[])
-    client.get_references = AsyncMock(return_value=[])
-    client.get_citations = AsyncMock(return_value=[])
-    client.close = AsyncMock()
-
-    # credit_tracker: make can_spend always return True
-    credit_tracker = AsyncMock()
-    credit_tracker.can_spend = AsyncMock(return_value=True)
-    credit_tracker.track = AsyncMock()
-    credit_tracker.usage_percent = 0.0
-    client.credit_tracker = credit_tracker
     return client
 
 
 # ==================== Sample Data Factories ====================
-
-def _make_oa_work(
-    doi: str = "10.1234/test.001",
-    title: str = "Attention Is All You Need",
-    abstract: str = "We propose a new simple network architecture, the Transformer.",
-    year: int = 2017,
-    citation_count: int = 50000,
-    is_open_access: bool = True,
-    oa_work_id: str = "W2741809807",
-    concepts: list = None,
-    topics: list = None,
-    authors: list = None,
-) -> MagicMock:
-    """
-    Factory for OpenAlexWork-like mock objects.
-
-    Returns a MagicMock with all attributes that _oa_work_to_unified() accesses.
-    """
-    work = MagicMock()
-    work.id = oa_work_id
-    work.doi = doi
-    work.title = title
-    work.abstract = abstract
-    work.publication_year = year
-    work.citation_count = citation_count
-    work.is_open_access = is_open_access
-    work.open_access_url = f"https://arxiv.org/abs/1706.03762" if is_open_access else None
-    work.concepts = concepts if concepts is not None else [
-        {"id": "C41008148", "display_name": "Computer Science", "level": 0, "score": 0.9},
-        {"id": "C119857082", "display_name": "Machine Learning", "level": 1, "score": 0.85},
-    ]
-    work.topics = topics if topics is not None else [
-        {
-            "id": "T10084",
-            "display_name": "Attention Mechanism in Neural Networks",
-            "score": 0.99,
-            "subfield": "Natural Language Processing",
-            "field": "Computer Science",
-            "domain": "Physical Sciences",
-        },
-        {
-            "id": "T10211",
-            "display_name": "Transformer Models",
-            "score": 0.95,
-            "subfield": "Machine Learning",
-            "field": "Computer Science",
-            "domain": "Physical Sciences",
-        },
-    ]
-    work.authors = authors if authors is not None else [
-        {
-            "id": "A2181803848",
-            "display_name": "Ashish Vaswani",
-            "orcid": None,
-            "author_position": "first",
-            "institutions": [{"id": "I1315976615", "display_name": "Google Brain"}],
-        },
-    ]
-    work.primary_location = {
-        "source": {
-            "id": "S4306401557",
-            "display_name": "Neural Information Processing Systems",
-            "issn_l": None,
-        }
-    }
-    return work
-
 
 def _make_s2_paper(
     paper_id: str = "204e3073870fae3d05bcbc2f6a8e263d9b72e776",
@@ -223,12 +129,6 @@ def _make_s2_paper(
     paper.arxiv_id = "1706.03762"
     paper.publication_types = ["JournalArticle"]
     return paper
-
-
-@pytest.fixture
-def sample_oa_work() -> MagicMock:
-    """Single OpenAlex work fixture with realistic data."""
-    return _make_oa_work()
 
 
 @pytest.fixture

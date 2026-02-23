@@ -156,31 +156,24 @@ class PaperClusterer:
             mask = cluster_labels == label
             cluster_papers = [p for p, m in zip(papers, mask) if m]
 
-            # Collect all topics from papers in cluster
-            topic_counter: Counter = Counter()
+            # Collect all fields from papers in cluster
             field_counter: Counter = Counter()
 
             for paper in cluster_papers:
-                for topic in paper.get("oa_topics", []):
-                    name = topic.get("display_name")
-                    if name:
-                        topic_counter[name] += 1
                 for fos in paper.get("fields_of_study", []):
                     if fos:
                         field_counter[fos] += 1
 
-            # Top 3 topics for label
-            top_topics = [name for name, _ in topic_counter.most_common(3)]
-            if not top_topics:
-                top_topics = [name for name, _ in field_counter.most_common(3)]
-            if not top_topics:
-                top_topics = [f"Cluster {label}"]
+            # Top 3 fields for label
+            top_fields = [name for name, _ in field_counter.most_common(3)]
+            if not top_fields:
+                top_fields = [f"Cluster {label}"]
 
-            cluster_label = " / ".join(top_topics[:2]) if len(top_topics) >= 2 else top_topics[0]
+            cluster_label = " / ".join(top_fields[:2]) if len(top_fields) >= 2 else top_fields[0]
 
             cluster_info[label] = {
                 "label": cluster_label,
-                "topic_names": top_topics,
+                "topic_names": top_fields,
                 "paper_count": len(cluster_papers),
                 "color": colors[label % len(colors)],
             }

@@ -1,6 +1,6 @@
 # ScholarGraph3D — System Architecture
 
-> **Version:** 1.3 | **Last Updated:** 2026-02-20
+> **Version:** 1.4 | **Last Updated:** 2026-02-23
 > **Related:** [PRD.md](./PRD.md) | [SPEC.md](./SPEC.md) | [SDD/TDD Plan](./SDD_TDD_PLAN.md)
 
 ---
@@ -35,7 +35,7 @@ PRD.md                      — What we build and why (user stories, acceptance 
 
 ## 1. System Overview
 
-ScholarGraph3D is a three-tier web application: a Next.js 14 frontend communicates with a FastAPI backend that reads from and writes to a PostgreSQL database augmented with the pgvector extension. External academic APIs (OpenAlex and Semantic Scholar) are consumed exclusively by the backend.
+ScholarGraph3D is a three-tier web application: a Next.js 14 frontend communicates with a FastAPI backend that reads from and writes to a PostgreSQL database augmented with the pgvector extension. The Semantic Scholar API is the sole external academic data source (OpenAlex was removed in v2.0.0); Crossref provides DOI-based metadata fallback.
 
 ### 1.1 High-Level Architecture Diagram
 
@@ -81,21 +81,21 @@ ScholarGraph3D is a three-tier web application: a Next.js 14 frontend communicat
 │  │        |                                                    │    │
 │  │  ┌─────┴──────────────────────────────────────┐            │    │
 │  │  │            Service Layer                    │            │    │
-│  │  │  DataFusionService  EmbeddingReducer        │            │    │
-│  │  │  PaperClusterer     SimilarityComputer      │            │    │
+│  │  │  EmbeddingReducer   PaperClusterer          │            │    │
+│  │  │  SimilarityComputer GapDetector             │            │    │
 │  │  └─────────────────────────────────────────────┘            │    │
 │  │        |                    |                               │    │
 │  │  ┌─────┴──────┐    ┌────────┴────────┐                      │    │
-│  │  │ OpenAlex   │    │ SemanticScholar │                      │    │
-│  │  │ Client     │    │ Client          │                      │    │
+│  │  │  Crossref  │    │ SemanticScholar │                      │    │
+│  │  │  Client    │    │ Client          │                      │    │
 │  │  └─────┬──────┘    └────────┬────────┘                      │    │
 │  └────────┼────────────────────┼──────────────────────────────┘    │
 └───────────┼────────────────────┼────────────────────────────────────┘
             │                    │
             v                    v
     ┌──────────────┐    ┌────────────────────┐
-    │  OpenAlex    │    │  Semantic Scholar  │
-    │  API (CC0)   │    │  API (SPECTER2)    │
+    │  Crossref    │    │  Semantic Scholar  │
+    │  API (DOI)   │    │  API (SPECTER2)    │
     └──────────────┘    └────────────────────┘
 
 ┌────────────────────────────────────────────────────────────────────┐
@@ -319,9 +319,9 @@ All configuration lives in `config.py` as a `Settings(BaseSettings)` class, cach
 |---------|------|---------|
 | `database_url` | str | asyncpg DSN for PostgreSQL |
 | `supabase_url` / `supabase_key` / `supabase_jwt_secret` | str | Supabase Auth |
-| `s2_api_key` / `s2_rate_limit` | str / float | S2 authentication + 1 RPS rate enforcer |
-| `oa_api_key` / `oa_email` / `oa_daily_credit_limit` | str / str / int | OA premium access + daily credit cap (100K) |
-| `redis_url` | str | Upstash Redis (Phase 2) |
+| `s2_api_key` / `s2_rate_limit` | str / float | S2 authentication; rate auto-detected (1.0 RPS authenticated, 0.3 RPS unauthenticated) |
+| `groq_api_key` | str | Groq API key for seed chat (llama-3.3-70b) |
+| `redis_url` | str | Upstash Redis — seed_explore cache, S2 refs/cites/embedding cache |
 | `cors_origins` | str | Comma-separated allowed CORS origins |
 | `environment` | Literal | `development` / `staging` / `production`; gates startup failure behavior |
 | `require_auth` | bool | Global auth enforcement toggle |
@@ -381,24 +381,29 @@ SearchRequest {query, limit, year_start, year_end,
     v
 [Step 3] EmbeddingReducer.reduce_to_3d()
     Input:  numpy array shape (N, 768)
-    UMAP(n_components=3, n_neighbors=min(15, N-1),
-         min_dist=0.1, metric='cosine', random_state=42)
-    Output: numpy array shape (N, 3)
+    Stage 1: UMAP(n_components=50, n_neighbors=min(15, N-1),
+                  min_dist=0.1, metric='cosine', random_state=42)
+             → shared 50D intermediate (N, 50) — used by both clusterer and viz
+    Stage 2: UMAP(n_components=3, n_neighbors=min(10, N-1),
+                  min_dist=0.1, metric='cosine', random_state=42)
+             → 3D coordinates (N, 3) for visualization
+    Output: (N, 3) 3D coords + (N, 50) intermediate embeddings
     Papers without embeddings: x=offset*0.5, y=10.0, z=0.0, cluster_id=-1
     Execution: asyncio.to_thread() — non-blocking event loop
+    Note: single 768→50D pass shared with clusterer eliminates double UMAP computation
     |
     v
 [Step 4] PaperClusterer.cluster()
-    Input:  numpy array shape (N, 768) — SPECTER2 embeddings.
-            Internally reduces to 50D via UMAP before clustering.
+    Input:  numpy array shape (N, 50) — shared 50D intermediate from EmbeddingReducer
+            (no longer recomputes UMAP internally)
     HDBSCAN(min_cluster_size=request.min_cluster_size,
             metric='euclidean', cluster_selection_method='eom')
     Output: (N,) array of cluster labels  (-1 = noise)
     Execution: asyncio.to_thread() — non-blocking event loop
     |
     ├── label_clusters()
-    │     Collect OA Topics from cluster members
-    │     Top-2 most frequent topic display_names -> cluster label
+    │     Collect fields_of_study from cluster members
+    │     Top-2 most frequent field display_names -> cluster label
     │     Assign color from 15-color palette
     │
     └── compute_hulls()
@@ -749,27 +754,9 @@ LIMIT 20;
 
 ## 7. API Integration Layer
 
-### 7.1 OpenAlexClient
+### 7.1 OpenAlexClient (Removed in v2.0.0)
 
-**File:** `backend/integrations/openalex.py`
-
-| Aspect | Detail |
-|--------|--------|
-| Base URL | `https://api.openalex.org` |
-| Authentication | `mailto` param for polite pool; `Authorization: Bearer {key}` for premium |
-| Rate limits | 10 req/sec (polite pool); 100K credits/day (premium) |
-| HTTP client | `httpx.AsyncClient`, 30s timeout |
-| Abstract format | Inverted index: `{"word": [position, ...], ...}` — `_reconstruct_abstract()` reverses the word-position map to recover readable text |
-| Credit tracking | `CreditTracker`: increments counter per API call (10 credits/page); logs warnings at 80%; switches to cache-first at 95% |
-
-**Credit Tracking States:**
-
-```
-Normal (< 80%)      → Full API access, normal per_page
-Warning (80-95%)    → Log warnings; continue API access
-Cache-first (≥ 95%) → Serve stale cache if available;
-                       reduced per_page on cache miss only
-```
+OpenAlex was removed as a data source in v2.0.0. `backend/integrations/openalex.py` and `backend/integrations/data_fusion.py` no longer exist. Semantic Scholar is the sole academic data provider. Crossref provides DOI-based metadata fallback (see 7.3).
 
 ### 7.2 SemanticScholarClient
 
@@ -779,7 +766,7 @@ Cache-first (≥ 95%) → Serve stale cache if available;
 |--------|--------|
 | Base URL | `https://api.semanticscholar.org/graph/v1` |
 | Authentication | `x-api-key` header |
-| Rate limit | 1 RPS authenticated — enforced by `asyncio.Lock` + `asyncio.sleep` |
+| Rate limit | 1 RPS authenticated, **0.3 RPS unauthenticated** (auto-detected when no `S2_API_KEY`); enforced by `asyncio.Semaphore(2)` + minimal `_time_lock` for timestamp tracking — up to 2 calls proceed in parallel without serializing the event loop |
 | Retry logic | 3 attempts with exponential backoff on HTTP 429; raises `SemanticScholarRateLimitError` after exhausting |
 | Batch endpoint | `POST /paper/batch` — up to 500 paper IDs per request, `fields=embedding,tldr` |
 | SPECTER2 field | `embedding.specter_v2` in response — 768-element float list |
@@ -901,30 +888,36 @@ Authorization is enforced at two independent layers:
 ### 9.1 Cache Layers
 
 ```
-Incoming Search Request
+Incoming seed_explore Request
     |
     v
-[L1] PostgreSQL search_cache  (live — Phase 1)
-    cache_key = SHA-256(normalized {query, limit, year_range, fields})
-    TTL: 24 hours (enforced at SELECT time)
-    HIT  (~50-100ms): return cached GraphResponse
-    MISS (~45-70s):   run full pipeline, then upsert cache
+[L1] Upstash Redis — seed_explore response cache  (v2.0.1)
+    cache_key = seed:{paper_id}
+    TTL: 24 hours
+    HIT  (~100ms): return full cached GraphResponse immediately
+    MISS: continue to pipeline
     |
     v (on miss)
-OA + S2 + UMAP + HDBSCAN + Similarity pipeline
+S2 + UMAP + HDBSCAN + Similarity + GapDetector pipeline
     |
     v
-[L2] Upstash Redis  (live — v0.8.0, REDIS_URL set on Render)
+[L2] Upstash Redis — S2 API result cache  (live — v0.8.0, REDIS_URL set on Render)
     emb:{s2_paper_id}          TTL = 30 days  ← SPECTER2 768-dim embedding
     refs:{paper_id}:{limit}    TTL = 7 days   ← get_references() result
     cites:{paper_id}:{limit}   TTL = 7 days   ← get_citations() result
-    search:{sha256}            TTL = 24 hours ← full GraphResponse
+    search:{sha256}            TTL = 24 hours ← full GraphResponse (keyword search)
     |
     → Cache MISS: S2 API call → store result → return
     → Cache HIT:  return immediately (skip S2 API)
     → Redis DOWN: graceful degradation — pass-through to S2 (no crash)
 
-[L3] Browser
+[L3] PostgreSQL search_cache  (legacy — keyword search only)
+    cache_key = SHA-256(normalized {query, limit, year_range, fields})
+    TTL: 24 hours (enforced at SELECT time)
+    HIT  (~50-100ms): return cached GraphResponse
+    MISS (~45-70s):   run full pipeline, then upsert cache
+
+[L4] Browser
     Zustand store:             in-memory for current session
     localStorage:              graph state survives page reload
     HTTP cache headers:        standard cache-control for static assets
@@ -933,19 +926,22 @@ OA + S2 + UMAP + HDBSCAN + Similarity pipeline
 ### 9.2 Cache Key Design
 
 ```python
-# PostgreSQL L1 cache
+# Redis L1 cache — seed_explore full response (v2.0.1)
+f"seed:{paper_id}"             # Full seed_explore GraphResponse (24h TTL)
+
+# Redis L2 cache keys — S2 API results (backend/cache.py)
+f"emb:{s2_paper_id}"           # SPECTER2 embedding (30d TTL)
+f"refs:{paper_id}:{limit}"     # S2 references list (7d TTL)
+f"cites:{paper_id}:{limit}"    # S2 citations list (7d TTL)
+f"search:{sha256_key}"         # Full keyword search response (24h TTL)
+
+# PostgreSQL L3 cache — keyword search (legacy)
 cache_key = SHA-256(JSON({
     "query":      query.lower().strip(),
     "limit":      limit,
     "year_range": (year_start, year_end),   # null if unset
     "fields":     sorted(fields) or null,   # sorted for order-independence
 }))
-
-# Redis L2 cache keys (backend/cache.py)
-f"emb:{s2_paper_id}"           # SPECTER2 embedding
-f"refs:{paper_id}:{limit}"     # S2 references list
-f"cites:{paper_id}:{limit}"    # S2 citations list
-f"search:{sha256_key}"         # Full search response
 ```
 
 `"Transformers"` and `"transformers"` produce the same L1 key. `["CS", "Physics"]` and `["Physics", "CS"]` produce the same key.
@@ -954,20 +950,16 @@ f"search:{sha256_key}"         # Full search response
 
 | Cache | TTL | Cleanup |
 |-------|-----|---------|
-| `search_cache` (PostgreSQL) | 24h | `WHERE created_at > NOW() - INTERVAL '24 hours'` at read; periodic `DELETE` of entries > 48h old |
-| `oc_citation_cache` (PostgreSQL) | 30 days | `oc_stale_cache` view; manual cleanup via `DELETE WHERE fetched_at < NOW() - INTERVAL '30 days'` |
+| Redis `seed:*` | 24h | Redis TTL automatic |
 | Redis `emb:*` | 30 days | Redis TTL automatic |
 | Redis `refs:*` / `cites:*` | 7 days | Redis TTL automatic |
 | Redis `search:*` | 24h | Redis TTL automatic |
+| `search_cache` (PostgreSQL) | 24h | `WHERE created_at > NOW() - INTERVAL '24 hours'` at read; periodic `DELETE` of entries > 48h old |
+| `oc_citation_cache` (PostgreSQL) | 30 days | `oc_stale_cache` view; manual cleanup via `DELETE WHERE fetched_at < NOW() - INTERVAL '30 days'` |
 
-### 9.4 Cache-First Mode (OA Credit Protection)
+### 9.4 Redis Unavailability Handling
 
-When OA API credit usage reaches 95% of the 100K daily limit, the system degrades gracefully:
-
-1. Check `search_cache` as normal.
-2. On cache miss: query for stale entries (older than 24h but still in table).
-3. Stale entry exists → return it with `meta.cache_stale: true`.
-4. No entry → make OA API call with reduced `per_page` to conserve remaining credits.
+If `REDIS_URL` is not set or Redis is unreachable, the cache layer degrades gracefully — all cache operations become no-ops and the pipeline runs normally against the S2 API. No crash, no error surfaced to the client. This is enforced in `backend/cache.py` with a try/except wrapper around every Redis operation.
 
 ---
 
@@ -997,8 +989,8 @@ When OA API credit usage reaches 95% of the 100K daily limit, the system degrade
 │                        └───────────────┘                            │
 │                                                                     │
 │  External APIs (backend-only):                                      │
-│    OpenAlex API         https://api.openalex.org                    │
 │    Semantic Scholar API https://api.semanticscholar.org             │
+│    Crossref API         https://api.crossref.org (DOI fallback)     │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -1020,11 +1012,9 @@ When OA API credit usage reaches 95% of the 100K daily limit, the system degrade
 | `SUPABASE_URL` | Both | Yes | Supabase project URL |
 | `SUPABASE_KEY` | Both | Yes | Supabase anon (public) key |
 | `SUPABASE_JWT_SECRET` | Backend | Yes | JWT signature verification secret |
-| `S2_API_KEY` | Backend | No | Semantic Scholar API key (1 RPS authenticated vs 100 req/5min unauthenticated) |
-| `OA_EMAIL` | Backend | No | OpenAlex polite pool email (higher rate limits) |
-| `OA_API_KEY` | Backend | No | OpenAlex premium key (100K credits/day) |
-| `OA_DAILY_CREDIT_LIMIT` | Backend | No | Daily credit cap (default 100000) |
-| `REDIS_URL` | Backend | No | Upstash Redis URL (Phase 2) |
+| `S2_API_KEY` | Backend | No | Semantic Scholar API key (1 RPS authenticated; auto-detected as 0.3 RPS unauthenticated if absent) |
+| `GROQ_API_KEY` | Backend | Yes | Groq API key for seed chat (llama-3.3-70b) |
+| `REDIS_URL` | Backend | No | Upstash Redis URL — enables seed_explore caching (24h), refs/cites caching (7d), embedding caching (30d) |
 | `CORS_ORIGINS` | Backend | Yes | Comma-separated allowed origins |
 | `ENVIRONMENT` | Backend | Yes | `development` / `staging` / `production` |
 | `NEXT_PUBLIC_API_URL` | Frontend | Yes | Backend API base URL |

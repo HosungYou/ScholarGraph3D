@@ -20,7 +20,6 @@ export const metadata: Metadata = {
     '3D graph',
     'literature review',
     'semantic scholar',
-    'openAlex',
   ],
   authors: [{ name: 'ScholarGraph3D' }],
   openGraph: {

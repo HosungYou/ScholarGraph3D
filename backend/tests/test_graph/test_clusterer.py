@@ -52,20 +52,13 @@ def make_three_tight_clusters(n_per_cluster: int = 15, dims: int = 768) -> np.nd
 
 def make_paper_dicts(
     n: int = 10,
-    topics: list = None,
     fields: list = None,
 ) -> list:
     """Create minimal paper dicts for label_clusters() input."""
-    default_topics = [
-        {"id": "T001", "display_name": "Machine Learning", "score": 0.9},
-        {"id": "T002", "display_name": "Neural Networks", "score": 0.8},
-        {"id": "T003", "display_name": "Deep Learning", "score": 0.7},
-    ]
-    default_fields = ["Computer Science"]
+    default_fields = ["Computer Science", "Machine Learning", "Deep Learning"]
     return [
         {
             "title": f"Paper {i}",
-            "oa_topics": topics if topics is not None else default_topics,
             "fields_of_study": fields if fields is not None else default_fields,
         }
         for i in range(n)
@@ -158,16 +151,12 @@ class TestLabelClusters:
         result = clusterer.label_clusters(papers, labels)
         assert isinstance(result, dict)
 
-    def test_label_clusters_uses_topics(self, clusterer):
+    def test_label_clusters_uses_fields(self, clusterer):
         """
-        Cluster label must be derived from OA topic display_names.
-        Label string must be non-empty and contain topic vocabulary.
+        Cluster label must be derived from fields_of_study.
+        Label string must be non-empty.
         """
-        topics = [
-            {"id": "T001", "display_name": "Attention Mechanism", "score": 0.9},
-            {"id": "T002", "display_name": "Transformer", "score": 0.85},
-        ]
-        papers = make_paper_dicts(n=10, topics=topics)
+        papers = make_paper_dicts(n=10, fields=["Attention Mechanism", "Transformer Models"])
         labels = np.array([0] * 10)
 
         result = clusterer.label_clusters(papers, labels)
@@ -179,9 +168,9 @@ class TestLabelClusters:
 
     def test_label_clusters_fallback_fields(self, clusterer):
         """
-        When papers have no OA topics, label should fall back to fields_of_study.
+        When papers have no fields_of_study, label should fall back to 'Cluster N'.
         """
-        papers = make_paper_dicts(n=10, topics=[], fields=["Quantum Physics"])
+        papers = make_paper_dicts(n=10, fields=["Quantum Physics"])
         labels = np.array([0] * 10)
 
         result = clusterer.label_clusters(papers, labels)

@@ -50,7 +50,6 @@ class SeedGraphNode(BaseModel):
     authors: List[Dict[str, Any]] = []
     doi: Optional[str] = None
     s2_paper_id: Optional[str] = None
-    oa_work_id: Optional[str] = None
     topics: List[Dict[str, Any]] = []
     x: float = 0.0
     y: float = 0.0
@@ -285,7 +284,6 @@ async def _seed_explore_pipeline(request: SeedExploreRequest, start_time: float)
             "title": p.title,
             "abstract": p.abstract or "",
             "fields_of_study": p.fields_of_study,
-            "oa_topics": [],
         } for p in papers_with_emb]
         cluster_meta = clusterer.label_clusters(paper_dicts, cluster_labels)
         # Deduplicate cluster labels (e.g., multiple "Computer Science" clusters)
