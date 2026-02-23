@@ -147,6 +147,16 @@ async def _seed_explore_pipeline(request: SeedExploreRequest, start_time: float)
     """Inner pipeline for seed_explore — wrapped by asyncio.wait_for for timeout enforcement."""
     s2_client = get_s2_client()
 
+    # Check cache first
+    try:
+        from cache import get_cached_seed_explore
+        cached = await get_cached_seed_explore(request.paper_id)
+        if cached:
+            logger.info(f"[timing] cache_hit: {time.time() - start_time:.2f}s — returning cached response")
+            return SeedGraphResponse(**cached)
+    except Exception:
+        pass  # cache miss or unavailable
+
     # 1. Fetch seed paper
     try:
         seed_paper = await s2_client.get_paper(request.paper_id, include_embedding=True)
@@ -243,22 +253,29 @@ async def _seed_explore_pipeline(request: SeedExploreRequest, start_time: float)
         paper_ids = [p.paper_id for p in papers_with_emb]
         s2_to_node = {p.paper_id: p.paper_id for p in papers_with_emb}
 
-        # 4. UMAP 3D with temporal Z-axis (Z = publication year)
+        # 4. Compute 50D intermediate UMAP ONCE, then derive both 3D coords and clusters
         reducer = EmbeddingReducer()
         years = [p.year for p in papers_with_emb]
+
+        # 768→50D intermediate (shared between clustering and visualization)
+        embeddings_50d = await asyncio.to_thread(
+            reducer.reduce_to_intermediate, embeddings, n_components=min(50, len(papers_with_emb) - 2)
+        )
+
+        # 50D→3D for visualization (much faster than 768→3D)
         coords_3d = await asyncio.to_thread(
-            lambda: reducer.reduce_to_3d(embeddings, years=years, use_temporal_z=True)
+            lambda: reducer.reduce_to_3d(embeddings_50d, years=years, use_temporal_z=True)
         )
 
         logger.info(f"[timing] umap: {time.time() - start_time:.2f}s")
 
-        # 5. HDBSCAN clustering + Similarity edges (parallel)
-        # v0.7.0: pass 768-dim embeddings; clusterer internally reduces to 50D UMAP
+        # 5. HDBSCAN clustering (on 50D, skips internal UMAP) + Similarity edges (on 768D)
         clusterer = PaperClusterer()
         min_cluster = max(3, min(5, len(papers_with_emb) // 5))
         sim_computer = SimilarityComputer()
 
-        cluster_task = asyncio.to_thread(clusterer.cluster, embeddings, min_cluster)
+        # Pass 50D to clusterer — it will skip internal UMAP since dim <= 50
+        cluster_task = asyncio.to_thread(clusterer.cluster, embeddings_50d, min_cluster)
         sim_task = asyncio.to_thread(sim_computer.compute_edges, embeddings, paper_ids, 0.7)
         cluster_labels, sim_edges = await asyncio.gather(cluster_task, sim_task)
 
@@ -486,10 +503,17 @@ async def _seed_explore_pipeline(request: SeedExploreRequest, start_time: float)
         "frontier_papers": len(frontier_ids),
         "depth": 1,
         "elapsed_seconds": round(elapsed, 2),
-        "oa_credits_used": 0,
     }
 
-    return SeedGraphResponse(
+    # Cache the response
+    response = SeedGraphResponse(
         nodes=nodes, edges=edges, clusters=clusters_info,
         gaps=gaps_info, frontier_ids=frontier_ids, meta=meta,
     )
+    try:
+        from cache import cache_seed_explore
+        await cache_seed_explore(request.paper_id, response.model_dump())
+    except Exception:
+        pass  # cache write failure is non-fatal
+
+    return response

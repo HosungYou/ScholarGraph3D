@@ -86,7 +86,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="ScholarGraph3D API",
     description="3D academic paper graph visualization with SPECTER2 embeddings",
-    version="2.0.0",
+    version="2.0.1",
     lifespan=lifespan,
 )
 
@@ -133,7 +133,7 @@ async def root():
     return {
         "status": "healthy",
         "service": "ScholarGraph3D",
-        "version": "2.0.0",
+        "version": "2.0.1",
     }
 
 
@@ -161,7 +161,6 @@ async def health_check():
         "auth": "configured" if supabase_client.is_configured() else "not configured",
         "environment": settings.environment,
         "s2_api": "authenticated" if settings.s2_api_key else "unauthenticated",
-        "oa_api": "premium" if settings.oa_api_key else "free",
     }
 
     if not is_healthy:

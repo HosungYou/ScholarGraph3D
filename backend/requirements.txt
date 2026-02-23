@@ -30,7 +30,6 @@ scipy==1.12.0
 redis==5.0.1
 
 # LLM Providers
-openai>=1.0.0
 groq>=0.4.0
 
 # Testing

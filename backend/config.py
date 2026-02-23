@@ -1,5 +1,5 @@
 """
-Configuration management for ScholarGraph3D backend.
+Configuration management for ScholarGraph3D backend (v2.0).
 """
 
 import os
@@ -24,33 +24,11 @@ class Settings(BaseSettings):
     s2_api_key: str = ""  # Optional: for higher rate limits (1 RPS authenticated)
     s2_rate_limit: float = 1.0  # Requests per second (authenticated)
 
-    # OpenAlex API
-    oa_api_key: str = ""  # For premium access (100K credits/day)
-    oa_email: str = ""  # For polite pool access (higher rate limits)
-    oa_daily_credit_limit: int = 100000
-
     # Redis (Upstash)
     redis_url: str = ""
 
-    # LLM Providers (Phase 2 - users bring their own keys)
-    default_llm_provider: str = "groq"
-    default_llm_model: str = "llama-3.3-70b-versatile"
-    # Server-side fallback keys (optional)
-    openai_api_key: str = ""
-    anthropic_api_key: str = ""
-    google_api_key: str = ""
+    # LLM
     groq_api_key: str = ""
-    # LLM Caching
-    llm_cache_enabled: bool = True
-    llm_cache_ttl: int = 3600
-
-    # Email (Resend)
-    resend_api_key: str = ""
-    notification_from_email: str = "notifications@scholargraph3d.com"
-
-    # Watch Queries
-    watch_cron_secret: str = ""  # Secret for cron endpoint auth
-    watch_check_interval_days: int = 7
 
     # CORS
     cors_origins: str = "http://localhost:3000,http://localhost:3001"

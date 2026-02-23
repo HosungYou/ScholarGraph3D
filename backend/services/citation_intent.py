@@ -80,7 +80,7 @@ class CitationIntentService:
                 url,
                 params={
                     "fields": ",".join(S2_CITATION_FIELDS),
-                    "limit": 500,
+                    "limit": 100,
                 },
             )
         except Exception as e:

@@ -5,14 +5,12 @@ Provides:
 - Paper search and metadata retrieval
 - Citation graph queries (references and citations)
 - SPECTER2 embeddings (batch API)
-- Paper recommendations
 - Rate limiting and retry logic
 """
 
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote
 
@@ -97,7 +95,6 @@ class SemanticScholarClient:
     """
 
     BASE_URL = "https://api.semanticscholar.org/graph/v1"
-    RECOMMENDATIONS_URL = "https://api.semanticscholar.org/recommendations/v1"
 
     PAPER_FIELDS = [
         "paperId", "title", "abstract", "year", "venue",
@@ -129,9 +126,11 @@ class SemanticScholarClient:
         self.max_retries = max_retries
         self.requests_per_second = requests_per_second
 
-        # Rate limiting state
+        # Rate limiting: semaphore allows N concurrent requests,
+        # sleep enforces per-request spacing
+        self._semaphore = asyncio.Semaphore(2)  # Allow 2 concurrent requests
         self._last_request_time: float = 0.0
-        self._lock = asyncio.Lock()
+        self._time_lock = asyncio.Lock()  # Only protects timestamp update
 
         headers = {"Accept": "application/json"}
         if api_key:
@@ -149,58 +148,57 @@ class SemanticScholarClient:
         await self.close()
 
     async def _rate_limit(self):
-        """Enforce per-second rate limiting."""
-        async with self._lock:
-            now = datetime.now().timestamp()
+        """Enforce rate limiting with semaphore for concurrent request support."""
+        async with self._time_lock:
+            now = asyncio.get_event_loop().time()
             min_interval = 1.0 / self.requests_per_second
             elapsed = now - self._last_request_time
-
             if elapsed < min_interval:
                 sleep_time = min_interval - elapsed
                 await asyncio.sleep(sleep_time)
-
-            self._last_request_time = datetime.now().timestamp()
+            self._last_request_time = asyncio.get_event_loop().time()
 
     async def _request(self, method: str, url: str, **kwargs) -> Dict[str, Any]:
         """Make an API request with retry logic."""
-        await self._rate_limit()
+        async with self._semaphore:
+            await self._rate_limit()
 
-        last_retry_after = 60
-        for attempt in range(self.max_retries):
-            try:
-                response = await self._client.request(method, url, **kwargs)
+            last_retry_after = 60
+            for attempt in range(self.max_retries):
+                try:
+                    response = await self._client.request(method, url, **kwargs)
 
-                if response.status_code == 429:
-                    retry_after = int(response.headers.get("Retry-After", 60))
-                    last_retry_after = retry_after
-                    # Cap sleep to 5s to avoid Render 30s request timeout
-                    if retry_after > 5 or attempt == self.max_retries - 1:
-                        raise SemanticScholarRateLimitError(retry_after=retry_after)
-                    logger.warning(f"S2 rate limited, waiting {retry_after}s")
-                    await asyncio.sleep(min(retry_after, 5))
-                    continue
+                    if response.status_code == 429:
+                        retry_after = int(response.headers.get("Retry-After", 60))
+                        last_retry_after = retry_after
+                        # Cap sleep to 5s to avoid Render 30s request timeout
+                        if retry_after > 5 or attempt == self.max_retries - 1:
+                            raise SemanticScholarRateLimitError(retry_after=retry_after)
+                        logger.warning(f"S2 rate limited, waiting {retry_after}s")
+                        await asyncio.sleep(min(retry_after, 5))
+                        continue
 
-                response.raise_for_status()
-                return response.json()
+                    response.raise_for_status()
+                    return response.json()
 
-            except SemanticScholarRateLimitError:
-                raise
-            except httpx.HTTPStatusError as e:
-                # Don't retry 4xx client errors (except 429 handled above)
-                if e.response.status_code < 500:
-                    logger.debug(f"S2 client error {e.response.status_code} for {url}, not retrying")
+                except SemanticScholarRateLimitError:
                     raise
-                if attempt == self.max_retries - 1:
-                    logger.error(f"S2 HTTP error after {self.max_retries} attempts: {e}")
-                    raise
-                await asyncio.sleep(2 ** attempt)
-            except httpx.RequestError as e:
-                if attempt == self.max_retries - 1:
-                    logger.error(f"S2 request error after {self.max_retries} attempts: {e}")
-                    raise
-                await asyncio.sleep(2 ** attempt)
+                except httpx.HTTPStatusError as e:
+                    # Don't retry 4xx client errors (except 429 handled above)
+                    if e.response.status_code < 500:
+                        logger.debug(f"S2 client error {e.response.status_code} for {url}, not retrying")
+                        raise
+                    if attempt == self.max_retries - 1:
+                        logger.error(f"S2 HTTP error after {self.max_retries} attempts: {e}")
+                        raise
+                    await asyncio.sleep(2 ** attempt)
+                except httpx.RequestError as e:
+                    if attempt == self.max_retries - 1:
+                        logger.error(f"S2 request error after {self.max_retries} attempts: {e}")
+                        raise
+                    await asyncio.sleep(2 ** attempt)
 
-        raise SemanticScholarRateLimitError(retry_after=last_retry_after)
+            raise SemanticScholarRateLimitError(retry_after=last_retry_after)
 
     # ==================== Paper Search ====================
 
@@ -434,28 +432,6 @@ class SemanticScholarClient:
 
         return papers
 
-    # ==================== Recommendations ====================
-
-    async def get_recommendations(
-        self,
-        paper_ids: List[str],
-        limit: int = 100,
-    ) -> List[SemanticScholarPaper]:
-        """Get paper recommendations based on a list of seed papers."""
-        url = f"{self.RECOMMENDATIONS_URL}/papers"
-
-        data = await self._request(
-            "POST", url,
-            params={"fields": ",".join(self.PAPER_FIELDS), "limit": min(limit, 500)},
-            json={"positivePaperIds": paper_ids[:500]},
-        )
-
-        return [
-            SemanticScholarPaper.from_api_response(item)
-            for item in data.get("recommendedPapers", [])
-        ]
-
-
 # ==================== Global Singleton ====================
 # One shared client so ALL requests share the same rate limiter.
 # Pattern mirrors database.py: global instance + init/close in lifespan.
@@ -466,11 +442,17 @@ s2_client = SemanticScholarClient()
 async def init_s2_client(api_key: Optional[str] = None, requests_per_second: float = 0.8) -> None:
     """Initialize the global S2 client (call on startup)."""
     global s2_client
+    # Auto-detect safe rate: authenticated = 1.0 RPS, unauthenticated = 0.3 RPS
+    if api_key:
+        effective_rate = requests_per_second
+    else:
+        effective_rate = min(requests_per_second, 0.3)
+        logger.info(f"No S2 API key — limiting to {effective_rate} RPS (unauthenticated)")
     s2_client = SemanticScholarClient(
         api_key=api_key,
-        requests_per_second=requests_per_second,
+        requests_per_second=effective_rate,
     )
-    logger.info("Semantic Scholar client initialized (shared rate limiter)")
+    logger.info(f"Semantic Scholar client initialized ({effective_rate} RPS, key={'yes' if api_key else 'no'})")
 
 
 async def close_s2_client() -> None:

@@ -2,7 +2,7 @@
 HDBSCAN clustering for paper embeddings.
 
 Clusters papers based on SPECTER2 embeddings and labels clusters
-using OpenAlex topic metadata.
+using field-of-study metadata from Semantic Scholar.
 
 v0.7.0 fix: HDBSCAN now runs on 50-dim intermediate UMAP embeddings
 (not 3D UMAP coordinates) to avoid double-distortion bug.
@@ -17,8 +17,9 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-# Threshold: if input has more dims than this, reduce to intermediate first
-_HIGH_DIM_THRESHOLD = 10
+# Threshold: if input has more dims than this, reduce to intermediate first.
+# Set to 50 so that pre-computed 50D embeddings pass through without re-reduction.
+_HIGH_DIM_THRESHOLD = 50
 
 
 class PaperClusterer:
@@ -35,8 +36,9 @@ class PaperClusterer:
 
         v0.7.0: Input should be high-dimensional embeddings (768-dim or
         50-dim intermediate UMAP), NOT 3D UMAP coordinates.
-        If high-dimensional input is detected (dim > 10), intermediate
+        If high-dimensional input is detected (dim > 50), intermediate
         UMAP reduction to 50D is applied first to preserve topology.
+        Pre-computed 50D embeddings pass through directly (no re-reduction).
 
         Args:
             embeddings: (N, D) array of embeddings.
@@ -121,10 +123,10 @@ class PaperClusterer:
         cluster_labels: np.ndarray,
     ) -> Dict[int, Dict[str, Any]]:
         """
-        Label each cluster using OA Topics (top 3 topics per cluster).
+        Label each cluster using fields of study (top 3 per cluster).
 
         Args:
-            papers: List of paper dicts with 'oa_topics' and 'fields_of_study' keys
+            papers: List of paper dicts with 'fields_of_study' keys
             cluster_labels: (N,) array of cluster labels
 
         Returns:

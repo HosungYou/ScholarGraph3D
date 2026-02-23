@@ -9,6 +9,7 @@ Cache key strategy:
     refs:{s2_paper_id}:{limit} TTL 7 days  — get_references() results
     cites:{s2_paper_id}:{limit} TTL 7 days — get_citations() results
     search:{sha256_key}        TTL 24h     — full search results (parallel to PG cache)
+    seed:{s2_paper_id}         TTL 24h     — full seed-explore response
 
 Usage:
     from cache import get_cached_embedding, cache_embedding
@@ -171,3 +172,34 @@ async def cache_search(cache_hash: str, result: Dict[str, Any]) -> None:
         await r.setex(f"search:{cache_hash}", _TTL_SEARCH, json.dumps(result))
     except Exception as e:
         logger.debug(f"Search cache set failed: {e}")
+
+
+# ==================== Seed Explore Response Cache ====================
+
+_TTL_SEED_EXPLORE = 60 * 60 * 24  # 24 hours
+
+
+async def get_cached_seed_explore(paper_id: str) -> Optional[Dict[str, Any]]:
+    """Return cached seed_explore response or None."""
+    r = await _get_redis()
+    if not r:
+        return None
+    try:
+        data = await r.get(f"seed:{paper_id}")
+        if data:
+            logger.debug(f"Cache HIT for seed:{paper_id}")
+            return json.loads(data)
+    except Exception as e:
+        logger.debug(f"Seed explore cache get failed: {e}")
+    return None
+
+
+async def cache_seed_explore(paper_id: str, result: Dict[str, Any]) -> None:
+    """Cache seed_explore response for 24 hours."""
+    r = await _get_redis()
+    if not r:
+        return
+    try:
+        await r.setex(f"seed:{paper_id}", _TTL_SEED_EXPLORE, json.dumps(result))
+    except Exception as e:
+        logger.debug(f"Seed explore cache set failed: {e}")
