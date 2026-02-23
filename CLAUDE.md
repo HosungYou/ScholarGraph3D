@@ -230,9 +230,9 @@ Key state slices:
 | PHILOSOPHY | docs/PHILOSOPHY.md |
 | TECH_PROOF | docs/TECH_PROOF.md |
 | DESIGN_THEME | docs/DESIGN_THEME.md |
+| RELEASE_v3.0.1 | docs/RELEASE_v3.0.1.md |
+| RELEASE_v3.0.0 | docs/RELEASE_v3.0.0.md |
 | RELEASE_v2.0.2 | docs/RELEASE_v2.0.2.md |
-| RELEASE_v2.0.1 | docs/RELEASE_v2.0.1.md |
-| RELEASE_v2.0.0 | docs/RELEASE_v2.0.0.md |
 | Earlier releases | docs/RELEASE_v*.md |
 
 ## v2.0 Changes from v1.x

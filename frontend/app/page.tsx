@@ -28,17 +28,62 @@ function looksLikeDoi(input: string): boolean {
 }
 
 const EXAMPLE_SEEDS = [
-  { label: 'Attention Is All You Need', doi: '10.48550/arXiv.1706.03762', field: 'Transformers' },
-  { label: 'AlphaFold 2', doi: '10.1038/s41586-021-03819-2', field: 'Protein' },
-  { label: 'BERT', doi: '10.48550/arXiv.1810.04805', field: 'NLP' },
+  { label: 'Attention Is All You Need', doi: '10.48550/arXiv.1706.03762', field: 'CS', color: '#4DA6FF' },
+  { label: 'AlphaFold 2', doi: '10.1038/s41586-021-03819-2', field: 'Bio', color: '#69F0AE' },
+  { label: 'BERT', doi: '10.48550/arXiv.1810.04805', field: 'NLP', color: '#4DA6FF' },
+  { label: 'mRNA Vaccines', doi: '10.1038/s41586-020-2622-0', field: 'Med', color: '#FF5252' },
+  { label: 'GPT-4 Technical Report', doi: '10.48550/arXiv.2303.08774', field: 'CS', color: '#4DA6FF' },
+  { label: 'Diffusion Models', doi: '10.48550/arXiv.2006.11239', field: 'CS', color: '#B388FF' },
 ];
 
 const EXAMPLE_QUERIES = [
-  { label: 'transformer architecture', field: 'CS' },
-  { label: 'AI adoption healthcare', field: 'Med' },
-  { label: 'climate change impacts', field: 'Env' },
-  { label: 'CRISPR gene editing', field: 'Bio' },
+  { label: 'transformer architecture', field: 'CS', color: '#4DA6FF' },
+  { label: 'AI adoption healthcare', field: 'Med', color: '#FF5252' },
+  { label: 'climate change impacts', field: 'Env', color: '#76FF03' },
+  { label: 'CRISPR gene editing', field: 'Bio', color: '#69F0AE' },
+  { label: 'quantum computing algorithms', field: 'Physics', color: '#EA80FC' },
+  { label: 'large language models', field: 'CS', color: '#4DA6FF' },
+  { label: 'renewable energy storage', field: 'Eng', color: '#B388FF' },
+  { label: 'behavioral economics nudges', field: 'Econ', color: '#FFD740' },
 ];
+
+const HISTORY_KEY = 'sg3d-search-history';
+const MAX_HISTORY = 10;
+
+interface SearchHistoryEntry {
+  query: string;
+  type: 'doi' | 'search';
+  timestamp: number;
+  label?: string;
+}
+
+function getSearchHistory(): SearchHistoryEntry[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+function saveSearchHistory(entry: Omit<SearchHistoryEntry, 'timestamp'>) {
+  if (typeof window === 'undefined') return;
+  try {
+    const history = getSearchHistory();
+    const deduplicated = history.filter(h => h.query !== entry.query);
+    deduplicated.unshift({ ...entry, timestamp: Date.now() });
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(deduplicated.slice(0, MAX_HISTORY)));
+  } catch {}
+}
+
+function clearSearchHistory() {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem(HISTORY_KEY);
+}
+
+function pickRandom<T>(arr: T[], n: number): T[] {
+  const shuffled = [...arr].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, n);
+}
 
 export default function LandingPage() {
   const [activeMode, setActiveMode] = useState<InputMode>('doi');
@@ -51,6 +96,9 @@ export default function LandingPage() {
 
   const starfieldRef = useRef<StarfieldBackgroundRef>(null);
   const [isWarping, setIsWarping] = useState(false);
+  const [searchHistory, setSearchHistory] = useState<SearchHistoryEntry[]>([]);
+  const [displayedSeeds, setDisplayedSeeds] = useState(EXAMPLE_SEEDS.slice(0, 3));
+  const [displayedQueries, setDisplayedQueries] = useState(EXAMPLE_QUERIES.slice(0, 4));
 
   const { user } = useAuth();
 
@@ -60,6 +108,12 @@ export default function LandingPage() {
     }
   }, [user, router]);
 
+  useEffect(() => {
+    setSearchHistory(getSearchHistory());
+    setDisplayedSeeds(pickRandom(EXAMPLE_SEEDS, 3));
+    setDisplayedQueries(pickRandom(EXAMPLE_QUERIES, 4));
+  }, []);
+
   const handleDOILookup = async (doi: string) => {
     if (!doi.trim()) return;
     setIsLoadingDoi(true);
@@ -68,6 +122,8 @@ export default function LandingPage() {
     try {
       const data = await api.getPaperByDOI(doi.trim());
       if (data.paper_id) {
+        saveSearchHistory({ query: doi, type: 'doi', label: doi });
+        setSearchHistory(getSearchHistory());
         setIsWarping(true);
         starfieldRef.current?.triggerWarp();
         setTimeout(() => {
@@ -98,6 +154,8 @@ export default function LandingPage() {
     try {
       const data = await api.searchPapers(query.trim());
       setNaturalResults(data.papers || []);
+      saveSearchHistory({ query: query.trim(), type: 'search' });
+      setSearchHistory(getSearchHistory());
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setDoiError(`Search failed: ${msg}`);
@@ -222,13 +280,20 @@ export default function LandingPage() {
               <button
                 key={mode}
                 onClick={() => switchMode(mode)}
-                className={`px-4 py-2 text-[11px] font-mono uppercase tracking-widest transition-all rounded ${
+                className={`relative px-4 py-2 text-[11px] font-mono uppercase tracking-widest transition-all ${
                   activeMode === mode
-                    ? 'text-white bg-neutral-900 border border-neutral-700'
-                    : 'text-neutral-600 border border-transparent hover:text-neutral-400'
+                    ? 'text-white'
+                    : 'text-neutral-600 hover:text-neutral-400'
                 }`}
               >
                 {label}
+                {activeMode === mode && (
+                  <motion.div
+                    layoutId="mode-underline"
+                    className="absolute -bottom-px left-1 right-1 h-[2px] bg-gradient-to-r from-transparent via-[#D4AF37] to-transparent"
+                    transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                  />
+                )}
               </button>
             ))}
           </div>
@@ -238,7 +303,7 @@ export default function LandingPage() {
             {activeMode === 'doi' ? (
               <motion.div key="doi" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                 <form onSubmit={handleSubmit}>
-                  <div className="flex items-stretch border border-neutral-800 rounded-lg overflow-hidden bg-neutral-950 hover:border-neutral-700 focus-within:border-neutral-600 transition-colors">
+                  <div className="flex items-stretch border border-neutral-800 rounded-lg overflow-hidden bg-neutral-950 hover:border-neutral-700 focus-within:border-[#D4AF37]/40 focus-within:shadow-[0_0_20px_rgba(212,175,55,0.08)] transition-all duration-300">
                     <input
                       type="text"
                       value={inputValue}
@@ -264,16 +329,53 @@ export default function LandingPage() {
                 {doiError && (
                   <p className="text-xs text-red-400/80 font-mono mt-2">{doiError}</p>
                 )}
+                <p className="text-[10px] text-neutral-800 mt-2 font-mono tracking-wider">Press Enter to explore</p>
+
+                {/* Recent searches */}
+                {searchHistory.length > 0 && (
+                  <div className="mt-4 mb-2">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] font-mono text-neutral-700 uppercase tracking-wider">Recent</span>
+                      <button
+                        onClick={() => { clearSearchHistory(); setSearchHistory([]); }}
+                        className="text-[10px] text-neutral-700 hover:text-red-400/60 transition-colors font-mono"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {searchHistory.slice(0, 5).map((h) => (
+                        <button
+                          key={h.timestamp}
+                          onClick={() => {
+                            if (h.type === 'doi') {
+                              handleDOILookup(h.query);
+                            } else {
+                              switchMode('natural');
+                              setInputValue(h.query);
+                              handleNaturalSearch(h.query);
+                            }
+                          }}
+                          className="group flex items-center gap-1.5 px-3 py-1.5 rounded border border-[#D4AF37]/15 hover:border-[#D4AF37]/40 text-xs transition-all"
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#D4AF37]/40 flex-shrink-0" />
+                          <span className="text-neutral-400 group-hover:text-[#D4AF37] transition-colors font-mono text-[11px] truncate max-w-[180px]">{h.label || h.query}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Example seeds */}
                 <div className="mt-4 flex flex-wrap items-center gap-2">
                   <span className="text-[10px] font-mono text-neutral-700 uppercase tracking-wider">Try:</span>
-                  {EXAMPLE_SEEDS.map((s) => (
+                  {displayedSeeds.map((s) => (
                     <button
                       key={s.doi}
                       onClick={() => handleDOILookup(s.doi)}
                       className="group flex items-center gap-2 px-3 py-1.5 rounded border border-neutral-800 hover:border-neutral-600 text-xs transition-all"
                     >
+                      <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
                       <span className="text-neutral-400 group-hover:text-white transition-colors font-mono text-[11px]">{s.label}</span>
                       <span className="text-neutral-700 text-[9px] font-mono">{s.field}</span>
                     </button>
@@ -283,7 +385,7 @@ export default function LandingPage() {
             ) : (
               <motion.div key="natural" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                 <form onSubmit={handleSubmit}>
-                  <div className="flex items-stretch border border-neutral-800 rounded-lg overflow-hidden bg-neutral-950 hover:border-neutral-700 focus-within:border-neutral-600 transition-colors">
+                  <div className="flex items-stretch border border-neutral-800 rounded-lg overflow-hidden bg-neutral-950 hover:border-neutral-700 focus-within:border-[#D4AF37]/40 focus-within:shadow-[0_0_20px_rgba(212,175,55,0.08)] transition-all duration-300">
                     <input
                       type="text"
                       value={inputValue}
@@ -309,17 +411,55 @@ export default function LandingPage() {
                 {doiError && (
                   <p className="text-xs text-red-400/80 font-mono mt-2">{doiError}</p>
                 )}
+                <p className="text-[10px] text-neutral-800 mt-2 font-mono tracking-wider">Press Enter to search</p>
+
+                {/* Recent searches */}
+                {searchHistory.length > 0 && !naturalResults && (
+                  <div className="mt-4 mb-2">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] font-mono text-neutral-700 uppercase tracking-wider">Recent</span>
+                      <button
+                        onClick={() => { clearSearchHistory(); setSearchHistory([]); }}
+                        className="text-[10px] text-neutral-700 hover:text-red-400/60 transition-colors font-mono"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {searchHistory.slice(0, 5).map((h) => (
+                        <button
+                          key={h.timestamp}
+                          onClick={() => {
+                            if (h.type === 'doi') {
+                              switchMode('doi');
+                              setInputValue(h.query);
+                              handleDOILookup(h.query);
+                            } else {
+                              setInputValue(h.query);
+                              handleNaturalSearch(h.query);
+                            }
+                          }}
+                          className="group flex items-center gap-1.5 px-3 py-1.5 rounded border border-[#D4AF37]/15 hover:border-[#D4AF37]/40 text-xs transition-all"
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#D4AF37]/40 flex-shrink-0" />
+                          <span className="text-neutral-400 group-hover:text-[#D4AF37] transition-colors font-mono text-[11px] truncate max-w-[180px]">{h.label || h.query}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Quick examples */}
                 {!naturalResults && (
                   <div className="mt-4 flex flex-wrap gap-2">
                     <span className="text-[10px] font-mono text-neutral-700 uppercase tracking-wider">Try:</span>
-                    {EXAMPLE_QUERIES.map((ex) => (
+                    {displayedQueries.map((ex) => (
                       <button
                         key={ex.label}
                         onClick={() => { setInputValue(ex.label); handleNaturalSearch(ex.label); }}
                         className="group flex items-center gap-2 px-3 py-1.5 rounded border border-neutral-800 hover:border-neutral-600 text-xs transition-all font-mono"
                       >
+                        <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: ex.color }} />
                         <span className="text-neutral-400 group-hover:text-white transition-colors">{ex.label}</span>
                         <span className="text-neutral-700 text-[9px]">{ex.field}</span>
                       </button>
