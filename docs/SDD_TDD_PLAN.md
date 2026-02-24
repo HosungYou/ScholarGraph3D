@@ -41,7 +41,11 @@ backend/tests/
 ├── test_graph/
 │   ├── test_embedding_reducer.py  # UMAP reduction tests
 │   ├── test_clusterer.py          # HDBSCAN tests
-│   └── test_similarity.py         # Cosine similarity tests
+│   ├── test_similarity.py         # Cosine similarity tests
+│   └── test_network_metrics.py  # v3.4.0: NetworkMetricsComputer (14 tests)
+├── test_services/
+│   ├── __init__.py
+│   └── test_academic_report.py  # v3.4.0: APA report generation (17 tests)
 ├── test_routers/
 │   ├── test_search.py             # Search endpoint integration
 │   ├── test_papers.py             # Papers endpoint integration
@@ -100,7 +104,15 @@ frontend/__tests__/
 | US-14 LLM Keys | Integration | Key storage, provider switching, fallback |
 | US-15 Lit Review | Integration | Markdown generation, APA citation format |
 
-## 6. CI/CD Integration
+## 6. Phase 6 Test Plan — Academic Analysis (v3.4.0)
+
+| Component | Test Type | Test Cases | Priority |
+|-----------|-----------|-----------|----------|
+| NetworkMetricsComputer | Unit | Empty/single/chain/star graphs, centrality ordering, h-index, structural holes, modularity, silhouette, overview | P0 |
+| academic_report_service | Unit | Feasibility tiers (insufficient/partial/full), methods params, table shapes, figure captions, reference counts | P0 |
+| academic_report router | Integration | Success/insufficient/empty 400, overview success/empty | P1 |
+
+## 7. CI/CD Integration
 
 ### GitHub Actions Workflow
 ```yaml

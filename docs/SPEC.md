@@ -1,6 +1,6 @@
 # ScholarGraph3D — Technical Specification
 
-> **Version:** 1.5 | **Last Updated:** 2026-02-24
+> **Version:** 1.6 | **Last Updated:** 2026-02-24
 > **Related:** [PRD.md](./PRD.md) | [ARCHITECTURE.md](./ARCHITECTURE.md) | [SDD/TDD Plan](./SDD_TDD_PLAN.md)
 
 ---
@@ -961,6 +961,72 @@ Generate a structured gap analysis report with evidence assembly and LLM narrati
 **Cache:** `gap_report:{gap_id_hash}` with 24-hour TTL.
 
 **Implementation:** `backend/routers/gap_report.py`, `backend/services/gap_report_service.py`
+
+---
+
+### 4.10 Academic Report Endpoints — v3.4.0
+
+#### `POST /api/academic-report`
+
+Generate APA 7th formatted academic analysis report.
+
+**Request Body:**
+```json
+{
+  "graph_context": {
+    "papers": [{ "id": "...", "title": "...", "year": 2023, "citation_count": 10, "cluster_id": 0, "cluster_label": "...", "authors": [...], "fields": [...] }],
+    "edges": [{ "source": "...", "target": "...", "type": "citation", "weight": 1.0 }],
+    "clusters": [{ "id": 0, "label": "...", "paper_count": 12 }]
+  },
+  "gap_ids": ["optional-gap-id"],
+  "analysis_parameters": { "n_neighbors": 15, "min_cluster_size": 5 }
+}
+```
+
+**Response 200:**
+```json
+{
+  "methods_section": "2.1 Data Collection...",
+  "tables": {
+    "table_1": { "title": "Table 1\nNetwork Statistics Summary", "headers": [...], "rows": [...], "note": "..." },
+    "table_2": { ... },
+    "table_3": { ... },
+    "table_4": { ... },
+    "table_5": { ... }
+  },
+  "figure_captions": {
+    "figure_1": "Figure 1. Citation Network...",
+    "figure_2": "Figure 2. Structural Gap...",
+    "figure_3": "Figure 3. Betweenness Centrality..."
+  },
+  "reference_list": {
+    "methodology_refs": ["Bonacich, P. (1987)...", ...],
+    "analysis_refs": [{ "paper_id": "...", "apa_citation": "..." }]
+  },
+  "network_metrics": { ... },
+  "parameters": { ... },
+  "generated_at": "2026-02-24T12:00:00Z",
+  "feasibility": "full",
+  "warnings": []
+}
+```
+
+#### `POST /api/network-overview`
+
+Lightweight network statistics (no full report).
+
+**Request Body:** Same `graph_context` structure.
+
+**Response 200:**
+```json
+{
+  "node_count": 110,
+  "edge_count": 423,
+  "density": 0.039,
+  "cluster_count": 7,
+  "modularity": 0.68
+}
+```
 
 ---
 

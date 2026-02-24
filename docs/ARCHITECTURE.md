@@ -1,6 +1,6 @@
 # ScholarGraph3D — System Architecture
 
-> **Version:** 1.8 | **Last Updated:** 2026-02-24
+> **Version:** 1.9 | **Last Updated:** 2026-02-24
 > **Related:** [PRD.md](./PRD.md) | [SPEC.md](./SPEC.md) | [SDD/TDD Plan](./SDD_TDD_PLAN.md)
 
 ---
@@ -83,6 +83,8 @@ ScholarGraph3D is a three-tier web application: a Next.js 14 frontend communicat
 │  │  │            Service Layer                    │            │    │
 │  │  │  EmbeddingReducer   PaperClusterer          │            │    │
 │  │  │  SimilarityComputer GapDetector             │            │    │
+│  │  │  NetworkMetricsComputer (v3.4.0)            │            │    │
+│  │  │  AcademicReportService (v3.4.0)             │            │    │
 │  │  └─────────────────────────────────────────────┘            │    │
 │  │        |                    |                               │    │
 │  │  ┌─────┴──────┐    ┌────────┴────────┐                      │    │
@@ -224,7 +226,8 @@ backend/
 │   ├── incremental_layout.py  # Phase 1.5: k-NN position interpolation for stable expand
 │   ├── trend_analyzer.py      # Phase 2: emerging/stable/declining classification
 │   ├── gap_detector.py        # Phase 2: multi-dimensional gap detection (5-dim scoring: structural/relatedness/temporal/intent/directional); returns evidence_detail dict per gap; _generate_grounded_questions() replaces template heuristics
-│   └── graph_rag.py           # Phase 2: RAG context builder for LLM chat
+│   ├── graph_rag.py           # Phase 2: RAG context builder for LLM chat
+│   └── network_metrics.py       # v3.4.0: SNA metrics via networkx (centrality, structural holes, modularity)
 ├── llm/
 │   ├── base.py                # Abstract BaseLLMProvider + LLMResponse
 │   ├── openai_provider.py     # GPT-4o-mini / GPT-4o / GPT-4-turbo
@@ -241,7 +244,8 @@ backend/
 │   ├── gap_report_service.py # Gap report evidence assembly + LLM narrative
 │   ├── lit_review.py          # LLM lit review generation + weasyprint PDF
 │   ├── query_normalizer.py    # Query normalization for cache hit rates (Groq llama-3.1-8b)
-│   └── query_parser.py        # NL→structured search params (Groq llama-3.3-70b)
+│   ├── query_parser.py        # NL→structured search params (Groq llama-3.3-70b)
+│   └── academic_report_service.py # APA 7th academic report generation (template-based, no LLM)
 ├── routers/
 │   ├── search.py              # POST /api/search — full graph pipeline (8 steps)
 │   ├── natural_search.py      # POST /api/search/natural — NL query → Groq parse → parallel search
@@ -256,7 +260,8 @@ backend/
 │   ├── personalization.py     # Phase 5: /api/user profile, events, search-history, recommendations
 │   ├── seed_explore.py        # Phase 6: POST /api/seed-explore (seed paper graph expansion)
 │   ├── seed_chat.py           # v2.0.0: POST /api/seed-chat — Groq chat + action markers (v3.2.0)
-│   └── gap_report.py      # Gap report generation (POST /api/gaps/report)
+│   ├── gap_report.py      # Gap report generation (POST /api/gaps/report)
+│   └── academic_report.py   # v3.4.0: POST /api/academic-report + /api/network-overview
 └── database/
     ├── 001_initial_schema.sql # papers, search_cache, user_graphs, watch_queries DDL
     ├── 002_personalization.sql # Phase 5: user_profiles, search_history, interactions, recommendations
@@ -546,14 +551,16 @@ frontend/
 │   ├── GapSpotterPanel.tsx        # Gap analysis between clusters
 │   ├── SeedChatPanel.tsx          # AI chat about the graph
 │   ├── GraphLegend.tsx            # Visual guide legend
-│   └── GapReportView.tsx          # Gap Report — full report rendering with score bars + export
+│   ├── GapReportView.tsx          # Gap Report — full report rendering with score bars + export
+│   └── AcademicAnalysisPanel.tsx  # v3.4.0: Academic Analysis — APA report, centrality chart, export
 ├── hooks/
-│   └── useGraphStore.ts           # Zustand store (single global state)
+│   └── useGraphStore.ts           # Zustand store (single global state, academic report)
 ├── lib/
 │   ├── api.ts                     # Backend HTTP client (typed fetch wrappers)
 │   ├── auth-context.tsx           # Supabase Auth React context provider
+│   ├── export.ts                  # Export utilities (graph, academic report)
 │   └── supabase.ts                # Supabase client initialization
-└── types/index.ts                 # Paper, GraphEdge, Cluster, GraphData
+└── types/index.ts                 # Paper, GraphEdge, Cluster, GraphData, NetworkMetrics, AcademicReport, NetworkOverview
 ```
 
 Phase 4 additions:
@@ -976,6 +983,7 @@ f"refs:{paper_id}:{limit}"     # S2 references list (7d TTL)
 f"cites:{paper_id}:{limit}"    # S2 citations list (7d TTL)
 f"search:{sha256_key}"         # Full keyword search response (24h TTL)
 f"gap_report:{hash}"          # Gap report evidence assembly (24h TTL)
+f"academic_report:{hash}"      # Academic analysis report (24h TTL)
 
 # PostgreSQL L3 cache — keyword search (legacy)
 cache_key = SHA-256(JSON({
@@ -997,6 +1005,7 @@ cache_key = SHA-256(JSON({
 | Redis `refs:*` / `cites:*` | 7 days | Redis TTL automatic |
 | Redis `search:*` | 24h | Redis TTL automatic |
 | Redis `gap_report:*` | 24h | Redis TTL automatic |
+| Redis `academic_report:*` | 24h | Redis TTL automatic |
 | `search_cache` (PostgreSQL) | 24h | `WHERE created_at > NOW() - INTERVAL '24 hours'` at read; periodic `DELETE` of entries > 48h old |
 | `oc_citation_cache` (PostgreSQL) | 30 days | `oc_stale_cache` view; manual cleanup via `DELETE WHERE fetched_at < NOW() - INTERVAL '30 days'` |
 

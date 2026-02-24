@@ -71,13 +71,15 @@ backend/
 │   ├── similarity.py          # Cosine similarity edges (>0.7)
 │   ├── bridge_detector.py     # Cross-cluster bridge node detection (top-5%)
 │   ├── incremental_layout.py  # k-NN position interpolation for stable expand
-│   └── gap_detector.py        # Inter-cluster gap detection + 5-dim scoring + bridge papers + research questions
+│   ├── gap_detector.py        # Inter-cluster gap detection + 5-dim scoring + bridge papers + research questions
+│   └── network_metrics.py       # v3.4.0: SNA metrics (networkx) — centrality, structural holes, modularity, silhouette
 ├── llm/
 │   ├── base.py              # Abstract BaseLLMProvider + LLMResponse
 │   └── groq_provider.py     # LLaMA 3.3-70b (rate limiter + retry)
 ├── services/
 │   ├── citation_intent.py   # S2 basic + enhanced citation intents
-│   └── gap_report_service.py # Gap report assembly + Groq narrative synthesis
+│   ├── gap_report_service.py # Gap report assembly + Groq narrative synthesis
+│   └── academic_report_service.py # v3.4.0: APA 7th report generation (template-based, no LLM)
 ├── routers/
 │   ├── papers.py          # Paper detail, expand-stable, intents, by-doi
 │   ├── graphs.py          # CRUD saved graphs (auth required, JSONB graph_data)
@@ -85,6 +87,7 @@ backend/
 │   ├── paper_search.py    # POST /api/paper-search — NL query → paper selection
 │   ├── seed_chat.py       # POST /api/seed-chat — Groq-powered graph chat + action markers
 │   ├── gap_report.py      # POST /api/gaps/report — Gap analysis report generation
+│   ├── academic_report.py   # v3.4.0: POST /api/academic-report + /api/network-overview
 │   └── bookmarks.py       # CRUD paper bookmarks with tags/memos (auth required)
 └── database/
     └── migrations/
@@ -124,22 +127,23 @@ frontend/
 │   │   ├── GraphControls.tsx          # Ship Controls — floating toggles
 │   │   ├── GapSpotterPanel.tsx        # Gap Spotter — research gaps, 5-dim scoring (relatedness), bridge papers, frontier papers
 │   │   ├── GapReportView.tsx          # Gap Report — full report rendering with export (Markdown/BibTeX)
-│   │   └── SeedChatPanel.tsx          # Seed Chat — Groq-powered conversational graph exploration
+│   │   ├── SeedChatPanel.tsx          # Seed Chat — Groq-powered conversational graph exploration
+│   │   └── AcademicAnalysisPanel.tsx  # v3.4.0: Academic Analysis — Network Overview, APA report, centrality chart, export
 │   ├── auth/
 │   │   ├── LoginForm.tsx              # Login form
 │   │   └── SignupForm.tsx             # Signup form
 │   └── dashboard/
 │       └── SavedGraphs.tsx            # Saved graphs list/management
 ├── hooks/
-│   └── useGraphStore.ts       # Zustand state (graph data, UI state, gaps, gap reports, frontier, paths)
+│   └── useGraphStore.ts       # Zustand state (graph data, UI state, gaps, gap reports, frontier, paths, academic report)
 ├── lib/
-│   ├── api.ts                 # Backend API client (seed-explore, paper-search, seed-chat, gap-report, graphs)
+│   ├── api.ts                 # Backend API client (seed-explore, paper-search, seed-chat, gap-report, academic-report, graphs)
 │   ├── auth-context.tsx       # Supabase auth context
 │   ├── supabase.ts            # Supabase client init
 │   ├── utils.ts               # Shared utilities (findCitationPath BFS)
-│   └── export.ts              # BibTeX/RIS + Gap Report Markdown/BibTeX export utilities
+│   └── export.ts              # BibTeX/RIS + Gap Report Markdown/BibTeX + Academic Report export utilities
 ├── types/
-│   └── index.ts               # All types (Paper, GraphData, StructuralGap, CitationIntent)
+│   └── index.ts               # All types (Paper, GraphData, StructuralGap, CitationIntent, NetworkMetrics, AcademicReport, NetworkOverview)
 ├── __tests__/                 # Jest test suite
 │   └── setup.tsx              # Testing library setup
 └── jest.config.js             # Jest configuration
@@ -150,7 +154,7 @@ frontend/
 1. **Landing** (`/`): User enters NL query → `POST /api/paper-search` → selects seed paper
 2. **Explore** (`/explore/seed?paper_id=...`): Seed paper expanded via `POST /api/seed-explore` → 3D graph rendered
 3. **Interact**: Click nodes to expand (expand-stable), view details (push layout), find citation paths with visual chain, drill-down via in-graph connections, export BibTeX/RIS
-4. **Analyze**: Left panel tabs — Clusters | Gaps | Chat — for exploring structure and asking questions
+4. **Analyze**: Left panel tabs — Clusters | Gaps | Chat | Academic — for exploring structure, asking questions, and generating APA 7th reports
 5. **Save**: Save graph to database → reload from Dashboard (`/dashboard`)
 
 ## API Endpoints
@@ -164,6 +168,8 @@ frontend/
 | GET | `/api/papers/by-doi?doi=...` | DOI lookup |
 | POST | `/api/seed-chat` | Groq chat about graph context + action markers |
 | POST | `/api/gaps/report` | Generate gap analysis report (Groq narrative + evidence) |
+| POST | `/api/academic-report` | Generate APA 7th academic analysis report (60s timeout, 24h cache) |
+| POST | `/api/network-overview` | Lightweight network stats (density, modularity, clusters) |
 | POST | `/api/bookmarks` | Create/upsert paper bookmark (auth) |
 | GET | `/api/bookmarks` | List bookmarks, optional `?tag=` filter (auth) |
 | GET | `/api/bookmarks/paper/{paper_id}` | Get bookmark for specific paper (auth) |
@@ -240,6 +246,7 @@ Seed explore returns: `{ nodes: Paper[], edges: GraphEdge[], clusters: Cluster[]
 - get_references/get_citations: (data.get("data") or []) — S2 may return {"data": null} for unindexed papers
 - Groq rate limiter: 28 RPM for LLaMA 3.3-70b
 - Gap score: structural(0.35) + relatedness(0.25) + temporal(0.15) + intent(0.15) + directional(0.10) = composite
+- Academic report: template-based (no LLM), <1s for 50-200 nodes, minimum 10 papers + 2 clusters
 
 ## Zustand Store (useGraphStore)
 
@@ -251,13 +258,16 @@ Key state slices:
 - `frontierIds`: string[] — frontier paper IDs
 - `pathStart`, `pathEnd`, `activePath`: citation path finding
 - `highlightedPaperIds`: Set<string> — hover highlights from gap panel
-- `activeTab`: 'clusters' | 'gaps' | 'chat' — left panel tab selection
+- `activeTab`: now includes 'academic' — 'clusters' | 'gaps' | 'chat' | 'academic' (v3.4.0)
 - `edgeVisMode`: 'similarity' | 'temporal' | 'crossCluster' — edge visualization mode (v3.1.0)
 - `panelSelectionId`: string | null — triggers camera focus on panel paper click (v3.2.0)
 - `highlightedClusterPair`: [number, number] | null — dims all except gap-hovered clusters (v3.2.0)
 - `hoveredGapEdges`: potential edges array — renders dashed gold links on gap hover (v3.2.0)
 - `activeGapReport`: GapReport | null — currently displayed gap analysis report (v3.3.0)
 - `gapReportLoading`: boolean — gap report generation in progress (v3.3.0)
+- `academicReport`: AcademicReport | null — generated academic analysis report (v3.4.0)
+- `academicReportLoading`: boolean — report generation in progress (v3.4.0)
+- `networkOverview`: NetworkOverview | null — lightweight network stats (v3.4.0)
 
 ## Documentation Map
 
@@ -270,6 +280,7 @@ Key state slices:
 | PHILOSOPHY | docs/PHILOSOPHY.md |
 | TECH_PROOF | docs/TECH_PROOF.md |
 | DESIGN_THEME | docs/DESIGN_THEME.md |
+| RELEASE_v3.4.0 | docs/RELEASE_v3.4.0.md |
 | RELEASE_v3.3.1 | docs/RELEASE_v3.3.1.md |
 | RELEASE_v3.3.0 | docs/RELEASE_v3.3.0.md |
 | RELEASE_v3.2.0 | docs/RELEASE_v3.2.0.md |
@@ -306,6 +317,30 @@ Key state slices:
 - Graph save/load with JSONB: 003_seed_graphs.sql
 - Tabbed left panel: Clusters | Gaps | Chat
 - Depth control: 1/2/3 hop exploration
+
+### v3.4.0 SNA Academic Output — Citation Network Analysis Report (2026-02-24)
+- Network Metrics Module: `network_metrics.py` — networkx DiGraph, 3-tier SNA (network/node/community level)
+  - Network: density, diameter, avg path length, reciprocity, transitivity, component count, avg degree
+  - Node: degree in/out, betweenness, closeness, PageRank, eigenvector centrality (sorted by betweenness)
+  - Community: intra-cluster density, avg year, year range, h-index
+  - Structural holes: constraint, effective_size, efficiency (Burt 1992)
+  - Modularity Q (Newman-Girvan 2004), Silhouette score (Rousseeuw 1987)
+- Academic Report Service: `academic_report_service.py` — APA 7th template-based (zero LLM calls)
+  - Methods section (5 subsections with auto-parameter substitution)
+  - 5 APA Tables (Network Stats, Communities, Centrality Top 10, Gap Analysis, Bridge Papers)
+  - 3 Figure captions with actual N, year range, cluster count
+  - 13 hardcoded methodology refs + dynamic analysis refs
+  - Feasibility gating: insufficient / partial / full
+- API: `POST /api/academic-report` (60s timeout, 24h Redis cache) + `POST /api/network-overview`
+- Frontend: ACADEMIC ANALYSIS tab (4th tab), AcademicAnalysisPanel component
+  - Network Overview (auto-fetched), Gold generate button, 4 sub-tabs (Methods/Tables/Figures/References)
+  - APATable with tab-separated copy, CentralityBarChart (CSS-only), Canvas capture for Figures
+  - Export: Full Report / Methods / Tables (copy) + .md / .bib (download)
+- Types: NetworkLevelMetrics, NodeCentrality, CommunityMetrics, StructuralHolesNode, NetworkMetrics, AcademicReportTable, AcademicReport, NetworkOverview
+- Store: academicReport, academicReportLoading, networkOverview state; activeTab includes 'academic'
+- Cache: `academic_report:{hash}` with 24h TTL
+- Tests: 14 network_metrics tests + 17 academic_report_service tests (31 total)
+- Dependency: networkx>=3.2.0
 
 ### v3.3.1 Gap Report UX Overhaul: Explainability + Quality (2026-02-24)
 - Semantic score inverted → "relatedness" (cosine_sim, not 1-cosine_sim): high similarity = more actionable gap

@@ -121,11 +121,13 @@ backend/
 ├── graph/
 │   ├── embedding_reducer.py    # UMAP
 │   ├── clusterer.py             # HDBSCAN
-│   └── similarity.py             # Cosine similarity edges
+│   ├── similarity.py             # Cosine similarity edges
+│   └── network_metrics.py      # v3.4.0: SNA metrics via networkx
 ├── routers/
 │   ├── search.py        # POST /api/search
 │   ├── papers.py        # GET /api/papers/{id}, citations, references
-│   └── graphs.py        # CRUD for saved user graphs
+│   ├── graphs.py        # CRUD for saved user graphs
+│   └── academic_report.py  # v3.4.0: Academic report + network overview
 ├── auth/
 │   └── supabase.py      # Supabase auth helpers
 ├── middleware/
@@ -200,6 +202,18 @@ backend/
 - `GET /api/graphs` → list user's saved graphs
 - `GET /api/graphs/{id}` → load specific graph
 - `DELETE /api/graphs/{id}` → delete graph
+
+**graph/network_metrics.py** (v3.4.0):
+- `NetworkMetricsComputer.compute_all(papers, edges, clusters)` → full SNA metrics
+- `NetworkMetricsComputer.compute_network_overview(papers, edges, clusters)` → lightweight stats
+
+**services/academic_report_service.py** (v3.4.0):
+- `generate_academic_report(network_metrics, papers, clusters, gaps, params)` → APA 7th report
+- Template-based (no LLM calls), feasibility gating
+
+**routers/academic_report.py** (v3.4.0):
+- `POST /api/academic-report` → full APA report (60s timeout, 24h cache)
+- `POST /api/network-overview` → lightweight network stats
 
 ---
 
@@ -409,6 +423,33 @@ interface GraphStore {
   "updated_at": "..."
 }
 ```
+
+### POST /api/academic-report (v3.4.0)
+
+Generate APA 7th formatted academic analysis report.
+
+**Input:**
+- `graph_context.papers`: Paper[] with id, title, year, citation_count, cluster_id, cluster_label, authors, fields
+- `graph_context.edges`: GraphEdge[] with source, target, type, weight
+- `graph_context.clusters`: Cluster[] with id, label, paper_count
+- `gap_ids`: optional string[] to include gap analysis
+- `analysis_parameters`: optional overrides (n_neighbors, min_cluster_size, etc.)
+
+**Output:**
+- `methods_section`: APA 7th Methods text (5 subsections)
+- `tables`: { table_1..table_5 } with title, headers, rows, note
+- `figure_captions`: { figure_1..figure_3 }
+- `reference_list`: methodology_refs + analysis_refs
+- `network_metrics`: full SNA metrics object
+- `feasibility`: 'full' | 'partial' | 'insufficient'
+- `warnings`: string[]
+
+### POST /api/network-overview (v3.4.0)
+
+Lightweight network statistics.
+
+**Input:** Same graph_context structure.
+**Output:** { node_count, edge_count, density, cluster_count, modularity }
 
 ---
 
