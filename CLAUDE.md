@@ -82,10 +82,12 @@ backend/
 │   ├── graphs.py          # CRUD saved graphs (auth required, JSONB graph_data)
 │   ├── seed_explore.py    # POST /api/seed-explore — seed paper graph expansion
 │   ├── paper_search.py    # POST /api/paper-search — NL query → paper selection
-│   └── seed_chat.py       # POST /api/seed-chat — Groq-powered graph chat
+│   ├── seed_chat.py       # POST /api/seed-chat — Groq-powered graph chat + action markers
+│   └── bookmarks.py       # CRUD paper bookmarks with tags/memos (auth required)
 └── database/
     └── migrations/
-        └── 003_seed_graphs.sql  # ALTER TABLE add graph_data JSONB column
+        ├── 003_seed_graphs.sql          # ALTER TABLE add graph_data JSONB column
+        └── 005_paper_bookmarks.sql      # paper_bookmarks table with GIN tag index
 ```
 
 ### Frontend Directory
@@ -157,7 +159,12 @@ frontend/
 | POST | `/api/papers/{id}/expand-stable` | Expand node with incremental layout |
 | GET | `/api/papers/{id}/intents` | Citation intent classification |
 | GET | `/api/papers/by-doi?doi=...` | DOI lookup |
-| POST | `/api/seed-chat` | Groq chat about graph context |
+| POST | `/api/seed-chat` | Groq chat about graph context + action markers |
+| POST | `/api/bookmarks` | Create/upsert paper bookmark (auth) |
+| GET | `/api/bookmarks` | List bookmarks, optional `?tag=` filter (auth) |
+| GET | `/api/bookmarks/paper/{paper_id}` | Get bookmark for specific paper (auth) |
+| PUT | `/api/bookmarks/{id}` | Update bookmark tags/memo (auth) |
+| DELETE | `/api/bookmarks/{id}` | Delete bookmark (auth) |
 | GET | `/api/graphs` | List saved graphs (auth) |
 | POST | `/api/graphs` | Save graph with JSONB data (auth) |
 | GET | `/api/graphs/{id}` | Load saved graph (auth) |
@@ -180,12 +187,15 @@ Seed explore returns: `{ nodes: Paper[], edges: GraphEdge[], clusters: Cluster[]
 - Twinkle: GLSL shader — 1.5Hz (old) → 6.0Hz (new papers)
 - Star layers: glow sprite (additive), lens flare (selected), corona (OA), supernova (top 10%), binary (bridge)
 - Frontier nodes: red ring (#FF4444) for papers with frontier_score > 0.7
+- Selected node: gold pulsing ring (sin-wave opacity), enlarged label (fontSize 20) with dark background box
+- Panel selection triggers camera auto-focus (1s animation, z+200 offset)
 
 ### Edge Visual Mapping (Light Streams)
 - Citation: 4 cyan particles flowing, intent-colored when intents loaded
 - Similarity: Dashed lines (#4a90d9), no particles
 - Citation Path: Gold (#FFD700) highlighted edges
-- Intent colors: Background=#95A5A6, Methodology=#9B59B6, Result=#4A90D9, Supports=#2ECC71, Contradicts=#E74C3C, Extends=#3498DB, Applies=#E67E22, Compares=#1ABC9C
+- Intent colors: Background=#95A5A6, Methodology=#9B59B6, Result=#4A90D9 (Enhanced intents removed in v3.2.0)
+- Gap hover: cluster pair at full opacity, others at 0.05; potential edges shown as dashed gold
 - **Edge Visualization Modes** (v3.1.0, store: `edgeVisMode`):
   - `similarity` (default): Intent-based coloring as above
   - `temporal`: Gold→gray lerp based on |yearA - yearB| / 10
@@ -238,6 +248,9 @@ Key state slices:
 - `highlightedPaperIds`: Set<string> — hover highlights from gap panel
 - `activeTab`: 'clusters' | 'gaps' | 'chat' — left panel tab selection
 - `edgeVisMode`: 'similarity' | 'temporal' | 'crossCluster' — edge visualization mode (v3.1.0)
+- `panelSelectionId`: string | null — triggers camera focus on panel paper click (v3.2.0)
+- `highlightedClusterPair`: [number, number] | null — dims all except gap-hovered clusters (v3.2.0)
+- `hoveredGapEdges`: potential edges array — renders dashed gold links on gap hover (v3.2.0)
 
 ## Documentation Map
 
@@ -250,6 +263,7 @@ Key state slices:
 | PHILOSOPHY | docs/PHILOSOPHY.md |
 | TECH_PROOF | docs/TECH_PROOF.md |
 | DESIGN_THEME | docs/DESIGN_THEME.md |
+| RELEASE_v3.2.0 | docs/RELEASE_v3.2.0.md |
 | RELEASE_v3.1.0 | docs/RELEASE_v3.1.0.md |
 | RELEASE_v3.0.2 | docs/RELEASE_v3.0.2.md |
 | RELEASE_v3.0.1 | docs/RELEASE_v3.0.1.md |
@@ -283,6 +297,18 @@ Key state slices:
 - Graph save/load with JSONB: 003_seed_graphs.sql
 - Tabbed left panel: Clusters | Gaps | Chat
 - Depth control: 1/2/3 hop exploration
+
+### v3.2.0 Gap Spotter UX + Bookmarks + Chat Actions (2026-02-24)
+- Gap hover: cluster pair highlight (opacity 1 vs 0.05) + potential edges as dashed gold
+- Camera auto-focus: panel paper clicks animate camera to node (1s, z+200)
+- Selection ring: gold pulsing RingGeometry with sin-wave opacity animation via CosmicAnimationManager
+- Label enhancement: selected node gets fontSize 20, scale 50x13, dark rounded background box
+- Mode-responsive legend: dynamic content per edgeVisMode (Citation Context / Temporal / Cross-Cluster)
+- Enhanced intents removed: unused enhanced_intent field and ENHANCED_INTENT_COLORS deleted
+- Research questions restored: fixed `research_questions=[]` → `gap.research_questions`, expanded to 5 categories
+- Bookmarks (P10): CRUD API (`/api/bookmarks`), toggle from OBJECT SCAN, tags + memos, PostgreSQL + GIN index
+- Chat Actions (P13): LLM action markers parsed → interactive buttons (highlight, select, cluster, edge mode, path)
+- Chat context: paper IDs and cluster IDs in system prompt for grounded action generation
 
 ### v3.1.0 UX Overhaul (2026-02-23)
 - Push layout: right panel is flex sibling, not overlay — 3D view stays visible

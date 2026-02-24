@@ -12,7 +12,6 @@ import dynamic from 'next/dynamic';
 import * as THREE from 'three';
 import { useGraphStore } from '@/hooks/useGraphStore';
 import type { Paper, CitationIntent } from '@/types';
-import { ENHANCED_INTENT_COLORS } from '@/types';
 import { createStarNode } from './cosmic/starNodeRenderer';
 import { createNebulaCluster } from './cosmic/nebulaClusterRenderer';
 import CosmicAnimationManager from './cosmic/CosmicAnimationManager';
@@ -145,6 +144,10 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     expandedFromMap,
     activePath,
     edgeVisMode,
+    panelSelectionId,
+    setPanelSelectionId,
+    highlightedClusterPair,
+    hoveredGapEdges,
   } = useGraphStore();
 
   const lastClickRef = useRef<{ nodeId: string; timestamp: number } | null>(
@@ -293,10 +296,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       if (ci) {
         isInfluential = ci.is_influential;
         intentContext = ci.context;
-        if (ci.enhanced_intent) {
-          intentColor = ENHANCED_INTENT_COLORS[ci.enhanced_intent];
-          intentLabel = ci.enhanced_intent;
-        } else if (ci.basic_intent) {
+        if (ci.basic_intent) {
           intentColor = INTENT_COLOR_MAP[ci.basic_intent];
           intentLabel = ci.basic_intent;
         }
@@ -371,8 +371,38 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         });
     }
 
+    // Potential edges from gap hover (dashed gold)
+    if (hoveredGapEdges.length > 0) {
+      hoveredGapEdges.forEach((pe) => {
+        links.push({
+          source: pe.source,
+          target: pe.target,
+          color: '#D4AF37',
+          width: 1.2,
+          edgeType: 'similarity' as const,
+          dashed: true,
+          intentLabel: 'potential',
+          intentContext: `Potential connection (${(pe.similarity * 100).toFixed(0)}%)`,
+        });
+      });
+    }
+
     return { nodes, links };
-  }, [graphData, yearRange, showCitationEdges, showSimilarityEdges, citationIntents, hiddenClusterIds, showGhostEdges, edgeVisMode]);
+  }, [graphData, yearRange, showCitationEdges, showSimilarityEdges, citationIntents, hiddenClusterIds, showGhostEdges, edgeVisMode, hoveredGapEdges]);
+
+  // Camera auto-focus when paper selected from panel
+  useEffect(() => {
+    if (!panelSelectionId || !fgRef.current) return;
+    const node = forceGraphData.nodes.find((n) => n.id === panelSelectionId);
+    if (node && node.x !== undefined && node.y !== undefined && node.z !== undefined) {
+      fgRef.current.cameraPosition(
+        { x: node.x, y: node.y, z: node.z! + 200 },
+        { x: node.x, y: node.y, z: node.z },
+        1000
+      );
+    }
+    setPanelSelectionId(null);
+  }, [panelSelectionId, forceGraphData.nodes, setPanelSelectionId]);
 
   // Node rendering
   const nodeThreeObject = useCallback(
@@ -391,6 +421,12 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       // === COSMIC THEME: Star nodes ===
       if (showCosmicTheme) {
         const cosmicOpacity = (() => {
+          // Gap hover: highlight only the two clusters
+          if (highlightedClusterPair) {
+            const [cidA, cidB] = highlightedClusterPair;
+            if (node.paper.cluster_id === cidA || node.paper.cluster_id === cidB) return 1;
+            return 0.05;
+          }
           if (isSelected || isHighlightedByPanel || isHighlighted) return 1;
           if (hasSelection) return 0.15;
           return node.opacity;
@@ -465,6 +501,22 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
           group.add(frontierRing);
         }
 
+        // Selection pulsing ring (gold, animated via CosmicAnimationManager)
+        if (isSelected) {
+          const selRingGeo = new THREE.RingGeometry(node.val * 2.2, node.val * 2.6, 48);
+          const selRingMat = new THREE.MeshBasicMaterial({
+            color: 0xD4AF37,
+            transparent: true,
+            opacity: 0.7,
+            side: THREE.DoubleSide,
+            depthWrite: false,
+          });
+          const selRing = new THREE.Mesh(selRingGeo, selRingMat);
+          selRing.rotation.x = Math.PI / 2;
+          selRing.userData.isSelectionPulse = true;
+          group.add(selRing);
+        }
+
         // Centrality-based label: show only top 20% OR highlighted/selected
         const showLabel = showLabels && node.name && (
           isSelected || isHighlighted || node.citationPercentile > 0.8
@@ -479,12 +531,43 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
             canvas.height = 64 * scale;
             ctx.scale(scale, scale);
 
-            const fontSize = isSelected ? 16 : 10 + 18 * node.citationPercentile;
+            const fontSize = isSelected ? 20 : 10 + 18 * node.citationPercentile;
             const labelOpacity = isSelected ? 1.0 :
               isHighlighted ? 0.9 :
               0.3 + 0.7 * node.citationPercentile;
 
+            const text = node.name.length > 18
+              ? node.name.substring(0, 16) + '..'
+              : node.name;
+
             ctx.font = `bold ${fontSize}px 'JetBrains Mono', monospace`;
+
+            // Background box for selected node label
+            if (isSelected) {
+              const metrics = ctx.measureText(text);
+              const textWidth = metrics.width;
+              const boxPadX = 8;
+              const boxPadY = 4;
+              const boxX = (canvas.width / scale / 2) - textWidth / 2 - boxPadX;
+              const boxY = (canvas.height / scale / 2) - fontSize / 2 - boxPadY;
+              const boxW = textWidth + boxPadX * 2;
+              const boxH = fontSize + boxPadY * 2;
+              const radius = 4;
+              ctx.fillStyle = 'rgba(0,0,0,0.65)';
+              ctx.beginPath();
+              ctx.moveTo(boxX + radius, boxY);
+              ctx.lineTo(boxX + boxW - radius, boxY);
+              ctx.quadraticCurveTo(boxX + boxW, boxY, boxX + boxW, boxY + radius);
+              ctx.lineTo(boxX + boxW, boxY + boxH - radius);
+              ctx.quadraticCurveTo(boxX + boxW, boxY + boxH, boxX + boxW - radius, boxY + boxH);
+              ctx.lineTo(boxX + radius, boxY + boxH);
+              ctx.quadraticCurveTo(boxX, boxY + boxH, boxX, boxY + boxH - radius);
+              ctx.lineTo(boxX, boxY + radius);
+              ctx.quadraticCurveTo(boxX, boxY, boxX + radius, boxY);
+              ctx.closePath();
+              ctx.fill();
+            }
+
             ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
             ctx.shadowBlur = 6;
             ctx.shadowOffsetX = 1;
@@ -498,9 +581,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(
-              node.name.length > 18
-                ? node.name.substring(0, 16) + '..'
-                : node.name,
+              text,
               canvas.width / scale / 2,
               canvas.height / scale / 2
             );
@@ -513,7 +594,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
               depthTest: false,
             });
             const sprite = new THREE.Sprite(spriteMaterial);
-            sprite.scale.set(40, 10, 1);
+            sprite.scale.set(isSelected ? 50 : 40, isSelected ? 13 : 10, 1);
             sprite.position.set(0, node.val + 5, 0);
             group.add(sprite);
           }
@@ -742,7 +823,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
 
       return group;
     },
-    [highlightSet, showLabels, showBloom, bridgeNodeIds, showOARings, showCitationAura, highlightedPaperIds, showCosmicTheme, yearRange]
+    [highlightSet, showLabels, showBloom, bridgeNodeIds, showOARings, showCitationAura, highlightedPaperIds, showCosmicTheme, yearRange, highlightedClusterPair]
   );
 
   // Link width
@@ -1588,7 +1669,13 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
   // Cosmic animation manager lifecycle
   useEffect(() => {
     if (showCosmicTheme) {
-      CosmicAnimationManager.getInstance().start();
+      const manager = CosmicAnimationManager.getInstance();
+      manager.start();
+      // Provide scene reference for selection pulse animation
+      if (fgRef.current) {
+        const scene = fgRef.current.scene?.();
+        if (scene) manager.setScene(scene);
+      }
     }
     return () => {
       CosmicAnimationManager.reset();

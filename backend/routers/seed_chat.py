@@ -6,6 +6,7 @@ powered by Groq llama-3.3-70b with server-side API key.
 """
 
 import logging
+import re
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException
@@ -54,9 +55,21 @@ class SeedChatRequest(BaseModel):
     history: List[ChatMessage] = []
 
 
+class ChatAction(BaseModel):
+    type: str  # highlight_papers | select_paper | show_cluster | set_edge_mode | find_path
+    paper_ids: Optional[List[str]] = None
+    paper_id: Optional[str] = None
+    cluster_id: Optional[int] = None
+    mode: Optional[str] = None
+    start: Optional[str] = None
+    end: Optional[str] = None
+    label: Optional[str] = None
+
+
 class SeedChatResponse(BaseModel):
     reply: str
     suggested_followups: List[str]
+    actions: List[ChatAction] = []
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -86,7 +99,7 @@ def _build_system_prompt(graph_context: GraphContext) -> str:
             # Truncate abstract to keep prompt compact
             abstract_str = f" Abstract: {p.abstract_snippet[:150].rstrip()}..."
         paper_lines.append(
-            f"{i}. [{p.year}] \"{p.title}\" by {authors_str} "
+            f"{i}. [ID:{p.paper_id}] [{p.year}] \"{p.title}\" by {authors_str} "
             f"(citations: {p.citation_count or 0}, fields: {fields_str}).{abstract_str}"
         )
 
@@ -94,7 +107,7 @@ def _build_system_prompt(graph_context: GraphContext) -> str:
 
     cluster_lines = []
     for c in graph_context.clusters:
-        cluster_lines.append(f"- {c.label} ({c.paper_count} papers)")
+        cluster_lines.append(f"- [Cluster {c.id}] {c.label} ({c.paper_count} papers)")
 
     clusters_section = "\n".join(cluster_lines) if cluster_lines else "No clusters identified."
 
@@ -118,7 +131,23 @@ YOUR ROLE:
 - Suggest follow-up questions to deepen exploration
 - Be concise but insightful; cite paper titles when relevant
 
-When you don't have enough context from the graph, say so clearly rather than speculating."""
+When you don't have enough context from the graph, say so clearly rather than speculating.
+
+ACTION MARKERS (optional):
+When your answer identifies specific papers, clusters, or suggests graph interactions, you may append action markers at the END of your reply. These are processed by the frontend to create interactive buttons.
+
+Available markers:
+- [ACTION:highlight:id1,id2,...] — Highlight specific papers in the graph
+- [ACTION:select:paper_id] — Select and focus on a paper
+- [ACTION:cluster:cluster_id] — Show a specific cluster
+- [ACTION:edge_mode:similarity|temporal|crossCluster] — Change edge visualization mode
+- [ACTION:path:start_id,end_id] — Find citation path between two papers
+
+Rules:
+- Only use IDs that appear in the graph context above
+- Place markers on their own line at the very end of your reply
+- You may use multiple markers
+- Markers are optional — only use when genuinely helpful"""
 
     return system_prompt
 
@@ -142,6 +171,66 @@ def _build_followups(graph_context: GraphContext) -> List[str]:
         followups.append("What methodologies are most commonly used?")
 
     return followups[:3]
+
+
+ACTION_PATTERN = re.compile(r'\[ACTION:(highlight|select|cluster|edge_mode|path):([^\]]+)\]')
+
+
+def _parse_actions(reply: str) -> tuple[str, list[ChatAction]]:
+    """
+    Extract action markers from LLM reply.
+    Returns (cleaned_reply, actions).
+    """
+    actions: list[ChatAction] = []
+
+    for match in ACTION_PATTERN.finditer(reply):
+        action_type = match.group(1)
+        params = match.group(2).strip()
+
+        try:
+            if action_type == 'highlight':
+                ids = [pid.strip() for pid in params.split(',') if pid.strip()]
+                if ids:
+                    actions.append(ChatAction(
+                        type='highlight_papers',
+                        paper_ids=ids,
+                        label=f'Highlight {len(ids)} papers',
+                    ))
+            elif action_type == 'select':
+                actions.append(ChatAction(
+                    type='select_paper',
+                    paper_id=params,
+                    label='Focus on paper',
+                ))
+            elif action_type == 'cluster':
+                actions.append(ChatAction(
+                    type='show_cluster',
+                    cluster_id=int(params),
+                    label='Show cluster',
+                ))
+            elif action_type == 'edge_mode':
+                if params in ('similarity', 'temporal', 'crossCluster'):
+                    actions.append(ChatAction(
+                        type='set_edge_mode',
+                        mode=params,
+                        label=f'Switch to {params} view',
+                    ))
+            elif action_type == 'path':
+                parts = [p.strip() for p in params.split(',')]
+                if len(parts) == 2:
+                    actions.append(ChatAction(
+                        type='find_path',
+                        start=parts[0],
+                        end=parts[1],
+                        label='Find citation path',
+                    ))
+        except (ValueError, IndexError):
+            continue  # Skip malformed markers
+
+    # Remove markers from reply
+    cleaned = ACTION_PATTERN.sub('', reply).rstrip('\n').rstrip()
+
+    return cleaned, actions
 
 
 # ─── Endpoint ─────────────────────────────────────────────────────────────────
@@ -204,9 +293,13 @@ async def seed_chat(request: SeedChatRequest):
     finally:
         await provider.close()
 
+    # Parse action markers from LLM reply
+    cleaned_reply, actions = _parse_actions(reply)
+
     suggested_followups = _build_followups(request.graph_context)
 
     return SeedChatResponse(
-        reply=reply,
+        reply=cleaned_reply,
         suggested_followups=suggested_followups,
+        actions=actions,
     )

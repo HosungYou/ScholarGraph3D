@@ -40,6 +40,16 @@ interface GraphStore {
   setGaps: (gaps: StructuralGap[]) => void;
   setFrontierIds: (ids: string[]) => void;
 
+  // Panel selection → camera focus
+  panelSelectionId: string | null;
+  setPanelSelectionId: (id: string | null) => void;
+
+  // Gap visualization
+  highlightedClusterPair: [number, number] | null;
+  setHighlightedClusterPair: (pair: [number, number] | null) => void;
+  hoveredGapEdges: { source: string; target: string; similarity: number }[];
+  setHoveredGapEdges: (edges: { source: string; target: string; similarity: number }[]) => void;
+
   // Phase 4: Timeline
   showTimeline: boolean;
 
@@ -118,6 +128,14 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
   frontierIds: [],
   setGaps: (gaps: StructuralGap[]) => set({ gaps }),
   setFrontierIds: (ids: string[]) => set({ frontierIds: ids }),
+
+  panelSelectionId: null,
+  setPanelSelectionId: (id) => set({ panelSelectionId: id }),
+
+  highlightedClusterPair: null,
+  setHighlightedClusterPair: (pair) => set({ highlightedClusterPair: pair }),
+  hoveredGapEdges: [],
+  setHoveredGapEdges: (edges) => set({ hoveredGapEdges: edges }),
 
   showTimeline: false,
 

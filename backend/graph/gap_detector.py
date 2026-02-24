@@ -213,7 +213,10 @@ class GapDetector:
             if top_bridge:
                 questions.append(f"How does the work on '{top_bridge[:80]}' bridge these two research areas?")
 
-        return questions[:3]
+        questions.append(f"What datasets or tools from {label_a} could advance research in {label_b}?")
+        questions.append(f"Could a unified theoretical framework encompass both {label_a} and {label_b}?")
+
+        return questions[:5]
 
     def _compute_connectivity(
         self,

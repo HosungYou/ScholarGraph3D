@@ -141,56 +141,69 @@ export default function GraphLegend() {
         </div>
       </div>
 
-      {/* Citation Intent Colors */}
+      {/* Mode-specific edge context */}
       <div className="mb-1.5 pt-1.5 border-t border-[#1A1A1A]/70">
-        <div className="text-[10px] font-mono uppercase tracking-widest text-text-primary/60 mb-1">
-          Edge Intents
-        </div>
-        <div className="flex flex-col gap-0.5">
-          <div className="flex items-center gap-2">
-            <div className="w-5 h-0 border-t-2 flex-shrink-0" style={{ borderColor: '#95A5A6' }} />
-            <span>Background</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-5 h-0 border-t-2 flex-shrink-0" style={{ borderColor: '#9B59B6' }} />
-            <span>Methodology</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-5 h-0 border-t-2 flex-shrink-0" style={{ borderColor: '#4A90D9' }} />
-            <span>Result/Comparison</span>
-          </div>
-        </div>
-
-        {(
-          <div className="mt-1 pt-1 border-t border-[#1A1A1A]/50">
-            <div className="text-[10px] text-[#999999]/50 mb-0.5">Enhanced</div>
+        {edgeVisMode === 'similarity' && (
+          <>
+            <div className="text-[10px] font-mono uppercase tracking-widest text-text-primary/60 mb-1">
+              Citation Context
+            </div>
             <div className="flex flex-col gap-0.5">
               <div className="flex items-center gap-2">
-                <div className="w-5 h-0 border-t-2 flex-shrink-0" style={{ borderColor: '#2ECC71' }} />
-                <span>Supports</span>
+                <div className="w-5 h-0 border-t-2 flex-shrink-0" style={{ borderColor: '#95A5A6' }} />
+                <span>Background</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-5 h-0 border-t-2 flex-shrink-0" style={{ borderColor: '#E74C3C' }} />
-                <span>Contradicts</span>
+                <div className="w-5 h-0 border-t-2 flex-shrink-0" style={{ borderColor: '#9B59B6' }} />
+                <span>Methodology</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-5 h-0 border-t-2 flex-shrink-0" style={{ borderColor: '#3498DB' }} />
-                <span>Extends</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-5 h-0 border-t-2 flex-shrink-0" style={{ borderColor: '#E67E22' }} />
-                <span>Applies</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-5 h-0 border-t-2 flex-shrink-0" style={{ borderColor: '#1ABC9C' }} />
-                <span>Compares</span>
+                <div className="w-5 h-0 border-t-2 flex-shrink-0" style={{ borderColor: '#4A90D9' }} />
+                <span>Result/Comparison</span>
               </div>
             </div>
-          </div>
+            <div className="text-[10px] text-[#999999]/40 mt-1 italic">
+              Hover edges for details
+            </div>
+          </>
         )}
-        <div className="text-[10px] text-[#999999]/40 mt-1 italic">
-          Hover edges for details
-        </div>
+        {edgeVisMode === 'temporal' && (
+          <>
+            <div className="text-[10px] font-mono uppercase tracking-widest text-text-primary/60 mb-1">
+              Temporal Encoding
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-0.5 bg-[#D4AF37] flex-shrink-0 rounded-full" />
+                <span>Close in time</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-0.5 bg-[#666666] flex-shrink-0 rounded-full" />
+                <span>Distant in time</span>
+              </div>
+            </div>
+            <div className="text-[10px] text-[#999999]/40 mt-1 italic">
+              Gold → gray = year gap
+            </div>
+          </>
+        )}
+        {edgeVisMode === 'crossCluster' && (
+          <>
+            <div className="text-[10px] font-mono uppercase tracking-widest text-text-primary/60 mb-1">
+              Cross-Cluster
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-0.5 bg-[#D4AF37] flex-shrink-0 rounded-full" />
+                <span>Inter-cluster (thick)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-px bg-[#333333] flex-shrink-0 rounded-full" />
+                <span>Intra-cluster (thin)</span>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Cluster */}

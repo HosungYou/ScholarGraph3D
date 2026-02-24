@@ -17,7 +17,7 @@ from database import db, init_db, close_db
 from integrations.semantic_scholar import init_s2_client, close_s2_client
 from auth.supabase_client import supabase_client
 from auth.middleware import AuthMiddleware
-from routers import papers, graphs
+from routers import papers, graphs, bookmarks
 from routers.seed_explore import router as seed_explore_router
 from routers.paper_search import router as paper_search_router
 from routers.seed_chat import router as seed_chat_router
@@ -123,6 +123,7 @@ app.include_router(graphs.router, tags=["Graphs"])
 app.include_router(seed_explore_router, tags=["Seed Explore"])
 app.include_router(paper_search_router, tags=["Paper Search"])
 app.include_router(seed_chat_router, tags=["Seed Chat"])
+app.include_router(bookmarks.router, tags=["Bookmarks"])
 
 
 # ==================== Health Endpoints ====================

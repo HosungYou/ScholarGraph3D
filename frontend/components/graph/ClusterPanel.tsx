@@ -17,6 +17,7 @@ export default function ClusterPanel() {
     clearHighlightedPaperIds,
     selectPaper,
     selectedPaper,
+    setPanelSelectionId,
   } = useGraphStore();
 
   const [expandedPaperList, setExpandedPaperList] = useState<number | null>(null);
@@ -351,7 +352,10 @@ export default function ClusterPanel() {
                 {(showAllPapers ? clusterPapers : clusterPapers.slice(0, 10)).map((paper) => (
                   <button
                     key={paper.id}
-                    onClick={() => selectPaper(paper)}
+                    onClick={() => {
+                      selectPaper(paper);
+                      setPanelSelectionId(paper.id);
+                    }}
                     className={`w-full text-left p-2 rounded-lg transition-all group ${
                       selectedPaper?.id === paper.id
                         ? 'bg-[rgba(212,175,55,0.06)] border-l-2 border-[#D4AF37] border-t border-r border-b border-t-[rgba(212,175,55,0.12)] border-r-[rgba(212,175,55,0.12)] border-b-[rgba(212,175,55,0.12)]'

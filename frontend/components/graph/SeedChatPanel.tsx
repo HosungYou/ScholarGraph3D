@@ -3,12 +3,15 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useGraphStore } from '@/hooks/useGraphStore';
 import { api } from '@/lib/api';
-import { MessageCircle, Send, Loader2 } from 'lucide-react';
+import { MessageCircle, Send, Loader2, Zap } from 'lucide-react';
+import type { ChatAction } from '@/types';
+import { findCitationPath } from '@/lib/utils';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   followups?: string[];
+  actions?: ChatAction[];
 }
 
 function buildGraphContext(graphData: NonNullable<ReturnType<typeof useGraphStore.getState>['graphData']>) {
@@ -53,8 +56,27 @@ function getInitialSuggestions(graphData: NonNullable<ReturnType<typeof useGraph
   return suggestions;
 }
 
+function ActionButtons({ actions, onExecute }: { actions: ChatAction[]; onExecute: (action: ChatAction) => void }) {
+  if (!actions || actions.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap gap-1.5 mt-2 pl-1">
+      {actions.map((action, i) => (
+        <button
+          key={i}
+          onClick={() => onExecute(action)}
+          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-mono bg-[#D4AF37]/08 hover:bg-[#D4AF37]/15 text-[#D4AF37]/80 hover:text-[#D4AF37] border border-[#D4AF37]/15 hover:border-[#D4AF37]/30 transition-all"
+        >
+          <Zap className="w-3 h-3" />
+          {action.label || action.type.replace(/_/g, ' ')}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function SeedChatPanel() {
-  const { graphData } = useGraphStore();
+  const { graphData, setHighlightedPaperIds, selectPaper, setActiveTab, setEdgeVisMode, setPathStart, setPathEnd, setActivePath } = useGraphStore();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -95,6 +117,7 @@ export default function SeedChatPanel() {
         role: 'assistant',
         content: result.reply,
         followups: result.suggested_followups,
+        actions: result.actions,
       };
       setMessages((prev) => [...prev, assistantMsg]);
     } catch (err) {
@@ -123,6 +146,52 @@ export default function SeedChatPanel() {
     },
     [input, sendMessage]
   );
+
+  const executeAction = useCallback((action: ChatAction) => {
+    if (!graphData) return;
+
+    switch (action.type) {
+      case 'highlight_papers':
+        if (action.paper_ids) {
+          setHighlightedPaperIds(new Set(action.paper_ids));
+        }
+        break;
+      case 'select_paper':
+        if (action.paper_id) {
+          const paper = graphData.nodes.find((n) => n.id === action.paper_id);
+          if (paper) {
+            selectPaper(paper);
+            window.dispatchEvent(new CustomEvent('focusPaper', { detail: { paperId: paper.id } }));
+          }
+        }
+        break;
+      case 'show_cluster':
+        if (action.cluster_id != null) {
+          setActiveTab('clusters');
+          const cluster = graphData.clusters.find((c) => c.id === action.cluster_id);
+          if (cluster) {
+            const clusterPaperIds = graphData.nodes
+              .filter((n) => n.cluster_id === cluster.id)
+              .map((n) => n.id);
+            setHighlightedPaperIds(new Set(clusterPaperIds));
+          }
+        }
+        break;
+      case 'set_edge_mode':
+        if (action.mode && ['similarity', 'temporal', 'crossCluster'].includes(action.mode)) {
+          setEdgeVisMode(action.mode as 'similarity' | 'temporal' | 'crossCluster');
+        }
+        break;
+      case 'find_path':
+        if (action.start && action.end) {
+          setPathStart(action.start);
+          setPathEnd(action.end);
+          const path = findCitationPath(action.start, action.end, graphData.edges);
+          setActivePath(path);
+        }
+        break;
+    }
+  }, [graphData, setHighlightedPaperIds, selectPaper, setActiveTab, setEdgeVisMode, setPathStart, setPathEnd, setActivePath]);
 
   const isEmpty = messages.length === 0;
 
@@ -192,6 +261,10 @@ export default function SeedChatPanel() {
                 <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
               </div>
             </div>
+
+            {msg.role === 'assistant' && msg.actions && msg.actions.length > 0 && (
+              <ActionButtons actions={msg.actions} onExecute={executeAction} />
+            )}
 
             {msg.role === 'assistant' &&
               msg.followups &&

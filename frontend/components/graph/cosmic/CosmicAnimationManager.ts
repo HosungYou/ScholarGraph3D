@@ -10,6 +10,7 @@ class CosmicAnimationManager {
   private static instance: CosmicAnimationManager | null = null;
   private animatedObjects: AnimatedObject[] = [];
   private shaderMaterials: THREE.ShaderMaterial[] = [];
+  private scene: THREE.Scene | null = null;
   private frameId: number = 0;
   private running = false;
   private startTime = 0;
@@ -61,9 +62,14 @@ class CosmicAnimationManager {
     if (idx !== -1) this.animatedObjects.splice(idx, 1);
   }
 
+  setScene(scene: THREE.Scene | null) {
+    this.scene = scene;
+  }
+
   clear() {
     this.animatedObjects = [];
     this.shaderMaterials = [];
+    this.scene = null;
   }
 
   private loop = () => {
@@ -93,6 +99,16 @@ class CosmicAnimationManager {
         // Object disposed — remove stale reference
         this.animatedObjects.splice(i, 1);
       }
+    }
+
+    // Animate selection pulse rings via scene traverse
+    if (this.scene) {
+      this.scene.traverse((obj) => {
+        if (obj.userData.isSelectionPulse && obj instanceof THREE.Mesh) {
+          const mat = obj.material as THREE.MeshBasicMaterial;
+          mat.opacity = 0.3 + 0.4 * Math.abs(Math.sin(time * 2.1));
+        }
+      });
     }
   };
 

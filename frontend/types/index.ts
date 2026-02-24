@@ -131,16 +131,31 @@ export interface CitationIntent {
   citing_id: string;
   cited_id: string;
   basic_intent?: 'methodology' | 'background' | 'result_comparison';
-  enhanced_intent?: 'supports' | 'contradicts' | 'extends' | 'applies' | 'compares';
   confidence?: number;
   context?: string;
   is_influential: boolean;
 }
 
-export const ENHANCED_INTENT_COLORS: Record<string, string> = {
-  supports: '#2ECC71',     // green
-  contradicts: '#E74C3C',  // red
-  extends: '#3498DB',      // blue
-  applies: '#9B59B6',      // purple
-  compares: '#F39C12',     // orange
-};
+// ─── Bookmarks (P10) ─────────────────────────────────────────────────
+
+export interface Bookmark {
+  id: string;
+  paper_id: string;
+  tags: string[];
+  memo: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// ─── Chat Actions (P13) ─────────────────────────────────────────────
+
+export interface ChatAction {
+  type: 'highlight_papers' | 'select_paper' | 'show_cluster' | 'set_edge_mode' | 'find_path';
+  paper_ids?: string[];
+  paper_id?: string;
+  cluster_id?: number;
+  mode?: string;
+  start?: string;
+  end?: string;
+  label?: string;
+}

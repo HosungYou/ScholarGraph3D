@@ -13,6 +13,9 @@ export default function GapSpotterPanel() {
     selectPaper,
     setHighlightedPaperIds,
     clearHighlightedPaperIds,
+    setPanelSelectionId,
+    setHighlightedClusterPair,
+    setHoveredGapEdges,
   } = useGraphStore();
 
   const frontierPapers = useMemo(() => {
@@ -60,11 +63,18 @@ export default function GapSpotterPanel() {
             gap={gap}
             graphData={graphData!}
             selectPaper={selectPaper}
+            setPanelSelectionId={setPanelSelectionId}
             onMouseEnter={() => {
               const ids = new Set(gap.bridge_papers.map((bp) => bp.paper_id));
               setHighlightedPaperIds(ids);
+              setHighlightedClusterPair([gap.cluster_a.id, gap.cluster_b.id]);
+              setHoveredGapEdges(gap.potential_edges);
             }}
-            onMouseLeave={() => clearHighlightedPaperIds()}
+            onMouseLeave={() => {
+              clearHighlightedPaperIds();
+              setHighlightedClusterPair(null);
+              setHoveredGapEdges([]);
+            }}
           />
         ))}
       </div>
@@ -88,7 +98,10 @@ export default function GapSpotterPanel() {
             {frontierPapers.slice(0, 8).map((paper) => (
               <button
                 key={paper.id}
-                onClick={() => selectPaper(paper)}
+                onClick={() => {
+                  selectPaper(paper);
+                  setPanelSelectionId(paper.id);
+                }}
                 onMouseEnter={() => setHighlightedPaperIds(new Set([paper.id]))}
                 onMouseLeave={() => clearHighlightedPaperIds()}
                 className="w-full text-left p-2 rounded-lg border border-[rgba(212,175,55,0.08)] bg-[rgba(212,175,55,0.02)] hover:border-[rgba(212,175,55,0.15)] hover:bg-[rgba(212,175,55,0.04)] transition-all group"
@@ -125,11 +138,12 @@ interface GapCardProps {
   gap: StructuralGap;
   graphData: NonNullable<ReturnType<typeof useGraphStore.getState>['graphData']>;
   selectPaper: (paper: Paper) => void;
+  setPanelSelectionId: (id: string | null) => void;
   onMouseEnter: () => void;
   onMouseLeave: () => void;
 }
 
-function GapCard({ gap, graphData, selectPaper, onMouseEnter, onMouseLeave }: GapCardProps) {
+function GapCard({ gap, graphData, selectPaper, setPanelSelectionId, onMouseEnter, onMouseLeave }: GapCardProps) {
   const strengthPct = Math.round(gap.gap_strength * 100);
 
   const strengthColor =
@@ -193,7 +207,12 @@ function GapCard({ gap, graphData, selectPaper, onMouseEnter, onMouseLeave }: Ga
                 return (
                   <button
                     key={bp.paper_id}
-                    onClick={() => fullPaper && selectPaper(fullPaper)}
+                    onClick={() => {
+                      if (fullPaper) {
+                        selectPaper(fullPaper);
+                        setPanelSelectionId(fullPaper.id);
+                      }
+                    }}
                     className="w-full flex items-start gap-1.5 px-1.5 py-1 rounded hover:bg-[rgba(255,255,255,0.04)] transition-colors text-left"
                   >
                     <div

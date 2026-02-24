@@ -442,7 +442,7 @@ async def _seed_explore_pipeline(request: SeedExploreRequest, start_time: float)
                             gap_strength=gap.gap_strength,
                             bridge_papers=gap.bridge_papers,
                             potential_edges=gap.potential_edges,
-                            research_questions=[],
+                            research_questions=gap.research_questions,
                         ))
 
                     logger.info(f"Gap detection: {len(gaps)} gaps found")

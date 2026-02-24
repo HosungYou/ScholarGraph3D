@@ -2,6 +2,8 @@ import type {
   GraphData,
   SavedGraph,
   CitationIntent,
+  Bookmark,
+  ChatAction,
 } from '@/types';
 import { getSession } from './supabase';
 
@@ -215,11 +217,59 @@ export const api = {
     message: string,
     graphContext: { papers: any[]; clusters: any[]; total_papers: number },
     history: { role: 'user' | 'assistant'; content: string }[]
-  ): Promise<{ reply: string; suggested_followups: string[] }> =>
+  ): Promise<{ reply: string; suggested_followups: string[]; actions?: ChatAction[] }> =>
     request(`${API_BASE}/api/seed-chat`, {
       method: 'POST',
       body: JSON.stringify({ message, graph_context: graphContext, history }),
     }),
+
+  // ─── Bookmarks (P10) ──────────────────────────────────────────────
+  getBookmarks: async (tag?: string): Promise<Bookmark[]> => {
+    const params = new URLSearchParams();
+    if (tag) params.set('tag', tag);
+    const qs = params.toString();
+    return request<Bookmark[]>(`${API_BASE}/api/bookmarks${qs ? '?' + qs : ''}`);
+  },
+
+  getBookmarkForPaper: async (paperId: string): Promise<Bookmark | null> => {
+    try {
+      return await request<Bookmark>(
+        `${API_BASE}/api/bookmarks/paper/${encodeURIComponent(paperId)}`
+      );
+    } catch {
+      return null; // 404 = no bookmark
+    }
+  },
+
+  createBookmark: async (data: {
+    paper_id: string;
+    tags?: string[];
+    memo?: string;
+  }): Promise<Bookmark> =>
+    request<Bookmark>(`${API_BASE}/api/bookmarks`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateBookmark: async (
+    id: string,
+    data: { tags?: string[]; memo?: string }
+  ): Promise<Bookmark> =>
+    request<Bookmark>(`${API_BASE}/api/bookmarks/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteBookmark: async (id: string): Promise<void> => {
+    const authHeaders = await getAuthHeaders();
+    const response = await fetch(`${API_BASE}/api/bookmarks/${id}`, {
+      method: 'DELETE',
+      headers: { ...authHeaders },
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to delete bookmark: ${response.status}`);
+    }
+  },
 
   // ─── Seed Paper Exploration ──────────────────────────────────────
   seedExplore: (
