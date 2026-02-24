@@ -1,6 +1,6 @@
 # ScholarGraph3D — System Architecture
 
-> **Version:** 1.6 | **Last Updated:** 2026-02-24
+> **Version:** 1.7 | **Last Updated:** 2026-02-24
 > **Related:** [PRD.md](./PRD.md) | [SPEC.md](./SPEC.md) | [SDD/TDD Plan](./SDD_TDD_PLAN.md)
 
 ---
@@ -223,7 +223,7 @@ backend/
 │   ├── bridge_detector.py     # Phase 1.5: cross-cluster bridge node detection (top-5%)
 │   ├── incremental_layout.py  # Phase 1.5: k-NN position interpolation for stable expand
 │   ├── trend_analyzer.py      # Phase 2: emerging/stable/declining classification
-│   ├── gap_detector.py        # Phase 2: inter-cluster gap detection + bridge papers
+│   ├── gap_detector.py        # Phase 2: multi-dimensional gap detection (5-dim scoring)
 │   └── graph_rag.py           # Phase 2: RAG context builder for LLM chat
 ├── llm/
 │   ├── base.py                # Abstract BaseLLMProvider + LLMResponse
@@ -238,6 +238,7 @@ backend/
 │   ├── watch_service.py       # Watch query execution + OA search + similarity filter
 │   ├── email_service.py       # Resend API email digests
 │   ├── citation_intent.py     # S2 basic + LLM-enhanced 5-class intents
+│   ├── gap_report_service.py # Gap report evidence assembly + LLM narrative
 │   ├── lit_review.py          # LLM lit review generation + weasyprint PDF
 │   ├── query_normalizer.py    # Query normalization for cache hit rates (Groq llama-3.1-8b)
 │   └── query_parser.py        # NL→structured search params (Groq llama-3.3-70b)
@@ -254,7 +255,8 @@ backend/
 │   ├── lit_review.py          # Phase 3: /api/lit-review/generate + export-pdf
 │   ├── personalization.py     # Phase 5: /api/user profile, events, search-history, recommendations
 │   ├── seed_explore.py        # Phase 6: POST /api/seed-explore (seed paper graph expansion)
-│   └── seed_chat.py           # v2.0.0: POST /api/seed-chat — Groq chat + action markers (v3.2.0)
+│   ├── seed_chat.py           # v2.0.0: POST /api/seed-chat — Groq chat + action markers (v3.2.0)
+│   └── gap_report.py      # Gap report generation (POST /api/gaps/report)
 └── database/
     ├── 001_initial_schema.sql # papers, search_cache, user_graphs, watch_queries DDL
     ├── 002_personalization.sql # Phase 5: user_profiles, search_history, interactions, recommendations
@@ -543,7 +545,8 @@ frontend/
 │   ├── GraphControls.tsx          # Floating toggle buttons + reset camera
 │   ├── GapSpotterPanel.tsx        # Gap analysis between clusters
 │   ├── SeedChatPanel.tsx          # AI chat about the graph
-│   └── GraphLegend.tsx            # Visual guide legend
+│   ├── GraphLegend.tsx            # Visual guide legend
+│   └── GapReportView.tsx          # Gap Report — full report rendering with score bars + export
 ├── hooks/
 │   └── useGraphStore.ts           # Zustand store (single global state)
 ├── lib/
@@ -972,6 +975,7 @@ f"emb:{s2_paper_id}"           # SPECTER2 embedding (30d TTL)
 f"refs:{paper_id}:{limit}"     # S2 references list (7d TTL)
 f"cites:{paper_id}:{limit}"    # S2 citations list (7d TTL)
 f"search:{sha256_key}"         # Full keyword search response (24h TTL)
+f"gap_report:{hash}"          # Gap report evidence assembly (24h TTL)
 
 # PostgreSQL L3 cache — keyword search (legacy)
 cache_key = SHA-256(JSON({
@@ -992,6 +996,7 @@ cache_key = SHA-256(JSON({
 | Redis `emb:*` | 30 days | Redis TTL automatic |
 | Redis `refs:*` / `cites:*` | 7 days | Redis TTL automatic |
 | Redis `search:*` | 24h | Redis TTL automatic |
+| Redis `gap_report:*` | 24h | Redis TTL automatic |
 | `search_cache` (PostgreSQL) | 24h | `WHERE created_at > NOW() - INTERVAL '24 hours'` at read; periodic `DELETE` of entries > 48h old |
 | `oc_citation_cache` (PostgreSQL) | 30 days | `oc_stale_cache` view; manual cleanup via `DELETE WHERE fetched_at < NOW() - INTERVAL '30 days'` |
 

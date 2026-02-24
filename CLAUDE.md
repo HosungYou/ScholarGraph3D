@@ -17,7 +17,7 @@ v2.0 is a major simplification from v1.x — keyword search, multi-provider LLM,
 | 3D Rendering | react-force-graph-3d + Three.js 0.152.2 | Pin Three.js version (ESM compat) |
 | Backend | FastAPI + Python 3.11 | Async with asyncpg |
 | Database | PostgreSQL + pgvector (Supabase) | 768-dim SPECTER2 vectors |
-| Cache | Redis (Upstash) | seed-explore 24h, refs/cites 7d, embeddings 30d, graceful no-op |
+| Cache | Redis (Upstash) | seed-explore 24h, gap-report 24h, refs/cites 7d, embeddings 30d, graceful no-op |
 | Auth | Supabase Auth | JWT, Google/GitHub OAuth |
 | LLM | Groq (llama-3.3-70b) | Seed chat + research question generation |
 
@@ -54,10 +54,10 @@ cd frontend && npx jest
 ### Backend Directory
 ```
 backend/
-├── main.py              # FastAPI app with lifespan (registers 5 routers)
+├── main.py              # FastAPI app with lifespan (registers 6 routers)
 ├── config.py            # Pydantic Settings (env vars)
 ├── database.py          # asyncpg pool (global db singleton)
-├── cache.py             # Redis cache helpers (Upstash) — graceful no-op if unavailable
+├── cache.py             # Redis cache helpers (Upstash) — graceful no-op if unavailable, gap report 24h TTL
 ├── auth/                # Supabase JWT auth
 ├── middleware/
 │   ├── analytics.py         # Request analytics middleware
@@ -71,18 +71,20 @@ backend/
 │   ├── similarity.py          # Cosine similarity edges (>0.7)
 │   ├── bridge_detector.py     # Cross-cluster bridge node detection (top-5%)
 │   ├── incremental_layout.py  # k-NN position interpolation for stable expand
-│   └── gap_detector.py        # Inter-cluster gap detection + bridge papers + research questions
+│   └── gap_detector.py        # Inter-cluster gap detection + 5-dim scoring + bridge papers + research questions
 ├── llm/
 │   ├── base.py              # Abstract BaseLLMProvider + LLMResponse
 │   └── groq_provider.py     # LLaMA 3.3-70b (rate limiter + retry)
 ├── services/
-│   └── citation_intent.py   # S2 basic + enhanced citation intents
+│   ├── citation_intent.py   # S2 basic + enhanced citation intents
+│   └── gap_report_service.py # Gap report assembly + Groq narrative synthesis
 ├── routers/
 │   ├── papers.py          # Paper detail, expand-stable, intents, by-doi
 │   ├── graphs.py          # CRUD saved graphs (auth required, JSONB graph_data)
 │   ├── seed_explore.py    # POST /api/seed-explore — seed paper graph expansion
 │   ├── paper_search.py    # POST /api/paper-search — NL query → paper selection
 │   ├── seed_chat.py       # POST /api/seed-chat — Groq-powered graph chat + action markers
+│   ├── gap_report.py      # POST /api/gaps/report — Gap analysis report generation
 │   └── bookmarks.py       # CRUD paper bookmarks with tags/memos (auth required)
 └── database/
     └── migrations/
@@ -120,7 +122,8 @@ frontend/
 │   │   ├── ClusterPanel.tsx           # Sector Scanner — density, visibility, paper list, stats
 │   │   ├── GraphLegend.tsx            # Star Chart — field colors, size/edge/cluster visual guide
 │   │   ├── GraphControls.tsx          # Ship Controls — floating toggles
-│   │   ├── GapSpotterPanel.tsx        # Gap Spotter — research gaps, bridge papers, frontier papers
+│   │   ├── GapSpotterPanel.tsx        # Gap Spotter — research gaps, 5-dim scoring, bridge papers, frontier papers
+│   │   ├── GapReportView.tsx          # Gap Report — full report rendering with export (Markdown/BibTeX)
 │   │   └── SeedChatPanel.tsx          # Seed Chat — Groq-powered conversational graph exploration
 │   ├── auth/
 │   │   ├── LoginForm.tsx              # Login form
@@ -128,13 +131,13 @@ frontend/
 │   └── dashboard/
 │       └── SavedGraphs.tsx            # Saved graphs list/management
 ├── hooks/
-│   └── useGraphStore.ts       # Zustand state (graph data, UI state, gaps, frontier, paths)
+│   └── useGraphStore.ts       # Zustand state (graph data, UI state, gaps, gap reports, frontier, paths)
 ├── lib/
-│   ├── api.ts                 # Backend API client (seed-explore, paper-search, seed-chat, graphs)
+│   ├── api.ts                 # Backend API client (seed-explore, paper-search, seed-chat, gap-report, graphs)
 │   ├── auth-context.tsx       # Supabase auth context
 │   ├── supabase.ts            # Supabase client init
 │   ├── utils.ts               # Shared utilities (findCitationPath BFS)
-│   └── export.ts              # BibTeX/RIS export utilities
+│   └── export.ts              # BibTeX/RIS + Gap Report Markdown/BibTeX export utilities
 ├── types/
 │   └── index.ts               # All types (Paper, GraphData, StructuralGap, CitationIntent)
 ├── __tests__/                 # Jest test suite
@@ -160,6 +163,7 @@ frontend/
 | GET | `/api/papers/{id}/intents` | Citation intent classification |
 | GET | `/api/papers/by-doi?doi=...` | DOI lookup |
 | POST | `/api/seed-chat` | Groq chat about graph context + action markers |
+| POST | `/api/gaps/report` | Generate gap analysis report (Groq narrative + evidence) |
 | POST | `/api/bookmarks` | Create/upsert paper bookmark (auth) |
 | GET | `/api/bookmarks` | List bookmarks, optional `?tag=` filter (auth) |
 | GET | `/api/bookmarks/paper/{paper_id}` | Get bookmark for specific paper (auth) |
@@ -251,6 +255,8 @@ Key state slices:
 - `panelSelectionId`: string | null — triggers camera focus on panel paper click (v3.2.0)
 - `highlightedClusterPair`: [number, number] | null — dims all except gap-hovered clusters (v3.2.0)
 - `hoveredGapEdges`: potential edges array — renders dashed gold links on gap hover (v3.2.0)
+- `activeGapReport`: GapReport | null — currently displayed gap analysis report (v3.3.0)
+- `gapReportLoading`: boolean — gap report generation in progress (v3.3.0)
 
 ## Documentation Map
 
@@ -263,6 +269,7 @@ Key state slices:
 | PHILOSOPHY | docs/PHILOSOPHY.md |
 | TECH_PROOF | docs/TECH_PROOF.md |
 | DESIGN_THEME | docs/DESIGN_THEME.md |
+| RELEASE_v3.3.0 | docs/RELEASE_v3.3.0.md |
 | RELEASE_v3.2.0 | docs/RELEASE_v3.2.0.md |
 | RELEASE_v3.1.0 | docs/RELEASE_v3.1.0.md |
 | RELEASE_v3.0.2 | docs/RELEASE_v3.0.2.md |
@@ -297,6 +304,18 @@ Key state slices:
 - Graph save/load with JSONB: 003_seed_graphs.sql
 - Tabbed left panel: Clusters | Gaps | Chat
 - Depth control: 1/2/3 hop exploration
+
+### v3.3.0 Gap-to-Proposal: Enhanced Gap Score + Gap Report (2026-02-24)
+- Enhanced Gap Score: 5-dimensional scoring (structural/semantic/temporal/intent/directional) with weighted composite — zero additional S2 API calls
+- Gap Report generation: `POST /api/gaps/report` — structured evidence + Groq LLM narrative synthesis with graceful degradation
+- GapReportView: full cosmic HUD report rendering with executive summary, score breakdown bars, key papers, narrative sections, research questions, significance
+- 3D canvas snapshot: captures graph state on report generation, embedded in report
+- Export: Markdown + BibTeX download from GapReportView
+- Pipeline change: intent fetch now sequential before gap detection (was parallel) to enrich edge data
+- Cache: gap_report 24h TTL via Redis
+- GapSpotterPanel: score breakdown mini bars, key papers preview, "GENERATE REPORT" button per gap card
+- Types: `GapReport`, `GapReportSection`, `GapReportQuestion`, `GapScoreBreakdown`, `GapKeyPaper` interfaces
+- Zustand: `activeGapReport`, `gapReportLoading` state; conditional rendering in seed page
 
 ### v3.2.0 Gap Spotter UX + Bookmarks + Chat Actions (2026-02-24)
 - Gap hover: cluster pair highlight (opacity 1 vs 0.05) + potential edges as dashed gold

@@ -1,6 +1,6 @@
 # ScholarGraph3D — Technical Specification
 
-> **Version:** 1.3 | **Last Updated:** 2026-02-24
+> **Version:** 1.4 | **Last Updated:** 2026-02-24
 > **Related:** [PRD.md](./PRD.md) | [ARCHITECTURE.md](./ARCHITECTURE.md) | [SDD/TDD Plan](./SDD_TDD_PLAN.md)
 
 ---
@@ -873,6 +873,87 @@ The seed chat response now includes an optional `actions` array for interactive 
 | `show_cluster` | `cluster_id: number` | Navigate to a cluster |
 | `set_edge_mode` | `mode: string` | Switch visualization mode (similarity/temporal/crossCluster) |
 | `find_path` | `start: string, end: string` | Trace citation path between two papers |
+
+### 4.9 Gap Report Endpoint — v3.3.0
+
+#### `POST /api/gaps/report`
+
+Generate a structured gap analysis report with evidence assembly and LLM narrative synthesis.
+
+**Request Body:**
+```json
+{
+  "gap": {
+    "gap_id": "abc123...",
+    "cluster_a": { "id": 0, "label": "Deep Learning", "paper_count": 12 },
+    "cluster_b": { "id": 1, "label": "Optimization", "paper_count": 8 },
+    "gap_strength": 0.87,
+    "bridge_papers": [...],
+    "potential_edges": [...],
+    "research_questions": [...],
+    "gap_score_breakdown": {
+      "structural": 0.92,
+      "semantic": 0.71,
+      "temporal": 0.85,
+      "intent": 0.90,
+      "directional": 0.78,
+      "composite": 0.87
+    },
+    "key_papers_a": [{ "paper_id": "...", "title": "...", "tldr": "...", "citation_count": 42 }],
+    "key_papers_b": [...],
+    "temporal_context": { "year_range_a": [2018, 2024], "year_range_b": [2020, 2025], "overlap_years": 4 },
+    "intent_summary": { "background": 3, "methodology": 1, "result": 2 }
+  },
+  "graph_context": {
+    "papers": [{ "id": "...", "title": "...", "year": 2023, "citation_count": 10, "cluster": 0 }],
+    "clusters": [{ "id": 0, "label": "Deep Learning", "paper_count": 12 }],
+    "total_papers": 45
+  },
+  "snapshot_data_url": "data:image/png;base64,..."
+}
+```
+
+**Response 200:**
+```json
+{
+  "gap_id": "abc123...",
+  "title": "Gap Analysis: Deep Learning ↔ Optimization",
+  "generated_at": "2026-02-24T12:00:00Z",
+  "executive_summary": "This gap analysis reveals...",
+  "sections": [
+    { "id": "narrative", "title": "Narrative Synthesis", "content": "..." },
+    { "id": "evidence", "title": "Evidence Summary", "content": "..." }
+  ],
+  "research_questions": [
+    {
+      "question": "How can X bridge Y?",
+      "justification": "The gap score indicates...",
+      "methodology_hint": "Mixed methods approach..."
+    }
+  ],
+  "cited_papers": [
+    { "paper_id": "...", "title": "...", "tldr": "...", "citation_count": 42 }
+  ],
+  "bibtex": "@article{Author2023, ...}",
+  "raw_metrics": {
+    "structural": 0.92,
+    "semantic": 0.71,
+    "temporal": 0.85,
+    "intent": 0.90,
+    "directional": 0.78,
+    "composite": 0.87
+  },
+  "significance_statement": "This research direction...",
+  "limitations": "This analysis is based on...",
+  "snapshot_data_url": "data:image/png;base64,..."
+}
+```
+
+**Graceful degradation:** If Groq LLM fails, the response omits narrative sections and returns evidence-only content with `sections` containing structured evidence.
+
+**Cache:** `gap_report:{gap_id_hash}` with 24-hour TTL.
+
+**Implementation:** `backend/routers/gap_report.py`, `backend/services/gap_report_service.py`
 
 ---
 

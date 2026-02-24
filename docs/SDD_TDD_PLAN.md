@@ -169,3 +169,93 @@ Maintain fixtures in `tests/fixtures/` with:
 - Edge connectivity: ✅
 - Node structure: ✅
 - Pydantic model validation: ✅
+
+## 9. v3.3.0 Test Coverage — Gap-to-Proposal Pipeline
+
+### New Test File: `tests/test_graph/test_gap_detector_enhanced.py`
+
+| Test | Description | Type |
+|------|-------------|------|
+| `test_detect_gaps_returns_score_breakdown` | Each gap has `gap_score_breakdown` with 6 keys | Unit |
+| `test_structural_score_zero_edges_returns_one` | No inter-cluster edges → structural = 1.0 | Unit |
+| `test_structural_score_full_connectivity_returns_zero` | All possible edges → structural ≈ 0.0 | Unit |
+| `test_semantic_score_identical_centroids_returns_zero` | Same centroid → semantic = 0.0 | Unit |
+| `test_semantic_score_orthogonal_centroids_returns_one` | Orthogonal centroids → semantic = 1.0 | Unit |
+| `test_temporal_score_no_overlap` | Non-overlapping year ranges → temporal = 1.0 | Unit |
+| `test_temporal_score_full_overlap` | Identical year ranges → temporal = 0.0 | Unit |
+| `test_temporal_score_partial_overlap` | Partially overlapping → 0.0 < temporal < 1.0 | Unit |
+| `test_intent_score_all_background` | All background intents → score > 0.5 | Unit |
+| `test_intent_score_no_cross_citations` | No cross-cluster citations → score = 0.8 | Unit |
+| `test_directional_score_symmetric` | Equal A→B and B→A → score = 0.0 | Unit |
+| `test_directional_score_asymmetric` | Only A→B → score = 1.0 | Unit |
+| `test_directional_score_no_pairs` | No citation_pairs → score = 0.8 | Unit |
+| `test_composite_weighted_sum` | composite = 0.3*structural + 0.25*semantic + 0.15*(temporal+intent+directional) | Unit |
+| `test_gap_strength_equals_composite` | gap.gap_strength == gap.gap_score_breakdown['composite'] | Unit |
+| `test_key_papers_top_3_by_citations` | key_papers sorted by citation_count descending, max 3 | Unit |
+| `test_key_papers_includes_tldr` | key_papers contain tldr when available | Unit |
+| `test_temporal_context_year_ranges` | temporal_context has correct year_range_a, year_range_b, overlap_years | Unit |
+| `test_detect_gaps_backward_compat` | Calling without citation_pairs/intent_edges still works | Unit |
+| `test_all_scores_in_zero_one_range` | Every dimension score in [0.0, 1.0] | Unit |
+
+### New Test File: `tests/test_services/test_gap_report_service.py`
+
+| Test | Description | Type |
+|------|-------------|------|
+| `test_assemble_evidence_returns_all_sections` | Evidence has score_interpretation, cluster profiles, bridge, temporal, intent | Unit |
+| `test_assemble_evidence_empty_gap` | Minimal gap data → evidence with defaults | Unit |
+| `test_assemble_report_with_narrative` | Full report with LLM narrative sections | Unit |
+| `test_assemble_report_without_narrative` | Graceful degradation: evidence-only report | Unit |
+| `test_assemble_report_bibtex_format` | BibTeX entries are valid @article format | Unit |
+| `test_assemble_report_cited_papers_deduped` | No duplicate paper_ids in cited_papers | Unit |
+| `test_research_questions_from_narrative` | LLM questions include question, justification, methodology_hint | Unit |
+| `test_research_questions_fallback_heuristic` | Without narrative, heuristic questions used | Unit |
+| `test_compute_gap_report_cache_key_stable` | Same gap → same cache key | Unit |
+| `test_compute_gap_report_cache_key_different` | Different gaps → different keys | Unit |
+
+### New Test File: `tests/test_routers/test_gap_report.py`
+
+| Test | Description | Type |
+|------|-------------|------|
+| `test_generate_gap_report_200` | Valid request → 200 with all fields | Integration |
+| `test_generate_gap_report_missing_gap_id` | Missing gap_id → 400 | Integration |
+| `test_generate_gap_report_llm_failure_graceful` | LLM fails → 200 with evidence-only | Integration |
+| `test_generate_gap_report_cached` | Second call returns cached result | Integration |
+| `test_generate_gap_report_response_schema` | Response matches GapReportResponse model | Integration |
+
+### Coverage: Gap-to-Proposal pipeline
+- Gap score computation: ✅ (all 5 dimensions + composite)
+- Score ranges: ✅ (all values [0,1])
+- Backward compatibility: ✅ (old callers still work)
+- Report assembly: ✅ (with and without LLM)
+- BibTeX generation: ✅
+- Cache: ✅ (hit/miss/key stability)
+- API endpoint: ✅ (happy path, error, graceful degradation)
+
+### Frontend Test File: `__tests__/components/GapSpotterPanel.test.tsx`
+
+| Test | Description | Type |
+|------|-------------|------|
+| `test_renders_score_breakdown_bars` | Gap with breakdown shows 5 dimension bars | Component |
+| `test_generate_report_button_exists` | Each gap card has GENERATE REPORT button | Component |
+| `test_generate_report_button_disabled_during_loading` | Button disabled when gapReportLoading=true | Component |
+| `test_key_papers_preview_renders` | Gap with key_papers shows paper titles | Component |
+
+### Frontend Test File: `__tests__/components/GapReportView.test.tsx`
+
+| Test | Description | Type |
+|------|-------------|------|
+| `test_renders_report_title` | Report title shown with cluster labels | Component |
+| `test_renders_executive_summary` | Executive summary section visible | Component |
+| `test_renders_score_bars` | All 6 score dimensions rendered as bars | Component |
+| `test_renders_research_questions` | Questions with justification and methodology | Component |
+| `test_back_button_clears_report` | Click back → setActiveGapReport(null) | Component |
+| `test_download_markdown_triggers_download` | Click Markdown → downloadFile called | Component |
+| `test_download_bibtex_triggers_download` | Click BibTeX → downloadFile called | Component |
+
+### Frontend Test File: `__tests__/lib/export.test.ts`
+
+| Test | Description | Type |
+|------|-------------|------|
+| `test_toGapReportMarkdown_includes_all_sections` | Markdown has title, summary, scores, sections, questions | Unit |
+| `test_toGapReportMarkdown_includes_snapshot` | Snapshot data URL included as image | Unit |
+| `test_toGapReportBibtex_returns_bibtex` | Returns the report's bibtex field | Unit |
