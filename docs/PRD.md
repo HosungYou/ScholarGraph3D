@@ -1,6 +1,6 @@
 # ScholarGraph3D — Product Requirements Document
 
-> **Version:** 1.0 | **Last Updated:** 2026-02-19
+> **Version:** 1.1 | **Last Updated:** 2026-02-24
 > **Related:** [SPEC.md](./SPEC.md) | [ARCHITECTURE.md](./ARCHITECTURE.md) | [SDD/TDD Plan](./SDD_TDD_PLAN.md)
 
 ---
@@ -107,6 +107,15 @@ Real-time monitoring and advanced analytics.
 | US-17 | As a researcher, I want citation intent visualization | Edge colors encode intent: supports=green, contradicts=red, methodology=purple, background=gray, result_comparison=blue | P2 | Complete ✅ |
 | US-18 | As a researcher, I want ScholaRAG_Graph export | Select papers -> export to ScholaRAG for deep RAG-based analysis; share format compatible with ScholaRAG_Graph import | P2 | Complete ✅ |
 
+### Phase 4 (Seed UX & Bookmarks) — v3.2.0
+
+User experience enhancements and personal research workflow features.
+
+| ID | User Story | Acceptance Criteria | Priority | Status |
+|----|-----------|-------------------|----------|--------|
+| US-19 | As a researcher, I want to bookmark papers with tags and memos | Toggle bookmark from paper detail; add/remove tags; write memo; filter bookmarks by tag; persists across sessions | P1 | Complete ✅ |
+| US-20 | As a researcher, I want chat to control the graph | Chat responses include action buttons (highlight, select, cluster, edge mode, path); clicking executes the action on 3D graph | P2 | Complete ✅ |
+
 ---
 
 ## 4. Business Model — Freemium
@@ -193,6 +202,10 @@ ScholarGraph3D fills **8 market gaps** not addressed by existing tools:
 | **v1.0.0** | Cosmic Universe Theme: stars, nebulae, light streams, HUD panels, warp transition | — | — | Complete ✅ |
 | **v1.0.1** | Visibility Enhancement: STAR_COLOR_MAP, sqrt node sizing, glow/nebula opacity boost | — | — | Complete ✅ |
 | **v1.1.0** | Legend, expand visual effects, error resilience, DOI fallback expand, API retry | — | — | Complete ✅ |
+| **v2.0.0** | Seed Paper mode: remove keyword search, single seed entry point, Groq chat | — | — | Complete ✅ |
+| **v3.0.0** | Cosmic Universe theme overhaul: star nodes, nebula clusters, light streams | — | — | Complete ✅ |
+| **v3.1.0** | UX Overhaul: push layout, edge vis modes, interactive Gap Spotter, cluster stats | — | 2026-02-23 | Complete ✅ |
+| **v3.2.0** | Gap Spotter UX, Paper Bookmarks (P10), Chat Graph Actions (P13) | US-19, US-20 | 2026-02-24 | Complete ✅ |
 
 > **Testing strategy for each version:** See [SDD/TDD Plan](./SDD_TDD_PLAN.md) for test-driven development cycles aligned with this release plan.
 

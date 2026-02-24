@@ -1,6 +1,6 @@
 # ScholarGraph3D — System Architecture
 
-> **Version:** 1.5 | **Last Updated:** 2026-02-23
+> **Version:** 1.6 | **Last Updated:** 2026-02-24
 > **Related:** [PRD.md](./PRD.md) | [SPEC.md](./SPEC.md) | [SDD/TDD Plan](./SDD_TDD_PLAN.md)
 
 ---
@@ -105,6 +105,7 @@ ScholarGraph3D is a three-tier web application: a Next.js 14 frontend communicat
 │  │  PostgreSQL 15 + pgvector                                  │   │
 │  │                                                            │   │
 │  │  papers (vector(768))  │  search_cache  │  user_graphs     │   │
+│  │  paper_bookmarks (v3.2.0)                                   │   │
 │  │  watch_queries         │  auth.users    │  user_settings   │   │
 │  └────────────────────────────────────────────────────────────┘   │
 │                                                                    │
@@ -246,15 +247,18 @@ backend/
 │   ├── search_stream.py       # GET /api/search/stream — SSE progress feedback
 │   ├── papers.py              # GET /papers/{id}, citations, references, expand, intents, by-doi
 │   ├── graphs.py              # GET/POST/PUT/DELETE /api/graphs (auth required)
+│   ├── bookmarks.py           # v3.2.0: CRUD /api/bookmarks — paper bookmarks with tags/memos (auth required)
 │   ├── analysis.py            # Phase 2+4: trends, gaps, hypotheses, conceptual-edges/stream, scaffold-angles
 │   ├── chat.py                # Phase 2: POST /api/chat + /api/chat/stream (SSE)
 │   ├── watch.py               # Phase 3: /api/watch CRUD + /api/watch/cron
 │   ├── lit_review.py          # Phase 3: /api/lit-review/generate + export-pdf
 │   ├── personalization.py     # Phase 5: /api/user profile, events, search-history, recommendations
-│   └── seed_explore.py        # Phase 6: POST /api/seed-explore (seed paper graph expansion)
+│   ├── seed_explore.py        # Phase 6: POST /api/seed-explore (seed paper graph expansion)
+│   └── seed_chat.py           # v2.0.0: POST /api/seed-chat — Groq chat + action markers (v3.2.0)
 └── database/
     ├── 001_initial_schema.sql # papers, search_cache, user_graphs, watch_queries DDL
-    └── 002_personalization.sql # Phase 5: user_profiles, search_history, interactions, recommendations
+    ├── 002_personalization.sql # Phase 5: user_profiles, search_history, interactions, recommendations
+    └── 005_paper_bookmarks.sql # v3.2.0: paper_bookmarks table with GIN tag index
 ```
 
 ### 3.2 Application Startup (Lifespan)
@@ -736,6 +740,19 @@ Force Simulation config:
 │ created_at TIMESTAMPTZ       │        │ last_count   INTEGER           │
 └──────────────────────────────┘        │ is_active    BOOLEAN           │
                                         └───────────────────────────────┘
+
+┌───────────────────────────────┐
+│  paper_bookmarks (v3.2.0)     │
+├───────────────────────────────┤
+│ id         UUID PK             │
+│ user_id    UUID NOT NULL       │
+│ paper_id   TEXT NOT NULL       │
+│ tags       TEXT[] DEFAULT '{}'  │
+│ memo       TEXT DEFAULT ''      │
+│ created_at TIMESTAMPTZ         │
+│ updated_at TIMESTAMPTZ         │
+│ UNIQUE(user_id, paper_id)      │
+└───────────────────────────────┘
 ```
 
 ### 6.2 Index Strategy
@@ -750,6 +767,8 @@ Force Simulation config:
 | `papers` | `idx_papers_embedding` ivfflat cosine, `lists=100` | Phase 2 GraphRAG vector search |
 | `user_graphs` | `idx_user_graphs_user_id` | User's graph list |
 | `user_graphs` | `idx_user_graphs_updated (user_id, updated_at DESC)` | Ordered dashboard list |
+| `paper_bookmarks` | `idx_paper_bookmarks_user (user_id)` | User's bookmark list |
+| `paper_bookmarks` | `idx_paper_bookmarks_tags` GIN(`tags`) | Tag-based bookmark filtering |
 
 ### 6.3 pgvector Configuration
 
@@ -766,6 +785,8 @@ LIMIT 20;
 ### 6.4 Row-Level Security
 
 `user_graphs` has four RLS policies (SELECT, INSERT, UPDATE, DELETE), all gated on `auth.uid() = user_id`. Even if application-layer auth is bypassed, RLS prevents cross-user data access at the query planner level. `auth.uid()` is a Supabase function that reads the JWT claim embedded in the PostgreSQL session.
+
+`paper_bookmarks` (v3.2.0) uses application-level auth (`Depends(get_current_user)`) with `WHERE user_id = $1` filtering. The `UNIQUE(user_id, paper_id)` constraint enables upsert behavior (`ON CONFLICT DO UPDATE`) for bookmark creation.
 
 ---
 
@@ -1979,6 +2000,29 @@ Key implementation details:
 ### 18.4 Updated Data Flow Diagram Note
 
 The high-level diagram in SS1.1 remains accurate. The citation enrichment step (18.2) is internal to the Service Layer box. The seed explore pipeline uses the same Service Layer components (EmbeddingReducer, PaperClusterer, SimilarityComputer) via `seed_explore.py` router, adding a new arrow from `/api/seed-explore` into the Service Layer.
+
+---
+
+### 18.5 Paper Bookmarks (`/api/bookmarks`) — v3.2.0
+
+A new `bookmarks.py` router provides full CRUD for paper bookmarks. Key design decisions:
+
+- **`paper_id` is TEXT, not FK to `papers`:** Users can bookmark any S2 paper ID, even if it hasn't been cached in the local `papers` table. This avoids requiring a prior seed-explore for bookmarking.
+- **Upsert via `ON CONFLICT DO UPDATE`:** Creating a bookmark for an already-bookmarked paper updates tags/memo instead of failing.
+- **GIN index on `tags TEXT[]`:** Enables efficient `$2 = ANY(tags)` filtering for tag-based queries.
+- **Frontend integration:** `PaperDetailPanel.tsx` adds a bookmark toggle icon in the header, with an inline tag chip editor and memo textarea. Uses `useAuth()` to gate the UI for authenticated users only.
+
+### 18.6 Chat Graph Actions (`seed_chat.py` action markers) — v3.2.0
+
+The seed chat system now supports structured action markers that the LLM can emit alongside natural language responses. Architecture:
+
+1. **System prompt enrichment:** Paper lines include `[ID:paper_id]` and cluster lines include `[Cluster N]`, giving the LLM concrete IDs to reference.
+2. **Action marker format:** `[ACTION:type:params]` — the LLM appends these to its response. Types: `highlight`, `select`, `cluster`, `edge_mode`, `path`.
+3. **Backend parser:** `_parse_actions()` uses regex to extract markers, builds `ChatAction` objects, and strips markers from the user-facing reply.
+4. **Response model:** `SeedChatResponse` now includes `actions: List[ChatAction] = []` (backward compatible — defaults to empty list).
+5. **Frontend execution:** `SeedChatPanel.tsx` renders action buttons (gold accent with Zap icon) that dispatch Zustand store actions: `setHighlightedPaperIds`, `selectPaper`, `setActiveTab`, `setEdgeVisMode`, `setPathStart/End`.
+
+This design keeps the LLM's natural language response clean while enabling structured graph interactions. Invalid markers are silently ignored (graceful degradation).
 
 ---
 

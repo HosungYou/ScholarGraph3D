@@ -1,6 +1,6 @@
 # ScholarGraph3D — Technical Specification
 
-> **Version:** 1.2 | **Last Updated:** 2026-02-20
+> **Version:** 1.3 | **Last Updated:** 2026-02-24
 > **Related:** [PRD.md](./PRD.md) | [ARCHITECTURE.md](./ARCHITECTURE.md) | [SDD/TDD Plan](./SDD_TDD_PLAN.md)
 
 ---
@@ -768,6 +768,112 @@ Delete a saved graph.
 **Response 204:** No content (success).
 **Response 404:** `{"detail": "Graph not found"}`
 
+### 4.7 Bookmark Endpoints (Auth Required) — v3.2.0
+
+All bookmark endpoints require a valid JWT. Bookmarks allow users to save papers with freeform tags and memos.
+
+#### `POST /api/bookmarks`
+
+Create or upsert a paper bookmark. If the user already has a bookmark for the given `paper_id`, tags and memo are updated.
+
+**Request Body (BookmarkCreate):**
+```json
+{
+  "paper_id": "649def34f8be52c8b66281af98ae884c09aef38b",
+  "tags": ["transformer", "attention"],
+  "memo": "Key paper for literature review"
+}
+```
+
+**Response 201 (BookmarkResponse):**
+```json
+{
+  "id": "53d57a28-...",
+  "paper_id": "649def34f8be52c8b66281af98ae884c09aef38b",
+  "tags": ["transformer", "attention"],
+  "memo": "Key paper for literature review",
+  "created_at": "2026-02-24T05:00:00Z",
+  "updated_at": "2026-02-24T05:00:00Z"
+}
+```
+
+#### `GET /api/bookmarks`
+
+List all bookmarks for the authenticated user.
+
+**Query Parameters:**
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `tag` | string | Optional — filter bookmarks containing this tag |
+
+**Response 200:** Array of `BookmarkResponse`.
+
+#### `GET /api/bookmarks/paper/{paper_id}`
+
+Get bookmark for a specific paper (by S2 paper ID).
+
+**Response 200:** `BookmarkResponse`
+**Response 404:** `{"detail": "Bookmark not found"}`
+
+#### `PUT /api/bookmarks/{id}`
+
+Update tags and/or memo on an existing bookmark. Only provided fields are updated.
+
+**Request Body (BookmarkUpdate):**
+```json
+{
+  "tags": ["transformer", "attention", "nlp"],
+  "memo": "Updated memo text"
+}
+```
+
+**Response 200:** Updated `BookmarkResponse`.
+
+#### `DELETE /api/bookmarks/{id}`
+
+Delete a bookmark.
+
+**Response 204:** No content (success).
+**Response 404:** `{"detail": "Bookmark not found"}`
+
+**Implementation:** `backend/routers/bookmarks.py`, `backend/database/005_paper_bookmarks.sql`
+
+### 4.8 Seed Chat Endpoint Update — v3.2.0
+
+#### `POST /api/seed-chat` (updated response)
+
+The seed chat response now includes an optional `actions` array for interactive graph manipulation:
+
+```json
+{
+  "reply": "The most influential paper in this graph is...",
+  "suggested_followups": ["What are the key methods?"],
+  "actions": [
+    {
+      "type": "highlight_papers",
+      "paper_ids": ["abc123", "def456"],
+      "label": "Highlight 2 papers"
+    },
+    {
+      "type": "select_paper",
+      "paper_id": "abc123",
+      "label": "Focus on paper"
+    }
+  ]
+}
+```
+
+**ChatAction types:**
+
+| Type | Parameters | Description |
+|------|-----------|-------------|
+| `highlight_papers` | `paper_ids: string[]` | Highlight specific nodes in the graph |
+| `select_paper` | `paper_id: string` | Focus camera and open detail panel |
+| `show_cluster` | `cluster_id: number` | Navigate to a cluster |
+| `set_edge_mode` | `mode: string` | Switch visualization mode (similarity/temporal/crossCluster) |
+| `find_path` | `start: string, end: string` | Trace citation path between two papers |
+
 ---
 
 ## 5. Database Schema
@@ -852,7 +958,29 @@ CREATE TABLE user_graphs (
 CREATE INDEX idx_user_graphs_user ON user_graphs(user_id);
 ```
 
-### 5.4 Search Cache Table
+### 5.4 Paper Bookmarks Table (v3.2.0)
+
+Stores per-user paper bookmarks with freeform tags and memos. Source: `backend/database/005_paper_bookmarks.sql`.
+
+```sql
+CREATE TABLE paper_bookmarks (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id     UUID NOT NULL,
+    paper_id    TEXT NOT NULL,                       -- S2 paper ID (not FK to papers)
+    tags        TEXT[] DEFAULT '{}',
+    memo        TEXT DEFAULT '',
+    created_at  TIMESTAMPTZ DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(user_id, paper_id)                        -- Enables upsert behavior
+);
+
+CREATE INDEX idx_paper_bookmarks_user ON paper_bookmarks(user_id);
+CREATE INDEX idx_paper_bookmarks_tags ON paper_bookmarks USING GIN(tags);
+```
+
+`paper_id` is TEXT rather than a FK to `papers.s2_paper_id` because users may bookmark papers not yet cached locally. The GIN index on `tags` enables efficient `$2 = ANY(tags)` filtering.
+
+### 5.5 Search Cache Table
 
 Caches full search results (nodes, edges, clusters) for 24-hour TTL.
 
@@ -1188,6 +1316,7 @@ Three levels defined in `auth/policies.py`:
 | `/api/search` | NONE | Core feature — free for all |
 | `/api/papers /api/papers/*` | NONE | Paper data — free for all |
 | `/api/graphs /api/graphs/*` | REQUIRED | User-specific saved data |
+| `/api/bookmarks /api/bookmarks/*` | REQUIRED | User-specific bookmarks (v3.2.0) |
 | All other routes | OPTIONAL | Default: token validated if present |
 
 ### 9.4 Middleware Flow
@@ -1240,6 +1369,8 @@ PostgreSQL RLS policies on `user_graphs` table ensure users can only access thei
 | `POST /api/papers/{id}/expand` | <2s | <4s | S2 citations + references |
 | `GET /api/graphs` | <100ms | <200ms | DB read |
 | `POST /api/graphs` | <100ms | <200ms | DB write |
+| `GET /api/bookmarks` | <100ms | <200ms | DB read |
+| `POST /api/bookmarks` | <100ms | <200ms | DB write (upsert) |
 | `GET /health` | <50ms | <100ms | DB ping (cached 15s) |
 
 ### 10.2 Frontend Rendering Targets
