@@ -1,6 +1,6 @@
 # ScholarGraph3D — Technical Specification
 
-> **Version:** 1.4 | **Last Updated:** 2026-02-24
+> **Version:** 1.5 | **Last Updated:** 2026-02-24
 > **Related:** [PRD.md](./PRD.md) | [ARCHITECTURE.md](./ARCHITECTURE.md) | [SDD/TDD Plan](./SDD_TDD_PLAN.md)
 
 ---
@@ -893,7 +893,7 @@ Generate a structured gap analysis report with evidence assembly and LLM narrati
     "research_questions": [...],
     "gap_score_breakdown": {
       "structural": 0.92,
-      "semantic": 0.71,
+      "relatedness": 0.71,
       "temporal": 0.85,
       "intent": 0.90,
       "directional": 0.78,
@@ -937,17 +937,24 @@ Generate a structured gap analysis report with evidence assembly and LLM narrati
   "bibtex": "@article{Author2023, ...}",
   "raw_metrics": {
     "structural": 0.92,
-    "semantic": 0.71,
+    "relatedness": 0.71,
     "temporal": 0.85,
     "intent": 0.90,
     "directional": 0.78,
     "composite": 0.87
   },
+  "llm_status": "success",
   "significance_statement": "This research direction...",
   "limitations": "This analysis is based on...",
   "snapshot_data_url": "data:image/png;base64,..."
 }
 ```
+
+**Score note (v3.3.1):** The `relatedness` dimension (formerly `semantic`) is the cosine similarity between cluster centroids. Higher values mean the clusters are more semantically similar, making the gap more actionable. This is the inverse of the prior "semantic distance" scoring.
+
+**`llm_status`** field: `"success"` when the Groq LLM narrative was generated successfully, `"failed"` when LLM was unavailable or errored (report contains evidence-only content in that case).
+
+**`research_questions`** field: `List[Dict]` — each item has `question` (string), `justification` (string), and `methodology_hint` (string). Questions are grounded in paper TLDRs, temporal context, intent distribution, and directional asymmetry — not generated from fixed templates.
 
 **Graceful degradation:** If Groq LLM fails, the response omits narrative sections and returns evidence-only content with `sections` containing structured evidence.
 

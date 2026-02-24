@@ -1,6 +1,6 @@
 # ScholarGraph3D — System Architecture
 
-> **Version:** 1.7 | **Last Updated:** 2026-02-24
+> **Version:** 1.8 | **Last Updated:** 2026-02-24
 > **Related:** [PRD.md](./PRD.md) | [SPEC.md](./SPEC.md) | [SDD/TDD Plan](./SDD_TDD_PLAN.md)
 
 ---
@@ -223,7 +223,7 @@ backend/
 │   ├── bridge_detector.py     # Phase 1.5: cross-cluster bridge node detection (top-5%)
 │   ├── incremental_layout.py  # Phase 1.5: k-NN position interpolation for stable expand
 │   ├── trend_analyzer.py      # Phase 2: emerging/stable/declining classification
-│   ├── gap_detector.py        # Phase 2: multi-dimensional gap detection (5-dim scoring)
+│   ├── gap_detector.py        # Phase 2: multi-dimensional gap detection (5-dim scoring: structural/relatedness/temporal/intent/directional); returns evidence_detail dict per gap; _generate_grounded_questions() replaces template heuristics
 │   └── graph_rag.py           # Phase 2: RAG context builder for LLM chat
 ├── llm/
 │   ├── base.py                # Abstract BaseLLMProvider + LLMResponse
@@ -1089,6 +1089,8 @@ GitHub push (main branch)
 ### 11.1 CORS
 
 `CORSMiddleware` is the outermost middleware layer. Only origins in `CORS_ORIGINS` receive `Access-Control-Allow-Origin` headers. `allow_credentials=True` supports cookie-based Supabase sessions. Allowed methods: `GET, POST, PUT, DELETE, OPTIONS`. Allowed headers: `Authorization, Content-Type, X-Requested-With`.
+
+**Global CORS exception handler (v3.3.1):** `main.py` registers a global exception handler via `@app.exception_handler(Exception)` that ensures CORS response headers are injected even on unhandled 500/503 errors. Without this, FastAPI's default error responses bypass `CORSMiddleware`, causing cross-origin clients to receive opaque network errors instead of actionable JSON error bodies.
 
 ### 11.2 Input Validation
 

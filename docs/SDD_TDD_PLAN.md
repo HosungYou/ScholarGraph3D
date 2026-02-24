@@ -259,3 +259,24 @@ Maintain fixtures in `tests/fixtures/` with:
 | `test_toGapReportMarkdown_includes_all_sections` | Markdown has title, summary, scores, sections, questions | Unit |
 | `test_toGapReportMarkdown_includes_snapshot` | Snapshot data URL included as image | Unit |
 | `test_toGapReportBibtex_returns_bibtex` | Returns the report's bibtex field | Unit |
+
+## 10. v3.3.1 Test Coverage — Gap Explainability & Quality
+
+### Changes tested in this release
+
+- `relatedness` dimension (formerly `semantic`): cosine similarity between cluster centroids; higher = more actionable gap
+- `evidence_detail` dict returned per gap from `gap_detector.py`
+- `_generate_grounded_questions()` replaces template-based heuristic question generation
+- `llm_status` field in gap report response (`"success"` | `"failed"`)
+- Global CORS exception handler in `main.py` ensures CORS headers on 500/503 errors
+
+### New / updated tests
+
+| Test | Description | Type |
+|------|-------------|------|
+| `test_relatedness_score_is_cosine_sim` | `relatedness` == centroid cosine similarity (not 1-cosine_sim) | Unit |
+| `test_evidence_detail_keys_present` | Each gap has `evidence_detail` with expected keys | Unit |
+| `test_grounded_questions_use_paper_data` | Questions reference paper TLDRs / temporal context, not fixed templates | Unit |
+| `test_gap_report_response_includes_llm_status` | Response schema contains `llm_status` field | Integration |
+| `test_gap_report_llm_status_failed_on_error` | LLM failure sets `llm_status: "failed"` | Integration |
+| `test_cors_headers_on_500_error` | Unhandled exception returns CORS headers in response | Integration |

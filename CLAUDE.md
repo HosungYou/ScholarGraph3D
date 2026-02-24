@@ -122,7 +122,7 @@ frontend/
 │   │   ├── ClusterPanel.tsx           # Sector Scanner — density, visibility, paper list, stats
 │   │   ├── GraphLegend.tsx            # Star Chart — field colors, size/edge/cluster visual guide
 │   │   ├── GraphControls.tsx          # Ship Controls — floating toggles
-│   │   ├── GapSpotterPanel.tsx        # Gap Spotter — research gaps, 5-dim scoring, bridge papers, frontier papers
+│   │   ├── GapSpotterPanel.tsx        # Gap Spotter — research gaps, 5-dim scoring (relatedness), bridge papers, frontier papers
 │   │   ├── GapReportView.tsx          # Gap Report — full report rendering with export (Markdown/BibTeX)
 │   │   └── SeedChatPanel.tsx          # Seed Chat — Groq-powered conversational graph exploration
 │   ├── auth/
@@ -239,6 +239,7 @@ Seed explore returns: `{ nodes: Paper[], edges: GraphEdge[], clusters: Cluster[]
 - expand endpoints: refs/cites fetched independently — partial S2 failures return available data (not 404)
 - get_references/get_citations: (data.get("data") or []) — S2 may return {"data": null} for unindexed papers
 - Groq rate limiter: 28 RPM for LLaMA 3.3-70b
+- Gap score: structural(0.35) + relatedness(0.25) + temporal(0.15) + intent(0.15) + directional(0.10) = composite
 
 ## Zustand Store (useGraphStore)
 
@@ -269,6 +270,7 @@ Key state slices:
 | PHILOSOPHY | docs/PHILOSOPHY.md |
 | TECH_PROOF | docs/TECH_PROOF.md |
 | DESIGN_THEME | docs/DESIGN_THEME.md |
+| RELEASE_v3.3.1 | docs/RELEASE_v3.3.1.md |
 | RELEASE_v3.3.0 | docs/RELEASE_v3.3.0.md |
 | RELEASE_v3.2.0 | docs/RELEASE_v3.2.0.md |
 | RELEASE_v3.1.0 | docs/RELEASE_v3.1.0.md |
@@ -305,8 +307,21 @@ Key state slices:
 - Tabbed left panel: Clusters | Gaps | Chat
 - Depth control: 1/2/3 hop exploration
 
+### v3.3.1 Gap Report UX Overhaul: Explainability + Quality (2026-02-24)
+- Semantic score inverted → "relatedness" (cosine_sim, not 1-cosine_sim): high similarity = more actionable gap
+- Weight rebalance: structural 0.35, relatedness 0.25, temporal 0.15, intent 0.15, directional 0.10
+- Evidence detail: `evidence_detail` dict per gap (actual_edges, max_possible_edges, centroid_similarity, year_span, cross_citations, methodology/background ratios, a_to_b/b_to_a counts)
+- Bridge papers: `sim_to_cluster_a`, `sim_to_cluster_b` per bridge paper
+- Grounded research questions: `_generate_grounded_questions()` uses paper TLDRs, temporal context, intent distribution, directional asymmetry
+- LLM fix: explicit `{}` detection, `llm_status: "success"|"failed"` in report response, typed exception handling
+- CORS fix: global exception handler ensures CORS headers on 500/503 errors
+- GapReportView rewrite: collapsible sections (AnimatePresence), score bar tooltips, copy-to-clipboard, LLM fallback banner
+- Resizable left panel: 250-600px drag handle, localStorage persistence
+- Frontend: `semantic` → `relatedness` label throughout, `EvidenceDetail` type, union RQ type `(string | Dict)[]`
+- Export: Markdown export uses "Relatedness" label
+
 ### v3.3.0 Gap-to-Proposal: Enhanced Gap Score + Gap Report (2026-02-24)
-- Enhanced Gap Score: 5-dimensional scoring (structural/semantic/temporal/intent/directional) with weighted composite — zero additional S2 API calls
+- Enhanced Gap Score: 5-dimensional scoring (structural/semantic→relatedness in v3.3.1/temporal/intent/directional) with weighted composite — zero additional S2 API calls
 - Gap Report generation: `POST /api/gaps/report` — structured evidence + Groq LLM narrative synthesis with graceful degradation
 - GapReportView: full cosmic HUD report rendering with executive summary, score breakdown bars, key papers, narrative sections, research questions, significance
 - 3D canvas snapshot: captures graph state on report generation, embedded in report
