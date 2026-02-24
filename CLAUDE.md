@@ -144,7 +144,7 @@ frontend/
 
 1. **Landing** (`/`): User enters NL query → `POST /api/paper-search` → selects seed paper
 2. **Explore** (`/explore/seed?paper_id=...`): Seed paper expanded via `POST /api/seed-explore` → 3D graph rendered
-3. **Interact**: Click nodes to expand (expand-stable), view details, find citation paths, export BibTeX/RIS
+3. **Interact**: Click nodes to expand (expand-stable), view details (push layout), find citation paths with visual chain, drill-down via in-graph connections, export BibTeX/RIS
 4. **Analyze**: Left panel tabs — Clusters | Gaps | Chat — for exploring structure and asking questions
 5. **Save**: Save graph to database → reload from Dashboard (`/dashboard`)
 
@@ -186,6 +186,12 @@ Seed explore returns: `{ nodes: Paper[], edges: GraphEdge[], clusters: Cluster[]
 - Similarity: Dashed lines (#4a90d9), no particles
 - Citation Path: Gold (#FFD700) highlighted edges
 - Intent colors: Background=#95A5A6, Methodology=#9B59B6, Result=#4A90D9, Supports=#2ECC71, Contradicts=#E74C3C, Extends=#3498DB, Applies=#E67E22, Compares=#1ABC9C
+- **Edge Visualization Modes** (v3.1.0, store: `edgeVisMode`):
+  - `similarity` (default): Intent-based coloring as above
+  - `temporal`: Gold→gray lerp based on |yearA - yearB| / 10
+  - `crossCluster`: Inter-cluster = gold (#D4AF37), intra-cluster = dim (#222222)
+- **Always-on overlays**: Bidirectional citations = gold (#FFD700), Shared authors = green (#2ECC71)
+- `is_influential` edges rendered 1.5x wider with glow
 
 ### Cluster Visual Mapping (Nebula Clouds)
 - Gaussian-distributed THREE.Points particles per cluster (Box-Muller)
@@ -231,6 +237,7 @@ Key state slices:
 - `pathStart`, `pathEnd`, `activePath`: citation path finding
 - `highlightedPaperIds`: Set<string> — hover highlights from gap panel
 - `activeTab`: 'clusters' | 'gaps' | 'chat' — left panel tab selection
+- `edgeVisMode`: 'similarity' | 'temporal' | 'crossCluster' — edge visualization mode (v3.1.0)
 
 ## Documentation Map
 
@@ -243,6 +250,7 @@ Key state slices:
 | PHILOSOPHY | docs/PHILOSOPHY.md |
 | TECH_PROOF | docs/TECH_PROOF.md |
 | DESIGN_THEME | docs/DESIGN_THEME.md |
+| RELEASE_v3.1.0 | docs/RELEASE_v3.1.0.md |
 | RELEASE_v3.0.2 | docs/RELEASE_v3.0.2.md |
 | RELEASE_v3.0.1 | docs/RELEASE_v3.0.1.md |
 | RELEASE_v3.0.0 | docs/RELEASE_v3.0.0.md |
@@ -275,3 +283,15 @@ Key state slices:
 - Graph save/load with JSONB: 003_seed_graphs.sql
 - Tabbed left panel: Clusters | Gaps | Chat
 - Depth control: 1/2/3 hop exploration
+
+### v3.1.0 UX Overhaul (2026-02-23)
+- Push layout: right panel is flex sibling, not overlay — 3D view stays visible
+- Edge visualization: 3 switchable modes (similarity/temporal/crossCluster) + always-on bidirectional/shared-author indicators
+- Interactive Gap Spotter: bridge papers and frontier papers clickable → OBJECT SCAN
+- Heuristic research questions generated from cluster labels (no LLM dependency)
+- Cluster stats: H-index, Recency %, Top Authors
+- Paper selection: gold visual feedback in cluster panel
+- Author S2 links: clickable to Semantic Scholar profiles
+- Citation path: visual chain with year gaps and clickable nodes
+- In-graph drill-down: collapsible References/Cited-by lists in OBJECT SCAN
+- Backend: CORS for .onrender.com, better chat error messages, is_influential edge propagation
