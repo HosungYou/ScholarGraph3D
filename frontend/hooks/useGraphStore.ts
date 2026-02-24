@@ -6,6 +6,7 @@ import type {
   GraphData,
   CitationIntent,
   StructuralGap,
+  GapReport,
 } from '@/types';
 
 interface GraphStore {
@@ -39,6 +40,12 @@ interface GraphStore {
   frontierIds: string[];
   setGaps: (gaps: StructuralGap[]) => void;
   setFrontierIds: (ids: string[]) => void;
+
+  // Gap Report
+  activeGapReport: GapReport | null;
+  gapReportLoading: boolean;
+  setActiveGapReport: (report: GapReport | null) => void;
+  setGapReportLoading: (loading: boolean) => void;
 
   // Panel selection → camera focus
   panelSelectionId: string | null;
@@ -128,6 +135,11 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
   frontierIds: [],
   setGaps: (gaps: StructuralGap[]) => set({ gaps }),
   setFrontierIds: (ids: string[]) => set({ frontierIds: ids }),
+
+  activeGapReport: null,
+  gapReportLoading: false,
+  setActiveGapReport: (report) => set({ activeGapReport: report }),
+  setGapReportLoading: (loading) => set({ gapReportLoading: loading }),
 
   panelSelectionId: null,
   setPanelSelectionId: (id) => set({ panelSelectionId: id }),

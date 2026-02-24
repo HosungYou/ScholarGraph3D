@@ -1,4 +1,4 @@
-import type { Paper } from '@/types';
+import type { Paper, GapReport } from '@/types';
 
 export function toBibtex(paper: Paper): string {
   const authorStr = paper.authors.map(a => a.name).join(' and ');
@@ -43,4 +43,83 @@ export function downloadFile(content: string, filename: string, mimeType: string
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+// ─── Gap Report Export ──────────────────────────────────────────────
+
+export function toGapReportMarkdown(report: GapReport): string {
+  const lines: string[] = [];
+
+  lines.push(`# ${report.title}`);
+  lines.push(`*Generated: ${new Date(report.generated_at).toLocaleDateString()}*`);
+  lines.push('');
+
+  if (report.snapshot_data_url) {
+    lines.push(`![Gap Visualization](${report.snapshot_data_url})`);
+    lines.push('');
+  }
+
+  lines.push('## Executive Summary');
+  lines.push(report.executive_summary);
+  lines.push('');
+
+  // Gap scores
+  lines.push('## Gap Scores');
+  if (report.raw_metrics) {
+    const m = report.raw_metrics;
+    lines.push(`| Dimension | Score |`);
+    lines.push(`|-----------|-------|`);
+    lines.push(`| Structural | ${(m.structural * 100).toFixed(0)}% |`);
+    lines.push(`| Semantic | ${(m.semantic * 100).toFixed(0)}% |`);
+    lines.push(`| Temporal | ${(m.temporal * 100).toFixed(0)}% |`);
+    lines.push(`| Intent | ${(m.intent * 100).toFixed(0)}% |`);
+    lines.push(`| Directional | ${(m.directional * 100).toFixed(0)}% |`);
+    lines.push(`| **Composite** | **${(m.composite * 100).toFixed(0)}%** |`);
+  }
+  lines.push('');
+
+  // Sections
+  for (const section of report.sections) {
+    lines.push(`## ${section.title}`);
+    lines.push(section.content);
+    lines.push('');
+  }
+
+  // Research questions
+  if (report.research_questions.length > 0) {
+    lines.push('## Research Questions');
+    report.research_questions.forEach((rq, i) => {
+      lines.push(`### ${i + 1}. ${rq.question}`);
+      lines.push(`**Justification:** ${rq.justification}`);
+      lines.push(`**Methodology:** ${rq.methodology_hint}`);
+      lines.push('');
+    });
+  }
+
+  if (report.significance_statement) {
+    lines.push('## Significance');
+    lines.push(report.significance_statement);
+    lines.push('');
+  }
+
+  if (report.limitations) {
+    lines.push('## Limitations');
+    lines.push(report.limitations);
+    lines.push('');
+  }
+
+  // References
+  if (report.cited_papers.length > 0) {
+    lines.push('## References');
+    report.cited_papers.forEach((p, i) => {
+      lines.push(`${i + 1}. ${p.title} (S2: ${p.paper_id})`);
+    });
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}
+
+export function toGapReportBibtex(report: GapReport): string {
+  return report.bibtex;
 }

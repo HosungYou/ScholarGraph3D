@@ -86,6 +86,11 @@ class SeedGapInfo(BaseModel):
     bridge_papers: List[Dict[str, Any]] = []
     potential_edges: List[Dict[str, Any]] = []
     research_questions: List[str] = []
+    gap_score_breakdown: Optional[Dict[str, float]] = None
+    key_papers_a: Optional[List[Dict[str, Any]]] = None
+    key_papers_b: Optional[List[Dict[str, Any]]] = None
+    temporal_context: Optional[Dict[str, Any]] = None
+    intent_summary: Optional[Dict[str, Any]] = None
 
 
 class SeedGraphResponse(BaseModel):
@@ -381,78 +386,84 @@ async def _seed_explore_pipeline(request: SeedExploreRequest, start_time: float)
             node.cluster_label = "Unclustered"
             nodes.append(node)
 
-        # 6. Citation intents + Gap detection (parallel — both independent)
-        async def _fetch_intents():
+        # 6. Citation intents FIRST (enriches edges), then gap detection (uses enriched data)
+        try:
+            intent_service = CitationIntentService()
+            seed_intents = await intent_service.get_basic_intents(
+                seed_paper.paper_id, s2_client
+            )
+            intent_lookup: Dict[tuple, str] = {}
+            influential_lookup: Dict[tuple, bool] = {}
+            for ci in seed_intents:
+                key = (ci["citing_id"], ci["cited_id"])
+                intent_lookup[key] = ci.get("intent", "background")
+                influential_lookup[key] = ci.get("is_influential", False)
+
+            updated_count = 0
+            for (citing_id, cited_id), edge in citation_edge_map.items():
+                intent = intent_lookup.get((citing_id, cited_id))
+                influential = influential_lookup.get((citing_id, cited_id))
+                if not intent:
+                    intent = intent_lookup.get((cited_id, citing_id))
+                if influential is None:
+                    influential = influential_lookup.get((cited_id, citing_id))
+                if intent:
+                    edge.intent = intent
+                    updated_count += 1
+                if influential:
+                    edge.is_influential = influential
+
+            logger.info(f"Updated {updated_count}/{len(citation_edge_map)} citation edges with S2 intents")
+        except Exception as e:
+            logger.warning(f"Citation intent fetch failed (non-fatal): {e}")
+
+        logger.info(f"[timing] intents: {time.time() - start_time:.2f}s")
+
+        # 7. Gap detection with enriched intent data and citation_pairs
+        gaps_info: List[SeedGapInfo] = []
+        if len(clusters_info) >= 2 and len(nodes) >= 5:
             try:
-                intent_service = CitationIntentService()
-                seed_intents = await intent_service.get_basic_intents(
-                    seed_paper.paper_id, s2_client
+                gap_detector = GapDetector()
+                gap_papers = [{
+                    "id": n.id,
+                    "title": n.title,
+                    "cluster_id": n.cluster_id,
+                    "year": n.year,
+                    "tldr": getattr(papers_map.get(n.id), 'tldr', None) if papers_map.get(n.id) else None,
+                    "citation_count": n.citation_count,
+                    "embedding": next(
+                        (p.embedding for p in papers_with_emb if p.paper_id == n.id),
+                        None
+                    ),
+                } for n in nodes]
+                gap_clusters = [{"id": c.id, "label": c.label, "paper_count": c.paper_count} for c in clusters_info]
+                gap_edges = [{"source": e.source, "target": e.target, "type": e.type, "weight": e.weight, "intent": e.intent} for e in edges]
+
+                gap_result = await asyncio.to_thread(
+                    gap_detector.detect_gaps,
+                    gap_papers, gap_clusters, gap_edges,
+                    citation_pairs, gap_edges,
                 )
-                intent_lookup: Dict[tuple, str] = {}
-                influential_lookup: Dict[tuple, bool] = {}
-                for ci in seed_intents:
-                    key = (ci["citing_id"], ci["cited_id"])
-                    intent_lookup[key] = ci.get("intent", "background")
-                    influential_lookup[key] = ci.get("is_influential", False)
 
-                updated_count = 0
-                for (citing_id, cited_id), edge in citation_edge_map.items():
-                    intent = intent_lookup.get((citing_id, cited_id))
-                    influential = influential_lookup.get((citing_id, cited_id))
-                    if not intent:
-                        intent = intent_lookup.get((cited_id, citing_id))
-                    if influential is None:
-                        influential = influential_lookup.get((cited_id, citing_id))
-                    if intent:
-                        edge.intent = intent
-                        updated_count += 1
-                    if influential:
-                        edge.is_influential = influential
+                for gap in gap_result.gaps[:10]:  # Limit to top 10 gaps
+                    gaps_info.append(SeedGapInfo(
+                        gap_id=gap.gap_id,
+                        cluster_a=gap.cluster_a,
+                        cluster_b=gap.cluster_b,
+                        gap_strength=gap.gap_strength,
+                        bridge_papers=gap.bridge_papers,
+                        potential_edges=gap.potential_edges,
+                        research_questions=gap.research_questions,
+                        gap_score_breakdown=gap.gap_score_breakdown if gap.gap_score_breakdown else None,
+                        key_papers_a=gap.key_papers_a if gap.key_papers_a else None,
+                        key_papers_b=gap.key_papers_b if gap.key_papers_b else None,
+                        temporal_context=gap.temporal_context if gap.temporal_context else None,
+                        intent_summary=gap.intent_summary if gap.intent_summary else None,
+                    ))
 
-                logger.info(f"Updated {updated_count}/{len(citation_edge_map)} citation edges with S2 intents")
+                logger.info(f"Gap detection: {len(gaps_info)} gaps found")
             except Exception as e:
-                logger.warning(f"Citation intent fetch failed (non-fatal): {e}")
-
-        async def _detect_gaps():
-            gaps: List[SeedGapInfo] = []
-            if len(clusters_info) >= 2 and len(nodes) >= 5:
-                try:
-                    gap_detector = GapDetector()
-                    gap_papers = [{
-                        "id": n.id,
-                        "title": n.title,
-                        "cluster_id": n.cluster_id,
-                        "embedding": next(
-                            (p.embedding for p in papers_with_emb if p.paper_id == n.id),
-                            None
-                        ),
-                    } for n in nodes]
-                    gap_clusters = [{"id": c.id, "label": c.label, "paper_count": c.paper_count} for c in clusters_info]
-                    gap_edges = [{"source": e.source, "target": e.target, "type": e.type, "weight": e.weight} for e in edges]
-
-                    gap_result = await asyncio.to_thread(
-                        gap_detector.detect_gaps, gap_papers, gap_clusters, gap_edges
-                    )
-
-                    for gap in gap_result.gaps[:10]:  # Limit to top 10 gaps
-                        gaps.append(SeedGapInfo(
-                            gap_id=gap.gap_id,
-                            cluster_a=gap.cluster_a,
-                            cluster_b=gap.cluster_b,
-                            gap_strength=gap.gap_strength,
-                            bridge_papers=gap.bridge_papers,
-                            potential_edges=gap.potential_edges,
-                            research_questions=gap.research_questions,
-                        ))
-
-                    logger.info(f"Gap detection: {len(gaps)} gaps found")
-                except Exception as e:
-                    logger.warning(f"Gap detection failed (non-fatal): {e}")
-            return gaps
-
-        intent_task = _fetch_intents()
-        gap_task = _detect_gaps()
-        _, gaps_info = await asyncio.gather(intent_task, gap_task)
+                logger.warning(f"Gap detection failed (non-fatal): {e}")
 
         logger.info(f"[timing] intents_and_gaps: {time.time() - start_time:.2f}s")
 

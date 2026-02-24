@@ -11,7 +11,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from itertools import combinations
 from math import sqrt
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import numpy as np
 
@@ -29,6 +29,11 @@ class StructuralGap:
     bridge_papers: List[Dict[str, Any]] = field(default_factory=list)  # [{paper_id, title, score}]
     potential_edges: List[Dict[str, Any]] = field(default_factory=list)  # [{source, target, similarity}]
     research_questions: List[str] = field(default_factory=list)  # LLM-generated (empty until AI fills)
+    gap_score_breakdown: Dict[str, float] = field(default_factory=dict)  # {structural, semantic, temporal, intent, directional, composite}
+    key_papers_a: List[Dict] = field(default_factory=list)  # cluster A top 3 papers {paper_id, title, tldr, citation_count}
+    key_papers_b: List[Dict] = field(default_factory=list)  # cluster B top 3 papers
+    temporal_context: Dict = field(default_factory=dict)  # {year_range_a, year_range_b, overlap_years}
+    intent_summary: Dict = field(default_factory=dict)  # {background, methodology, result} cross-citation distribution
 
 
 @dataclass
@@ -53,14 +58,18 @@ class GapDetector:
         papers: List[Dict[str, Any]],
         clusters: List[Dict[str, Any]],
         edges: List[Dict[str, Any]],
+        citation_pairs: Optional[set] = None,
+        intent_edges: Optional[List[Dict[str, Any]]] = None,
     ) -> GapAnalysisResult:
         """
-        Detect structural gaps between clusters.
+        Detect structural gaps between clusters with multi-dimensional scoring.
 
         Args:
-            papers: List of paper dicts with keys: id, title, cluster_id, embedding (optional)
+            papers: List of paper dicts with keys: id, title, cluster_id, embedding (optional), year, tldr, citation_count
             clusters: List of cluster dicts with keys: id, label, paper_count
-            edges: List of edge dicts with keys: source, target, type, weight
+            edges: List of edge dicts with keys: source, target, type, weight, intent (optional)
+            citation_pairs: Set of (citing_id, cited_id) tuples for directional analysis
+            intent_edges: List of edge dicts with intent field for intent distribution analysis
 
         Returns:
             GapAnalysisResult with gaps, connectivity matrix, and summary
@@ -106,8 +115,10 @@ class GapDetector:
             cid_a = cluster_a["id"]
             cid_b = cluster_b["id"]
 
-            size_a = len(cluster_papers.get(cid_a, []))
-            size_b = len(cluster_papers.get(cid_b, []))
+            papers_a = cluster_papers.get(cid_a, [])
+            papers_b = cluster_papers.get(cid_b, [])
+            size_a = len(papers_a)
+            size_b = len(papers_b)
 
             if size_a == 0 or size_b == 0:
                 continue
@@ -116,25 +127,62 @@ class GapDetector:
             pair_key = self._pair_key(cid_a, cid_b)
             actual_edges = connectivity.get(pair_key, 0)
 
-            # Calculate max possible edges and gap strength
+            # ── Structural score (weight 0.3) ──
             max_possible = size_a * size_b
-            gap_strength = 1.0 - (actual_edges / max_possible) if max_possible > 0 else 1.0
+            structural_score = 1.0 - (actual_edges / max_possible) if max_possible > 0 else 1.0
+
+            # ── Semantic score (weight 0.25) ──
+            centroid_a = cluster_centroids.get(cid_a)
+            centroid_b = cluster_centroids.get(cid_b)
+            if centroid_a is not None and centroid_b is not None:
+                semantic_score = 1.0 - self._cosine_similarity(centroid_a, centroid_b)
+            else:
+                semantic_score = structural_score  # fallback
+
+            # ── Temporal score (weight 0.15) ──
+            temporal_score, temporal_ctx = self._compute_temporal_score(papers_a, papers_b)
+
+            # ── Intent score (weight 0.15) ──
+            intent_score, intent_dist = self._compute_intent_score(
+                cid_a, cid_b, paper_cluster, intent_edges or edges
+            )
+
+            # ── Directional score (weight 0.15) ──
+            directional_score = self._compute_directional_score(
+                cid_a, cid_b, paper_cluster, citation_pairs
+            )
+
+            # ── Composite score ──
+            composite = (
+                0.30 * structural_score
+                + 0.25 * semantic_score
+                + 0.15 * temporal_score
+                + 0.15 * intent_score
+                + 0.15 * directional_score
+            )
+
+            gap_score_breakdown = {
+                "structural": round(structural_score, 4),
+                "semantic": round(semantic_score, 4),
+                "temporal": round(temporal_score, 4),
+                "intent": round(intent_score, 4),
+                "directional": round(directional_score, 4),
+                "composite": round(composite, 4),
+            }
 
             # Find bridge candidates using centroid similarity
             bridge_papers = self._find_bridge_papers(
-                cluster_papers.get(cid_a, []),
-                cluster_papers.get(cid_b, []),
-                cluster_centroids.get(cid_a),
-                cluster_centroids.get(cid_b),
+                papers_a, papers_b, centroid_a, centroid_b,
             )
 
             # Find potential ghost edges (cross-cluster high-similarity pairs)
             potential_edges = self._find_potential_edges(
-                cluster_papers.get(cid_a, []),
-                cluster_papers.get(cid_b, []),
-                threshold=0.5,
-                top_k=5,
+                papers_a, papers_b, threshold=0.5, top_k=5,
             )
+
+            # Key papers per cluster (top 3 by citation count)
+            key_papers_a = self._extract_key_papers(papers_a)
+            key_papers_b = self._extract_key_papers(papers_b)
 
             gaps.append(StructuralGap(
                 gap_id=str(uuid.uuid4()),
@@ -148,12 +196,17 @@ class GapDetector:
                     "label": cluster_b.get("label", f"Cluster {cid_b}"),
                     "paper_count": size_b,
                 },
-                gap_strength=round(gap_strength, 4),
+                gap_strength=round(composite, 4),  # composite = gap_strength for backward compat
                 bridge_papers=bridge_papers,
                 potential_edges=potential_edges,
                 research_questions=self._generate_heuristic_questions(
                     cluster_a, cluster_b, bridge_papers
                 ),
+                gap_score_breakdown=gap_score_breakdown,
+                key_papers_a=key_papers_a,
+                key_papers_b=key_papers_b,
+                temporal_context=temporal_ctx,
+                intent_summary=intent_dist,
             ))
 
         # Apply adaptive threshold filtering
@@ -368,6 +421,142 @@ class GapDetector:
             }
             for sim, src, tgt in candidates[:top_k]
         ]
+
+    @staticmethod
+    def _extract_key_papers(papers: List[Dict[str, Any]], top_n: int = 3) -> List[Dict]:
+        """Extract top N papers by citation count from a cluster."""
+        sorted_papers = sorted(
+            papers,
+            key=lambda p: p.get("citation_count", 0),
+            reverse=True,
+        )
+        return [
+            {
+                "paper_id": str(p.get("id", "")),
+                "title": p.get("title", ""),
+                "tldr": p.get("tldr", ""),
+                "citation_count": p.get("citation_count", 0),
+            }
+            for p in sorted_papers[:top_n]
+        ]
+
+    @staticmethod
+    def _compute_temporal_score(
+        papers_a: List[Dict[str, Any]],
+        papers_b: List[Dict[str, Any]],
+    ) -> Tuple[float, Dict]:
+        """
+        Compute temporal gap score based on year distribution non-overlap.
+
+        Returns (score, context_dict).
+        """
+        years_a = [p.get("year") for p in papers_a if p.get("year")]
+        years_b = [p.get("year") for p in papers_b if p.get("year")]
+
+        if not years_a or not years_b:
+            return 0.5, {"year_range_a": [0, 0], "year_range_b": [0, 0], "overlap_years": 0}
+
+        min_a, max_a = min(years_a), max(years_a)
+        min_b, max_b = min(years_b), max(years_b)
+
+        # Compute year range overlap
+        overlap_start = max(min_a, min_b)
+        overlap_end = min(max_a, max_b)
+        overlap_years = max(0, overlap_end - overlap_start + 1)
+
+        total_span = max(max_a, max_b) - min(min_a, min_b) + 1
+        non_overlap_ratio = 1.0 - (overlap_years / total_span) if total_span > 0 else 0.5
+
+        context = {
+            "year_range_a": [min_a, max_a],
+            "year_range_b": [min_b, max_b],
+            "overlap_years": overlap_years,
+        }
+        return round(non_overlap_ratio, 4), context
+
+    def _compute_intent_score(
+        self,
+        cid_a: int,
+        cid_b: int,
+        paper_cluster: Dict[str, int],
+        edges: List[Dict[str, Any]],
+    ) -> Tuple[float, Dict]:
+        """
+        Compute intent-based gap score from cross-cluster citation intents.
+
+        Higher methodology ratio in cross-citations indicates stronger methodological gap.
+        Returns (score, distribution_dict).
+        """
+        intent_counts = {"background": 0, "methodology": 0, "result": 0}
+        total_cross = 0
+
+        for edge in edges:
+            if edge.get("type") != "citation":
+                continue
+            src_cluster = paper_cluster.get(str(edge.get("source", "")), -1)
+            tgt_cluster = paper_cluster.get(str(edge.get("target", "")), -1)
+
+            pair = self._pair_key(src_cluster, tgt_cluster) if src_cluster != -1 and tgt_cluster != -1 else None
+            target_pair = self._pair_key(cid_a, cid_b)
+
+            if pair != target_pair:
+                continue
+
+            total_cross += 1
+            intent = edge.get("intent", "background")
+            if intent in ("methodology",):
+                intent_counts["methodology"] += 1
+            elif intent in ("result_comparison", "result"):
+                intent_counts["result"] += 1
+            else:
+                intent_counts["background"] += 1
+
+        if total_cross == 0:
+            return 0.8, {"background": 0, "methodology": 0, "result": 0}
+
+        # Higher methodology ratio → higher gap score (methods aren't being shared)
+        methodology_ratio = intent_counts["methodology"] / total_cross
+        # If most cross-citations are background, gap is significant
+        background_ratio = intent_counts["background"] / total_cross
+        score = 0.5 + 0.3 * background_ratio + 0.2 * (1.0 - methodology_ratio)
+        score = min(1.0, max(0.0, score))
+
+        return round(score, 4), intent_counts
+
+    def _compute_directional_score(
+        self,
+        cid_a: int,
+        cid_b: int,
+        paper_cluster: Dict[str, int],
+        citation_pairs: Optional[set] = None,
+    ) -> float:
+        """
+        Compute directional asymmetry score between two clusters.
+
+        A→B vs B→A citation imbalance indicates knowledge flow gap.
+        """
+        if not citation_pairs:
+            return 0.5
+
+        a_to_b = 0
+        b_to_a = 0
+
+        papers_in_a = {pid for pid, cid in paper_cluster.items() if cid == cid_a}
+        papers_in_b = {pid for pid, cid in paper_cluster.items() if cid == cid_b}
+
+        for citing_id, cited_id in citation_pairs:
+            if citing_id in papers_in_a and cited_id in papers_in_b:
+                a_to_b += 1
+            elif citing_id in papers_in_b and cited_id in papers_in_a:
+                b_to_a += 1
+
+        total = a_to_b + b_to_a
+        if total == 0:
+            return 0.8  # No cross-citations = high gap
+
+        # Asymmetry: |A→B - B→A| / (A→B + B→A)
+        asymmetry = abs(a_to_b - b_to_a) / total
+        return round(asymmetry, 4)
 
     @staticmethod
     def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:

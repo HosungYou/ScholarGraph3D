@@ -203,3 +203,34 @@ async def cache_seed_explore(paper_id: str, result: Dict[str, Any]) -> None:
         await r.setex(f"seed:{paper_id}", _TTL_SEED_EXPLORE, json.dumps(result))
     except Exception as e:
         logger.debug(f"Seed explore cache set failed: {e}")
+
+
+# ==================== Gap Report Cache ====================
+
+_TTL_GAP_REPORT = 60 * 60 * 24  # 24 hours
+
+
+async def get_cached_gap_report(cache_key: str) -> Optional[Dict[str, Any]]:
+    """Return cached gap report or None."""
+    r = await _get_redis()
+    if not r:
+        return None
+    try:
+        data = await r.get(f"gap_report:{cache_key}")
+        if data:
+            logger.debug(f"Cache HIT for gap_report:{cache_key}")
+            return json.loads(data)
+    except Exception as e:
+        logger.debug(f"Gap report cache get failed: {e}")
+    return None
+
+
+async def cache_gap_report(cache_key: str, result: Dict[str, Any]) -> None:
+    """Cache gap report for 24 hours."""
+    r = await _get_redis()
+    if not r:
+        return
+    try:
+        await r.setex(f"gap_report:{cache_key}", _TTL_GAP_REPORT, json.dumps(result))
+    except Exception as e:
+        logger.debug(f"Gap report cache set failed: {e}")

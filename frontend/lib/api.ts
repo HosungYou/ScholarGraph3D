@@ -4,6 +4,8 @@ import type {
   CitationIntent,
   Bookmark,
   ChatAction,
+  GapReport,
+  StructuralGap,
 } from '@/types';
 import { getSession } from './supabase';
 
@@ -270,6 +272,21 @@ export const api = {
       throw new Error(`Failed to delete bookmark: ${response.status}`);
     }
   },
+
+  // ─── Gap Report ────────────────────────────────────────────────
+  generateGapReport: (
+    gap: StructuralGap,
+    graphContext: { papers: any[]; clusters: any[]; total_papers: number },
+    snapshotDataUrl?: string
+  ): Promise<GapReport> =>
+    request<GapReport>(`${API_BASE}/api/gaps/report`, {
+      method: 'POST',
+      body: JSON.stringify({
+        gap,
+        graph_context: graphContext,
+        snapshot_data_url: snapshotDataUrl,
+      }),
+    }, 30000),
 
   // ─── Seed Paper Exploration ──────────────────────────────────────
   seedExplore: (

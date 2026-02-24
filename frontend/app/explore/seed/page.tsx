@@ -14,6 +14,7 @@ import GraphLegend from '@/components/graph/GraphLegend';
 import RadarLoader from '@/components/cosmic/RadarLoader';
 import SeedChatPanel from '@/components/graph/SeedChatPanel';
 import GapSpotterPanel from '@/components/graph/GapSpotterPanel';
+import GapReportView from '@/components/graph/GapReportView';
 import type { Paper, CitationIntent, GraphData, StructuralGap } from '@/types';
 
 /* ──────────────────────────────────────────────
@@ -99,6 +100,7 @@ function SeedExploreContent() {
     setActiveTab,
     setGaps,
     setFrontierIds,
+    activeGapReport,
   } = useGraphStore();
 
   const graphRef = useRef<ScholarGraph3DRef>(null);
@@ -508,7 +510,9 @@ function SeedExploreContent() {
               {/* Tab content */}
               <div className="flex-1 overflow-y-auto min-h-0">
                 {activeTab === 'clusters' && <ClusterPanel />}
-                {activeTab === 'gaps' && <GapSpotterPanel />}
+                {activeTab === 'gaps' && (
+                  activeGapReport ? <GapReportView /> : <GapSpotterPanel />
+                )}
                 {activeTab === 'chat' && <SeedChatPanel />}
               </div>
             </>

@@ -110,6 +110,22 @@ export interface PaperSearchResult {
 
 // ─── Gap Analysis ────────────────────────────────────────────────────
 
+export interface GapScoreBreakdown {
+  structural: number;
+  semantic: number;
+  temporal: number;
+  intent: number;
+  directional: number;
+  composite: number;
+}
+
+export interface GapKeyPaper {
+  paper_id: string;
+  title: string;
+  tldr?: string;
+  citation_count: number;
+}
+
 export interface StructuralGap {
   gap_id: string;
   cluster_a: { id: number; label: string; paper_count: number };
@@ -118,11 +134,45 @@ export interface StructuralGap {
   bridge_papers: { paper_id: string; title: string; score: number }[];
   potential_edges: { source: string; target: string; similarity: number }[];
   research_questions: string[];
+  gap_score_breakdown?: GapScoreBreakdown;
+  key_papers_a?: GapKeyPaper[];
+  key_papers_b?: GapKeyPaper[];
+  temporal_context?: { year_range_a: [number, number]; year_range_b: [number, number]; overlap_years: number };
+  intent_summary?: { background: number; methodology: number; result: number };
 }
 
 export interface GapAnalysis {
   gaps: StructuralGap[];
   summary: { total_gaps: number; avg_gap_strength: number };
+}
+
+// ─── Gap Report ─────────────────────────────────────────────────────
+
+export interface GapReportSection {
+  id: string;
+  title: string;
+  content: string;
+}
+
+export interface GapReportQuestion {
+  question: string;
+  justification: string;
+  methodology_hint: string;
+}
+
+export interface GapReport {
+  gap_id: string;
+  title: string;
+  generated_at: string;
+  executive_summary: string;
+  sections: GapReportSection[];
+  research_questions: GapReportQuestion[];
+  significance_statement?: string;
+  limitations?: string;
+  cited_papers: GapKeyPaper[];
+  bibtex: string;
+  raw_metrics: GapScoreBreakdown;
+  snapshot_data_url?: string;
 }
 
 // ─── Citation Intent (Enhanced) ──────────────────────────────────────

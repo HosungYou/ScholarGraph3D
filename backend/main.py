@@ -21,6 +21,7 @@ from routers import papers, graphs, bookmarks
 from routers.seed_explore import router as seed_explore_router
 from routers.paper_search import router as paper_search_router
 from routers.seed_chat import router as seed_chat_router
+from routers.gap_report import router as gap_report_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -124,6 +125,7 @@ app.include_router(seed_explore_router, tags=["Seed Explore"])
 app.include_router(paper_search_router, tags=["Paper Search"])
 app.include_router(seed_chat_router, tags=["Seed Chat"])
 app.include_router(bookmarks.router, tags=["Bookmarks"])
+app.include_router(gap_report_router, tags=["Gap Report"])
 
 
 # ==================== Health Endpoints ====================

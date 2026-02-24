@@ -1,9 +1,10 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import { useGraphStore } from '@/hooks/useGraphStore';
-import { Radar, Waypoints, Sparkles, ChevronDown } from 'lucide-react';
-import type { StructuralGap, Paper } from '@/types';
+import { Radar, Waypoints, Sparkles, ChevronDown, FileText, Loader2 } from 'lucide-react';
+import type { StructuralGap, Paper, GapScoreBreakdown } from '@/types';
+import { api } from '@/lib/api';
 
 export default function GapSpotterPanel() {
   const {
@@ -16,6 +17,9 @@ export default function GapSpotterPanel() {
     setPanelSelectionId,
     setHighlightedClusterPair,
     setHoveredGapEdges,
+    setActiveGapReport,
+    setGapReportLoading,
+    gapReportLoading,
   } = useGraphStore();
 
   const frontierPapers = useMemo(() => {
@@ -24,6 +28,48 @@ export default function GapSpotterPanel() {
       .map((id) => graphData.nodes.find((n) => n.id === id))
       .filter((p): p is NonNullable<typeof p> => p != null);
   }, [frontierIds, graphData]);
+
+  const handleGenerateReport = useCallback(async (gap: StructuralGap) => {
+    if (!graphData || gapReportLoading) return;
+
+    setGapReportLoading(true);
+    try {
+      // Capture 3D graph snapshot if possible
+      let snapshotDataUrl: string | undefined;
+      try {
+        const canvas = document.querySelector('canvas');
+        if (canvas) {
+          snapshotDataUrl = canvas.toDataURL('image/png');
+        }
+      } catch {
+        // Snapshot capture is best-effort
+      }
+
+      const graphContext = {
+        papers: graphData.nodes.map(n => ({
+          id: n.id,
+          title: n.title,
+          cluster_id: n.cluster_id,
+          cluster_label: n.cluster_label,
+          year: n.year,
+          citation_count: n.citation_count,
+        })),
+        clusters: graphData.clusters.map(c => ({
+          id: c.id,
+          label: c.label,
+          paper_count: c.paper_count,
+        })),
+        total_papers: graphData.nodes.length,
+      };
+
+      const report = await api.generateGapReport(gap, graphContext, snapshotDataUrl);
+      setActiveGapReport(report);
+    } catch (err) {
+      console.error('Gap report generation failed:', err);
+    } finally {
+      setGapReportLoading(false);
+    }
+  }, [graphData, gapReportLoading, setActiveGapReport, setGapReportLoading]);
 
   // Empty state
   if (gaps.length === 0) {
@@ -64,6 +110,8 @@ export default function GapSpotterPanel() {
             graphData={graphData!}
             selectPaper={selectPaper}
             setPanelSelectionId={setPanelSelectionId}
+            onGenerateReport={() => handleGenerateReport(gap)}
+            isGenerating={gapReportLoading}
             onMouseEnter={() => {
               const ids = new Set(gap.bridge_papers.map((bp) => bp.paper_id));
               setHighlightedPaperIds(ids);
@@ -139,11 +187,13 @@ interface GapCardProps {
   graphData: NonNullable<ReturnType<typeof useGraphStore.getState>['graphData']>;
   selectPaper: (paper: Paper) => void;
   setPanelSelectionId: (id: string | null) => void;
+  onGenerateReport: () => void;
+  isGenerating: boolean;
   onMouseEnter: () => void;
   onMouseLeave: () => void;
 }
 
-function GapCard({ gap, graphData, selectPaper, setPanelSelectionId, onMouseEnter, onMouseLeave }: GapCardProps) {
+function GapCard({ gap, graphData, selectPaper, setPanelSelectionId, onGenerateReport, isGenerating, onMouseEnter, onMouseLeave }: GapCardProps) {
   const strengthPct = Math.round(gap.gap_strength * 100);
 
   const strengthColor =
@@ -167,7 +217,7 @@ function GapCard({ gap, graphData, selectPaper, setPanelSelectionId, onMouseEnte
             <span className="text-[10px] font-mono text-[#999999]/70 truncate max-w-[80px]">
               {gap.cluster_a.label}
             </span>
-            <span className="text-[10px] font-mono text-[rgba(255,255,255,0.1)]">↔</span>
+            <span className="text-[10px] font-mono text-[rgba(255,255,255,0.1)]">{'\u2194'}</span>
             <span className="text-[10px] font-mono text-[#999999]/70 truncate max-w-[80px]">
               {gap.cluster_b.label}
             </span>
@@ -196,6 +246,25 @@ function GapCard({ gap, graphData, selectPaper, setPanelSelectionId, onMouseEnte
             />
           </div>
         </div>
+
+        {/* Score breakdown mini bars */}
+        {gap.gap_score_breakdown && (
+          <ScoreBreakdown breakdown={gap.gap_score_breakdown} />
+        )}
+
+        {/* Key papers preview */}
+        {(gap.key_papers_a?.length || gap.key_papers_b?.length) ? (
+          <div className="mb-1.5">
+            <span className="hud-label mb-1 block">Key Papers</span>
+            <div className="space-y-0.5">
+              {[...(gap.key_papers_a || []).slice(0, 1), ...(gap.key_papers_b || []).slice(0, 1)].map((kp) => (
+                <div key={kp.paper_id} className="text-[9px] font-mono text-[#999999]/50 leading-snug line-clamp-1 px-1.5">
+                  {kp.title}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         {/* Bridge papers */}
         {gap.bridge_papers.length > 0 && (
@@ -241,7 +310,65 @@ function GapCard({ gap, graphData, selectPaper, setPanelSelectionId, onMouseEnte
         {gap.research_questions.length > 0 && (
           <ResearchQuestions questions={gap.research_questions} />
         )}
+
+        {/* Generate Report button */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onGenerateReport();
+          }}
+          disabled={isGenerating}
+          className="w-full mt-2 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg border border-[rgba(212,175,55,0.2)] bg-[rgba(212,175,55,0.05)] hover:border-[rgba(212,175,55,0.4)] hover:bg-[rgba(212,175,55,0.1)] disabled:opacity-40 disabled:cursor-not-allowed transition-all text-[9px] font-mono uppercase tracking-widest text-[#D4AF37]/70 hover:text-[#D4AF37]"
+        >
+          {isGenerating ? (
+            <>
+              <Loader2 className="w-3 h-3 animate-spin" />
+              GENERATING...
+            </>
+          ) : (
+            <>
+              <FileText className="w-3 h-3" />
+              GENERATE REPORT
+            </>
+          )}
+        </button>
       </div>
+    </div>
+  );
+}
+
+// ─── Score Breakdown Mini Bars ──────────────────────────────────────────────
+
+function ScoreBreakdown({ breakdown }: { breakdown: GapScoreBreakdown }) {
+  const dimensions: { key: keyof GapScoreBreakdown; label: string }[] = [
+    { key: 'structural', label: 'STR' },
+    { key: 'semantic', label: 'SEM' },
+    { key: 'temporal', label: 'TMP' },
+    { key: 'intent', label: 'INT' },
+    { key: 'directional', label: 'DIR' },
+  ];
+
+  return (
+    <div className="mb-2 space-y-0.5">
+      {dimensions.map(({ key, label }) => {
+        const val = breakdown[key] ?? 0;
+        const pct = Math.round(val * 100);
+        return (
+          <div key={key} className="flex items-center gap-1.5">
+            <span className="text-[8px] font-mono text-[#999999]/30 w-6 text-right">{label}</span>
+            <div className="flex-1 h-[3px] bg-[rgba(255,255,255,0.02)] rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-500"
+                style={{
+                  width: `${pct}%`,
+                  backgroundColor: val > 0.7 ? '#D4AF37' : val > 0.4 ? '#666666' : '#333333',
+                }}
+              />
+            </div>
+            <span className="text-[8px] font-mono text-[#999999]/25 w-7">{pct}%</span>
+          </div>
+        );
+      })}
     </div>
   );
 }
