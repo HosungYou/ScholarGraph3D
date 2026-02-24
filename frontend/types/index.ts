@@ -112,11 +112,23 @@ export interface PaperSearchResult {
 
 export interface GapScoreBreakdown {
   structural: number;
-  semantic: number;
+  relatedness: number;
   temporal: number;
   intent: number;
   directional: number;
   composite: number;
+}
+
+export interface EvidenceDetail {
+  actual_edges: number;
+  max_possible_edges: number;
+  centroid_similarity: number;
+  total_year_span: number;
+  total_cross_citations: number;
+  methodology_ratio: number;
+  background_ratio: number;
+  citations_a_to_b: number;
+  citations_b_to_a: number;
 }
 
 export interface GapKeyPaper {
@@ -131,14 +143,15 @@ export interface StructuralGap {
   cluster_a: { id: number; label: string; paper_count: number };
   cluster_b: { id: number; label: string; paper_count: number };
   gap_strength: number;
-  bridge_papers: { paper_id: string; title: string; score: number }[];
+  bridge_papers: { paper_id: string; title: string; score: number; sim_to_cluster_a?: number; sim_to_cluster_b?: number }[];
   potential_edges: { source: string; target: string; similarity: number }[];
-  research_questions: string[];
+  research_questions: (string | { question: string; justification: string; methodology_hint: string })[];
   gap_score_breakdown?: GapScoreBreakdown;
   key_papers_a?: GapKeyPaper[];
   key_papers_b?: GapKeyPaper[];
   temporal_context?: { year_range_a: [number, number]; year_range_b: [number, number]; overlap_years: number };
   intent_summary?: { background: number; methodology: number; result: number };
+  evidence_detail?: EvidenceDetail;
 }
 
 export interface GapAnalysis {
@@ -173,6 +186,7 @@ export interface GapReport {
   bibtex: string;
   raw_metrics: GapScoreBreakdown;
   snapshot_data_url?: string;
+  llm_status?: 'success' | 'failed';
 }
 
 // ─── Citation Intent (Enhanced) ──────────────────────────────────────

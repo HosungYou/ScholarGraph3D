@@ -78,7 +78,7 @@ import {
    Sidebar collapsed width & expanded width
    ────────────────────────────────────────────── */
 const SIDEBAR_COLLAPSED = 48;
-const SIDEBAR_EXPANDED = 300;
+const SIDEBAR_DEFAULT = 300;
 const DRAWER_WIDTH = 480;
 
 function SeedExploreContent() {
@@ -133,6 +133,56 @@ function SeedExploreContent() {
       localStorage.setItem('seed-left-collapsed', String(next));
       return next;
     });
+  }, []);
+
+  /* ── Resizable sidebar width ── */
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('seed-sidebar-width');
+      if (saved) {
+        const w = parseInt(saved, 10);
+        if (w >= 250 && w <= 600) return w;
+      }
+    }
+    return SIDEBAR_DEFAULT;
+  });
+  const sidebarWidthRef = useRef(sidebarWidth);
+  useEffect(() => { sidebarWidthRef.current = sidebarWidth; }, [sidebarWidth]);
+
+  const isResizingRef = useRef(false);
+  const resizeStartXRef = useRef(0);
+  const resizeStartWidthRef = useRef(0);
+
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizingRef.current = true;
+    resizeStartXRef.current = e.clientX;
+    resizeStartWidthRef.current = sidebarWidthRef.current;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }, []);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizingRef.current) return;
+      const delta = e.clientX - resizeStartXRef.current;
+      const newWidth = Math.min(600, Math.max(250, resizeStartWidthRef.current + delta));
+      setSidebarWidth(newWidth);
+    };
+    const handleMouseUp = () => {
+      if (isResizingRef.current) {
+        isResizingRef.current = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        localStorage.setItem('seed-sidebar-width', String(sidebarWidthRef.current));
+      }
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
   }, []);
 
   // Auto-save helpers
@@ -443,7 +493,7 @@ function SeedExploreContent() {
       <div className="flex-1 flex overflow-hidden">
         {/* ─── Left Sidebar — Collapsible ─── */}
         <motion.div
-          animate={{ width: leftCollapsed ? SIDEBAR_COLLAPSED : SIDEBAR_EXPANDED }}
+          animate={{ width: leftCollapsed ? SIDEBAR_COLLAPSED : sidebarWidth }}
           transition={{ type: 'spring', damping: 28, stiffness: 300 }}
           className="flex-shrink-0 border-r border-[rgba(255,255,255,0.04)] bg-[rgba(10,10,10,0.95)] flex flex-col relative z-10"
         >
@@ -516,6 +566,15 @@ function SeedExploreContent() {
                 {activeTab === 'chat' && <SeedChatPanel />}
               </div>
             </>
+          )}
+          {/* Resize handle */}
+          {!leftCollapsed && (
+            <div
+              onMouseDown={handleResizeStart}
+              className="absolute top-0 right-0 w-1.5 h-full cursor-col-resize group z-20"
+            >
+              <div className="w-full h-full bg-transparent group-hover:bg-[rgba(212,175,55,0.3)] transition-colors" />
+            </div>
           )}
         </motion.div>
 

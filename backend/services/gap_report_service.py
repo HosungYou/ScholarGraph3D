@@ -7,6 +7,7 @@ generates an LLM narrative synthesis via Groq.
 Zero additional S2 API calls — all data comes from the gap detection pipeline.
 """
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -141,14 +142,23 @@ Generate 3-5 research questions. Each should be specific, actionable, and ground
             system_prompt=system_prompt,
         )
 
+        if result is not None and not result:
+            # generate_json returned {} — LLM responded but produced no content
+            logger.warning("LLM returned empty JSON object — treating as failure")
+            return None
+
         if result and result.get("executive_summary"):
             return result
 
         logger.warning("LLM returned empty or invalid result")
         return None
 
+    except asyncio.TimeoutError:
+        logger.warning("Narrative generation timed out")
+        return None
     except Exception as e:
-        logger.warning(f"Narrative generation failed: {e}")
+        error_type = type(e).__name__
+        logger.warning(f"Narrative generation failed ({error_type}): {e}")
         return None
 
 
@@ -157,6 +167,7 @@ def assemble_report(
     narrative: Optional[Dict[str, Any]],
     gap: Dict[str, Any],
     snapshot_data_url: Optional[str] = None,
+    llm_status: str = "success",
 ) -> Dict[str, Any]:
     """
     Assemble final GapReport from evidence + narrative.
@@ -229,13 +240,20 @@ def assemble_report(
                     "methodology_hint": rq.get("methodology_hint", ""),
                 })
     else:
-        # Fallback: convert heuristic questions
+        # Fallback: convert heuristic questions (may be str or dict from grounded generator)
         for q in gap.get("research_questions", []):
-            research_questions.append({
-                "question": q,
-                "justification": "Generated from cluster label analysis.",
-                "methodology_hint": "Consider a systematic literature review or empirical study.",
-            })
+            if isinstance(q, dict):
+                research_questions.append({
+                    "question": q.get("question", ""),
+                    "justification": q.get("justification", ""),
+                    "methodology_hint": q.get("methodology_hint", ""),
+                })
+            else:
+                research_questions.append({
+                    "question": q,
+                    "justification": "Generated from cluster label analysis.",
+                    "methodology_hint": "Consider a systematic literature review or empirical study.",
+                })
 
     # Collect all cited papers
     all_cited = []
@@ -275,6 +293,7 @@ def assemble_report(
         "bibtex": bibtex,
         "raw_metrics": breakdown,
         "snapshot_data_url": snapshot_data_url,
+        "llm_status": llm_status,
     }
 
 
@@ -299,7 +318,7 @@ def _interpret_scores(breakdown: Dict[str, float]) -> str:
     lines = []
     labels = {
         "structural": ("Structural", "Inter-cluster edge density — how few citation/similarity connections exist between clusters."),
-        "semantic": ("Semantic", "Embedding distance between cluster centroids — how thematically different the clusters are."),
+        "relatedness": ("Relatedness", "Thematic similarity between cluster centroids — higher means clusters share related topics, making the gap more actionable."),
         "temporal": ("Temporal", "Year distribution overlap — how much the publication timelines differ."),
         "intent": ("Intent", "Citation intent distribution — whether cross-citations are mostly background (superficial) vs methodology (deep)."),
         "directional": ("Directional", "Citation asymmetry — whether knowledge flows predominantly in one direction."),

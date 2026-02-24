@@ -342,7 +342,7 @@ function GapCard({ gap, graphData, selectPaper, setPanelSelectionId, onGenerateR
 function ScoreBreakdown({ breakdown }: { breakdown: GapScoreBreakdown }) {
   const dimensions: { key: keyof GapScoreBreakdown; label: string }[] = [
     { key: 'structural', label: 'STR' },
-    { key: 'semantic', label: 'SEM' },
+    { key: 'relatedness', label: 'REL' },
     { key: 'temporal', label: 'TMP' },
     { key: 'intent', label: 'INT' },
     { key: 'directional', label: 'DIR' },
@@ -375,7 +375,7 @@ function ScoreBreakdown({ breakdown }: { breakdown: GapScoreBreakdown }) {
 
 // ─── Research Questions Accordion ────────────────────────────────────────────
 
-function ResearchQuestions({ questions }: { questions: string[] }) {
+function ResearchQuestions({ questions }: { questions: (string | { question: string; justification: string; methodology_hint: string })[] }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -398,7 +398,7 @@ function ResearchQuestions({ questions }: { questions: string[] }) {
               key={i}
               className="text-[10px] font-mono text-[#999999]/50 leading-snug pl-2 border-l border-[rgba(212,175,55,0.1)]"
             >
-              {q}
+              {typeof q === 'string' ? q : q.question}
             </div>
           ))}
         </div>

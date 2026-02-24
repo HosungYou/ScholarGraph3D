@@ -1,9 +1,10 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useGraphStore } from '@/hooks/useGraphStore';
-import { ArrowLeft, Download, FileText, BookOpen } from 'lucide-react';
-import type { GapReport, GapScoreBreakdown, GapKeyPaper, GapReportQuestion, GapReportSection } from '@/types';
+import { ArrowLeft, Download, FileText, BookOpen, ChevronDown, Copy, Check, AlertTriangle } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import type { GapReport, GapScoreBreakdown, GapKeyPaper, GapReportQuestion, EvidenceDetail } from '@/types';
 import { toGapReportMarkdown, toGapReportBibtex, downloadFile } from '@/lib/export';
 
 export default function GapReportView() {
@@ -51,6 +52,16 @@ export default function GapReportView() {
         Back to Gaps
       </button>
 
+      {/* LLM Fallback Warning */}
+      {report.llm_status === 'failed' && (
+        <div className="flex items-center gap-2 px-3 py-2 mb-4 rounded-lg border border-[rgba(212,175,55,0.3)] bg-[rgba(212,175,55,0.05)]">
+          <AlertTriangle className="w-3.5 h-3.5 text-[#D4AF37] flex-shrink-0" />
+          <span className="text-[9px] font-mono text-[#D4AF37]/80">
+            Evidence-only mode — LLM narrative unavailable
+          </span>
+        </div>
+      )}
+
       {/* Title */}
       <div className="hud-divider mb-3" />
       <div className="flex items-center gap-2 mb-1">
@@ -78,71 +89,64 @@ export default function GapReportView() {
       )}
 
       {/* Executive Summary */}
-      <section className="mb-4">
-        <SectionHeader title="EXECUTIVE SUMMARY" />
+      <CollapsibleSection title="EXECUTIVE SUMMARY" defaultOpen>
         <p className="text-[10px] font-mono text-[#999999]/70 leading-relaxed border-l-2 border-[rgba(212,175,55,0.15)] pl-3">
           {report.executive_summary}
         </p>
-      </section>
+      </CollapsibleSection>
 
       {/* Gap Score */}
-      <section className="mb-4">
-        <SectionHeader title="GAP SCORE" />
+      <CollapsibleSection title="GAP SCORE" defaultOpen>
         <GapScoreDisplay metrics={report.raw_metrics} />
-      </section>
+      </CollapsibleSection>
 
       {/* Cluster papers */}
       {report.cited_papers.length > 0 && (
-        <section className="mb-4">
-          <SectionHeader title="KEY PAPERS" />
+        <CollapsibleSection title="KEY PAPERS" defaultOpen>
           <div className="space-y-1">
             {report.cited_papers.map((paper) => (
               <PaperItem key={paper.paper_id} paper={paper} onClick={() => handlePaperClick(paper.paper_id)} />
             ))}
           </div>
-        </section>
+        </CollapsibleSection>
       )}
 
       {/* Report sections */}
       {report.sections.map((section) => (
-        <section key={section.id} className="mb-4">
-          <SectionHeader title={section.title.toUpperCase()} />
+        <CollapsibleSection key={section.id} title={section.title.toUpperCase()}>
           <div className="text-[10px] font-mono text-[#999999]/60 leading-relaxed whitespace-pre-wrap pl-1">
             {section.content}
           </div>
-        </section>
+        </CollapsibleSection>
       ))}
 
       {/* Research Questions */}
       {report.research_questions.length > 0 && (
-        <section className="mb-4">
-          <SectionHeader title="RESEARCH QUESTIONS" />
+        <CollapsibleSection title="RESEARCH QUESTIONS" defaultOpen>
           <div className="space-y-3">
             {report.research_questions.map((rq, i) => (
               <ResearchQuestionItem key={i} index={i + 1} question={rq} />
             ))}
           </div>
-        </section>
+        </CollapsibleSection>
       )}
 
       {/* Significance */}
       {report.significance_statement && (
-        <section className="mb-4">
-          <SectionHeader title="SIGNIFICANCE" />
+        <CollapsibleSection title="SIGNIFICANCE">
           <p className="text-[10px] font-mono text-[#999999]/60 leading-relaxed pl-1">
             {report.significance_statement}
           </p>
-        </section>
+        </CollapsibleSection>
       )}
 
       {/* Limitations */}
       {report.limitations && (
-        <section className="mb-4">
-          <SectionHeader title="LIMITATIONS" />
+        <CollapsibleSection title="LIMITATIONS">
           <p className="text-[10px] font-mono text-[#999999]/40 leading-relaxed pl-1">
             {report.limitations}
           </p>
-        </section>
+        </CollapsibleSection>
       )}
 
       <div className="hud-divider mb-4" />
@@ -168,22 +172,82 @@ export default function GapReportView() {
   );
 }
 
-// ─── Sub-components ─────────────────────────────────────────────────────────
+// ─── Collapsible Section ─────────────────────────────────────────────────────
 
-function SectionHeader({ title }: { title: string }) {
+function CollapsibleSection({ title, children, defaultOpen = false }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const el = document.getElementById(`section-content-${title.replace(/\s+/g, '-')}`);
+    if (el) {
+      await navigator.clipboard.writeText(el.innerText);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    }
+  }, [title]);
+
   return (
-    <div className="flex items-center gap-2 mb-2">
-      <span className="hud-label text-[#D4AF37]/50">{title}</span>
-      <div className="flex-1 h-px bg-gradient-to-r from-[rgba(255,255,255,0.06)] to-transparent" />
-    </div>
+    <section className="mb-4">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center gap-2 mb-2 w-full group"
+      >
+        <ChevronDown
+          className={`w-3 h-3 text-[#D4AF37]/40 transition-transform duration-200 ${isOpen ? '' : '-rotate-90'}`}
+        />
+        <span className="hud-label text-[#D4AF37]/50">{title}</span>
+        <div className="flex-1 h-px bg-gradient-to-r from-[rgba(255,255,255,0.06)] to-transparent" />
+        <span
+          onClick={handleCopy}
+          className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 cursor-pointer"
+          title="Copy section"
+        >
+          {copied ? (
+            <Check className="w-3 h-3 text-green-400" />
+          ) : (
+            <Copy className="w-3 h-3 text-[#999999]/30 hover:text-[#999999]/60" />
+          )}
+        </span>
+      </button>
+      <AnimatePresence initial={false}>
+        {isOpen && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div id={`section-content-${title.replace(/\s+/g, '-')}`}>
+              {children}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </section>
   );
 }
 
+// ─── Gap Score Display with Tooltips ─────────────────────────────────────────
+
 function GapScoreDisplay({ metrics }: { metrics: GapScoreBreakdown }) {
+  const [hoveredKey, setHoveredKey] = useState<string | null>(null);
+
+  const tooltips: Record<string, string> = {
+    composite: 'Weighted combination of all gap dimensions.',
+    structural: 'Inter-cluster edge density — percentage of possible connections that are missing.',
+    relatedness: 'Thematic similarity between clusters — higher means the gap is more actionable.',
+    temporal: 'Year distribution overlap — how much publication timelines differ.',
+    intent: 'Citation intent — whether cross-citations are background (shallow) vs methodology (deep).',
+    directional: 'Citation asymmetry — whether knowledge flows in one direction only.',
+  };
+
   const dimensions: { key: keyof GapScoreBreakdown; label: string }[] = [
     { key: 'composite', label: 'composite' },
     { key: 'structural', label: 'structural' },
-    { key: 'semantic', label: 'semantic' },
+    { key: 'relatedness', label: 'relatedness' },
     { key: 'temporal', label: 'temporal' },
     { key: 'intent', label: 'intent' },
     { key: 'directional', label: 'directional' },
@@ -195,32 +259,57 @@ function GapScoreDisplay({ metrics }: { metrics: GapScoreBreakdown }) {
         const val = metrics[key] ?? 0;
         const pct = Math.round(val * 100);
         const isComposite = key === 'composite';
+        const isHovered = hoveredKey === key;
         return (
-          <div key={key} className="flex items-center gap-2">
-            <span className={`text-[9px] font-mono w-16 text-right ${isComposite ? 'text-[#D4AF37]/70 font-semibold' : 'text-[#999999]/40'}`}>
-              {label}
-            </span>
-            <div className="flex-1 h-1 bg-[rgba(255,255,255,0.02)] rounded-full overflow-hidden">
-              <div
-                className="h-full rounded-full transition-all duration-700"
-                style={{
-                  width: `${pct}%`,
-                  backgroundColor: isComposite
-                    ? '#D4AF37'
-                    : val > 0.7 ? '#D4AF37' : val > 0.4 ? '#666666' : '#333333',
-                  boxShadow: isComposite ? '0 0 8px rgba(212,175,55,0.3)' : undefined,
-                }}
-              />
+          <div key={key} className="relative">
+            <div
+              className="flex items-center gap-2 cursor-help"
+              onMouseEnter={() => setHoveredKey(key)}
+              onMouseLeave={() => setHoveredKey(null)}
+            >
+              <span className={`text-[9px] font-mono w-16 text-right ${isComposite ? 'text-[#D4AF37]/70 font-semibold' : 'text-[#999999]/40'}`}>
+                {label}
+              </span>
+              <div className="flex-1 h-1 bg-[rgba(255,255,255,0.02)] rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-700"
+                  style={{
+                    width: `${pct}%`,
+                    backgroundColor: isComposite
+                      ? '#D4AF37'
+                      : val > 0.7 ? '#D4AF37' : val > 0.4 ? '#666666' : '#333333',
+                    boxShadow: isComposite ? '0 0 8px rgba(212,175,55,0.3)' : undefined,
+                  }}
+                />
+              </div>
+              <span className={`text-[9px] font-mono w-8 ${isComposite ? 'text-[#D4AF37]/70 font-semibold' : 'text-[#999999]/30'}`}>
+                {pct}%
+              </span>
             </div>
-            <span className={`text-[9px] font-mono w-8 ${isComposite ? 'text-[#D4AF37]/70 font-semibold' : 'text-[#999999]/30'}`}>
-              {pct}%
-            </span>
+            {/* Tooltip popover */}
+            <AnimatePresence>
+              {isHovered && (
+                <motion.div
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute left-20 right-0 mt-1 z-10 px-2.5 py-1.5 rounded-md bg-[rgba(20,20,20,0.95)] border border-[rgba(212,175,55,0.2)] shadow-lg"
+                >
+                  <p className="text-[9px] font-mono text-[#999999]/70 leading-snug">
+                    {tooltips[key]}
+                  </p>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         );
       })}
     </div>
   );
 }
+
+// ─── Paper Item ──────────────────────────────────────────────────────────────
 
 function PaperItem({ paper, onClick }: { paper: GapKeyPaper; onClick: () => void }) {
   return (
@@ -240,6 +329,8 @@ function PaperItem({ paper, onClick }: { paper: GapKeyPaper; onClick: () => void
     </button>
   );
 }
+
+// ─── Research Question Item ──────────────────────────────────────────────────
 
 function ResearchQuestionItem({ index, question }: { index: number; question: GapReportQuestion }) {
   return (

@@ -70,7 +70,7 @@ export function toGapReportMarkdown(report: GapReport): string {
     lines.push(`| Dimension | Score |`);
     lines.push(`|-----------|-------|`);
     lines.push(`| Structural | ${(m.structural * 100).toFixed(0)}% |`);
-    lines.push(`| Semantic | ${(m.semantic * 100).toFixed(0)}% |`);
+    lines.push(`| Relatedness | ${((m as any).relatedness * 100).toFixed(0)}% |`);
     lines.push(`| Temporal | ${(m.temporal * 100).toFixed(0)}% |`);
     lines.push(`| Intent | ${(m.intent * 100).toFixed(0)}% |`);
     lines.push(`| Directional | ${(m.directional * 100).toFixed(0)}% |`);

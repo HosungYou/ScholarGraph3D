@@ -28,12 +28,13 @@ class StructuralGap:
     gap_strength: float  # 0 (well-connected) to 1 (complete gap)
     bridge_papers: List[Dict[str, Any]] = field(default_factory=list)  # [{paper_id, title, score}]
     potential_edges: List[Dict[str, Any]] = field(default_factory=list)  # [{source, target, similarity}]
-    research_questions: List[str] = field(default_factory=list)  # LLM-generated (empty until AI fills)
-    gap_score_breakdown: Dict[str, float] = field(default_factory=dict)  # {structural, semantic, temporal, intent, directional, composite}
+    research_questions: List[Any] = field(default_factory=list)  # str (legacy) or Dict (grounded)
+    gap_score_breakdown: Dict[str, float] = field(default_factory=dict)  # {structural, relatedness, temporal, intent, directional, composite}
     key_papers_a: List[Dict] = field(default_factory=list)  # cluster A top 3 papers {paper_id, title, tldr, citation_count}
     key_papers_b: List[Dict] = field(default_factory=list)  # cluster B top 3 papers
     temporal_context: Dict = field(default_factory=dict)  # {year_range_a, year_range_b, overlap_years}
     intent_summary: Dict = field(default_factory=dict)  # {background, methodology, result} cross-citation distribution
+    evidence_detail: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -135,9 +136,11 @@ class GapDetector:
             centroid_a = cluster_centroids.get(cid_a)
             centroid_b = cluster_centroids.get(cid_b)
             if centroid_a is not None and centroid_b is not None:
-                semantic_score = 1.0 - self._cosine_similarity(centroid_a, centroid_b)
+                centroid_similarity = self._cosine_similarity(centroid_a, centroid_b)
+                relatedness_score = centroid_similarity  # High similarity = more actionable gap
             else:
-                semantic_score = structural_score  # fallback
+                centroid_similarity = 0.0
+                relatedness_score = 0.5  # neutral fallback
 
             # ── Temporal score (weight 0.15) ──
             temporal_score, temporal_ctx = self._compute_temporal_score(papers_a, papers_b)
@@ -148,22 +151,22 @@ class GapDetector:
             )
 
             # ── Directional score (weight 0.15) ──
-            directional_score = self._compute_directional_score(
+            directional_score, citations_a_to_b, citations_b_to_a = self._compute_directional_score(
                 cid_a, cid_b, paper_cluster, citation_pairs
             )
 
             # ── Composite score ──
             composite = (
-                0.30 * structural_score
-                + 0.25 * semantic_score
+                0.35 * structural_score
+                + 0.25 * relatedness_score
                 + 0.15 * temporal_score
                 + 0.15 * intent_score
-                + 0.15 * directional_score
+                + 0.10 * directional_score
             )
 
             gap_score_breakdown = {
                 "structural": round(structural_score, 4),
-                "semantic": round(semantic_score, 4),
+                "relatedness": round(relatedness_score, 4),
                 "temporal": round(temporal_score, 4),
                 "intent": round(intent_score, 4),
                 "directional": round(directional_score, 4),
@@ -184,6 +187,29 @@ class GapDetector:
             key_papers_a = self._extract_key_papers(papers_a)
             key_papers_b = self._extract_key_papers(papers_b)
 
+            # Evidence detail for frontend explainability
+            total_cross = sum(intent_dist.values()) if intent_dist else 0
+            methodology_ratio = intent_dist.get("methodology", 0) / total_cross if total_cross > 0 else 0.0
+            background_ratio = intent_dist.get("background", 0) / total_cross if total_cross > 0 else 0.0
+
+            year_range_a = temporal_ctx.get("year_range_a", [0, 0])
+            year_range_b = temporal_ctx.get("year_range_b", [0, 0])
+            total_year_span = 0
+            if year_range_a[0] > 0 and year_range_b[0] > 0:
+                total_year_span = max(year_range_a[1], year_range_b[1]) - min(year_range_a[0], year_range_b[0]) + 1
+
+            evidence_detail = {
+                "actual_edges": actual_edges,
+                "max_possible_edges": max_possible,
+                "centroid_similarity": round(centroid_similarity, 4),
+                "total_year_span": total_year_span,
+                "total_cross_citations": citations_a_to_b + citations_b_to_a,
+                "methodology_ratio": round(methodology_ratio, 4),
+                "background_ratio": round(background_ratio, 4),
+                "citations_a_to_b": citations_a_to_b,
+                "citations_b_to_a": citations_b_to_a,
+            }
+
             gaps.append(StructuralGap(
                 gap_id=str(uuid.uuid4()),
                 cluster_a={
@@ -199,14 +225,18 @@ class GapDetector:
                 gap_strength=round(composite, 4),  # composite = gap_strength for backward compat
                 bridge_papers=bridge_papers,
                 potential_edges=potential_edges,
-                research_questions=self._generate_heuristic_questions(
-                    cluster_a, cluster_b, bridge_papers
+                research_questions=self._generate_grounded_questions(
+                    cluster_a, cluster_b,
+                    key_papers_a, key_papers_b,
+                    bridge_papers, evidence_detail,
+                    temporal_ctx, intent_dist,
                 ),
                 gap_score_breakdown=gap_score_breakdown,
                 key_papers_a=key_papers_a,
                 key_papers_b=key_papers_b,
                 temporal_context=temporal_ctx,
                 intent_summary=intent_dist,
+                evidence_detail=evidence_detail,
             ))
 
         # Apply adaptive threshold filtering
@@ -252,22 +282,126 @@ class GapDetector:
 
         return result
 
-    def _generate_heuristic_questions(self, cluster_a: dict, cluster_b: dict, bridge_papers: list) -> list:
-        """Generate heuristic research questions from cluster labels and bridge papers."""
-        questions = []
+    def _generate_grounded_questions(
+        self,
+        cluster_a: dict,
+        cluster_b: dict,
+        key_papers_a: List[Dict],
+        key_papers_b: List[Dict],
+        bridge_papers: List[Dict],
+        evidence_detail: Dict,
+        temporal_ctx: Dict,
+        intent_dist: Dict,
+    ) -> List[Dict]:
+        """Generate research questions grounded in actual paper data."""
+        questions: List[Dict] = []
         label_a = cluster_a.get("label", "Cluster A")
         label_b = cluster_b.get("label", "Cluster B")
 
-        questions.append(f"How might methods from {label_a} be applied to problems in {label_b}?")
-        questions.append(f"What shared mechanisms or principles connect {label_a} and {label_b}?")
+        # Q1: Method transfer based on top paper
+        top_a = key_papers_a[0] if key_papers_a else None
+        top_b = key_papers_b[0] if key_papers_b else None
 
+        if top_a and top_a.get("tldr"):
+            questions.append({
+                "question": f"How could the approach in '{top_a['title'][:80]}' ({top_a.get('citation_count', 0)} citations) be adapted for {label_b}?",
+                "justification": f"Core finding — {top_a['tldr'][:150]} — has high influence in {label_a} but no citations from {label_b}.",
+                "methodology_hint": f"Replicate methodology of {top_a['title'][:50]} with {label_b} datasets or populations.",
+            })
+        elif top_a:
+            questions.append({
+                "question": f"How might methods from '{top_a['title'][:80]}' be applied to {label_b}?",
+                "justification": f"Top paper in {label_a} ({top_a.get('citation_count', 0)} citations) has no cross-cluster impact.",
+                "methodology_hint": "Conduct a systematic comparison of methodological approaches across both domains.",
+            })
+
+        # Q2: Bridge paper extension
         if bridge_papers:
-            top_bridge = bridge_papers[0].get("title", "") if isinstance(bridge_papers[0], dict) else str(bridge_papers[0])
-            if top_bridge:
-                questions.append(f"How does the work on '{top_bridge[:80]}' bridge these two research areas?")
+            bp = bridge_papers[0]
+            bp_title = bp.get("title", "")[:80]
+            sim_a = bp.get("sim_to_cluster_a", bp.get("score", 0))
+            sim_b = bp.get("sim_to_cluster_b", bp.get("score", 0))
+            questions.append({
+                "question": f"What unexplored directions does '{bp_title}' suggest for connecting {label_a} and {label_b}?",
+                "justification": f"Bridge paper has {sim_a:.0%} similarity to {label_a} and {sim_b:.0%} to {label_b}, spanning both areas.",
+                "methodology_hint": "Trace how this paper's ideas have propagated in each cluster via citation network analysis.",
+            })
 
-        questions.append(f"What datasets or tools from {label_a} could advance research in {label_b}?")
-        questions.append(f"Could a unified theoretical framework encompass both {label_a} and {label_b}?")
+        # Q3: Temporal gap
+        year_range_a = temporal_ctx.get("year_range_a", [0, 0])
+        year_range_b = temporal_ctx.get("year_range_b", [0, 0])
+        overlap = temporal_ctx.get("overlap_years", 0)
+
+        if overlap == 0 and year_range_a[0] > 0 and year_range_b[0] > 0:
+            earlier = label_a if year_range_a[1] < year_range_b[0] else label_b
+            later = label_b if earlier == label_a else label_a
+            questions.append({
+                "question": f"Why did {later} develop without building on foundational work from {earlier}?",
+                "justification": f"No temporal overlap: {label_a} ({year_range_a[0]}-{year_range_a[1]}) vs {label_b} ({year_range_b[0]}-{year_range_b[1]}).",
+                "methodology_hint": "Historical bibliometric analysis to identify missed knowledge transfer opportunities.",
+            })
+        elif overlap < 5 and year_range_a[0] > 0:
+            questions.append({
+                "question": f"What recent developments in {label_a} or {label_b} could enable cross-disciplinary research?",
+                "justification": f"Only {overlap} years of overlapping publication history suggests emerging convergence.",
+                "methodology_hint": "Focus on papers from the overlap period to identify early integration attempts.",
+            })
+
+        # Q4: Intent depth
+        total_cross = sum(intent_dist.values()) if intent_dist else 0
+        if total_cross > 0:
+            bg_ratio = intent_dist.get("background", 0) / total_cross
+            meth_ratio = intent_dist.get("methodology", 0) / total_cross
+            if bg_ratio > 0.7:
+                questions.append({
+                    "question": f"How can {label_a} and {label_b} move beyond surface-level citations to deeper methodological exchange?",
+                    "justification": f"{bg_ratio:.0%} of {total_cross} cross-citations are background references — no method sharing.",
+                    "methodology_hint": "Design a study applying a method from one cluster to a problem in the other.",
+                })
+            elif meth_ratio > 0.3:
+                questions.append({
+                    "question": f"Which methods are being transferred between {label_a} and {label_b}, and what gaps remain?",
+                    "justification": f"{meth_ratio:.0%} methodology citations suggest active but incomplete methodological exchange.",
+                    "methodology_hint": "Map specific methods cited across clusters to identify untransferred techniques.",
+                })
+        else:
+            questions.append({
+                "question": f"What shared mechanisms or theoretical principles could connect {label_a} and {label_b}?",
+                "justification": "No cross-cluster citations detected — these areas have no documented connection.",
+                "methodology_hint": "Conduct a scoping review to identify potential theoretical bridges.",
+            })
+
+        # Q5: Directional asymmetry
+        a_to_b = evidence_detail.get("citations_a_to_b", 0)
+        b_to_a = evidence_detail.get("citations_b_to_a", 0)
+        if a_to_b > 0 or b_to_a > 0:
+            if a_to_b > b_to_a * 2:
+                questions.append({
+                    "question": f"Why does {label_a} cite {label_b} ({a_to_b}x) but not vice versa ({b_to_a}x)? What would {label_b} gain?",
+                    "justification": f"Directional asymmetry ({a_to_b}:{b_to_a}) suggests one-way knowledge flow.",
+                    "methodology_hint": "Interview researchers in both fields to understand barriers to bidirectional citation.",
+                })
+            elif b_to_a > a_to_b * 2:
+                questions.append({
+                    "question": f"Why does {label_b} cite {label_a} ({b_to_a}x) but not vice versa ({a_to_b}x)? What would {label_a} gain?",
+                    "justification": f"Directional asymmetry ({a_to_b}:{b_to_a}) suggests one-way knowledge flow.",
+                    "methodology_hint": "Interview researchers in both fields to understand barriers to bidirectional citation.",
+                })
+
+        # Fill to at least 3
+        if len(questions) < 3:
+            if top_b and top_b.get("tldr"):
+                questions.append({
+                    "question": f"Could a unified framework encompass {label_a} and the approach in '{top_b['title'][:80]}'?",
+                    "justification": f"'{top_b['title'][:60]}' ({top_b.get('citation_count', 0)} cit.) represents {label_b} core: {top_b['tldr'][:100]}.",
+                    "methodology_hint": "Develop a conceptual mapping between key constructs in both areas.",
+                })
+            else:
+                questions.append({
+                    "question": f"What datasets or tools from {label_a} could advance research in {label_b}?",
+                    "justification": f"Structural gap: {evidence_detail.get('actual_edges', 0)}/{evidence_detail.get('max_possible_edges', 0)} possible connections exist.",
+                    "methodology_hint": "Inventory available datasets and tools in each cluster for cross-applicability.",
+                })
 
         return questions[:5]
 
@@ -355,6 +489,8 @@ class GapDetector:
                 "paper_id": str(p.get("id", "")),
                 "title": p.get("title", ""),
                 "score": round(score, 4),
+                "sim_to_cluster_a": round(float(self._cosine_similarity(np.array(p["embedding"]), centroid_a)), 4),
+                "sim_to_cluster_b": round(float(self._cosine_similarity(np.array(p["embedding"]), centroid_b)), 4),
             }
             for score, p in candidates[:top_n]
         ]
@@ -529,14 +665,15 @@ class GapDetector:
         cid_b: int,
         paper_cluster: Dict[str, int],
         citation_pairs: Optional[set] = None,
-    ) -> float:
+    ) -> Tuple[float, int, int]:
         """
         Compute directional asymmetry score between two clusters.
 
         A→B vs B→A citation imbalance indicates knowledge flow gap.
+        Returns (score, a_to_b_count, b_to_a_count).
         """
         if not citation_pairs:
-            return 0.5
+            return 0.5, 0, 0
 
         a_to_b = 0
         b_to_a = 0
@@ -552,11 +689,11 @@ class GapDetector:
 
         total = a_to_b + b_to_a
         if total == 0:
-            return 0.8  # No cross-citations = high gap
+            return 0.8, 0, 0  # No cross-citations = high gap
 
         # Asymmetry: |A→B - B→A| / (A→B + B→A)
         asymmetry = abs(a_to_b - b_to_a) / total
-        return round(asymmetry, 4)
+        return round(asymmetry, 4), a_to_b, b_to_a
 
     @staticmethod
     def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:

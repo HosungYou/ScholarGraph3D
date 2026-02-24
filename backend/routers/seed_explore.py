@@ -85,12 +85,13 @@ class SeedGapInfo(BaseModel):
     gap_strength: float
     bridge_papers: List[Dict[str, Any]] = []
     potential_edges: List[Dict[str, Any]] = []
-    research_questions: List[str] = []
+    research_questions: List[Any] = []
     gap_score_breakdown: Optional[Dict[str, float]] = None
     key_papers_a: Optional[List[Dict[str, Any]]] = None
     key_papers_b: Optional[List[Dict[str, Any]]] = None
     temporal_context: Optional[Dict[str, Any]] = None
     intent_summary: Optional[Dict[str, Any]] = None
+    evidence_detail: Optional[Dict[str, Any]] = None
 
 
 class SeedGraphResponse(BaseModel):
@@ -459,6 +460,7 @@ async def _seed_explore_pipeline(request: SeedExploreRequest, start_time: float)
                         key_papers_b=gap.key_papers_b if gap.key_papers_b else None,
                         temporal_context=gap.temporal_context if gap.temporal_context else None,
                         intent_summary=gap.intent_summary if gap.intent_summary else None,
+                        evidence_detail=gap.evidence_detail if gap.evidence_detail else None,
                     ))
 
                 logger.info(f"Gap detection: {len(gaps_info)} gaps found")

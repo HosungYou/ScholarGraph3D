@@ -47,6 +47,7 @@ class GapReportResponse(BaseModel):
     bibtex: str
     raw_metrics: Dict[str, float]
     snapshot_data_url: Optional[str] = None
+    llm_status: Optional[str] = None
 
 
 @router.post("/api/gaps/report", response_model=GapReportResponse)
@@ -84,9 +85,10 @@ async def generate_gap_report(request: GapReportRequest):
 
     # 2. Generate narrative (may fail gracefully)
     narrative = await generate_narrative(evidence, gap)
+    llm_status = "success" if narrative else "failed"
 
     # 3. Assemble report
-    report = assemble_report(evidence, narrative, gap, request.snapshot_data_url)
+    report = assemble_report(evidence, narrative, gap, request.snapshot_data_url, llm_status=llm_status)
 
     # Cache the report
     try:

@@ -9,7 +9,8 @@ import logging
 import re
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
@@ -75,6 +76,8 @@ async def lifespan(app: FastAPI):
 
     # Log API configuration
     logger.info(f"  S2 API Key: {'configured' if settings.s2_api_key else 'not set (unauthenticated)'}")
+    logger.info(f"  CORS origins: {_cors_origins}")
+    logger.info(f"  CORS regex: {_cors_origin_regex}")
 
     yield
 
@@ -126,6 +129,18 @@ app.include_router(paper_search_router, tags=["Paper Search"])
 app.include_router(seed_chat_router, tags=["Seed Chat"])
 app.include_router(bookmarks.router, tags=["Bookmarks"])
 app.include_router(gap_report_router, tags=["Gap Report"])
+
+
+# ==================== Global Exception Handler ====================
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Ensure CORS headers are present even on unhandled errors."""
+    logger.error(f"Unhandled exception on {request.method} {request.url.path}: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"},
+    )
 
 
 # ==================== Health Endpoints ====================
