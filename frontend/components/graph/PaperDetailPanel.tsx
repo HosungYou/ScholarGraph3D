@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   X,
   ExternalLink,
@@ -70,7 +70,7 @@ export default function PaperDetailPanel({
     return graphData.nodes.find(n => n.id === parentId) || null;
   }, [expandedFromMap, paper, graphData]);
 
-  const citationPercentile = React.useMemo(() => {
+  const citationPercentile = useMemo(() => {
     if (!graphData || !paper) return 0;
     const sorted = [...graphData.nodes].sort((a, b) => b.citation_count - a.citation_count);
     const rank = sorted.findIndex(p => p.id === paper.id);
@@ -137,7 +137,18 @@ export default function PaperDetailPanel({
         <div className="space-y-1">
           {paper.authors.slice(0, 5).map((author, i) => (
             <div key={i} className="text-sm text-text-primary">
-              {author.name}
+              {author.id ? (
+                <a
+                  href={`https://www.semanticscholar.org/author/${author.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-[#D4AF37] transition-colors underline decoration-[rgba(255,255,255,0.1)] hover:decoration-[#D4AF37]/40"
+                >
+                  {author.name}
+                </a>
+              ) : (
+                author.name
+              )}
               {author.affiliations?.[0] && (
                 <span className="text-[10px] text-[#999999]/60 ml-1.5">
                   ({author.affiliations[0]})
@@ -289,6 +300,11 @@ export default function PaperDetailPanel({
         </>
       )}
 
+      {/* ── In-Graph Connections ── */}
+      {graphData && (
+        <InGraphConnections paper={paper} graphData={graphData} />
+      )}
+
       {/* ── Expanded From ── */}
       {parentPaper && (
         <>
@@ -335,10 +351,13 @@ export default function PaperDetailPanel({
 
         {/* Citation Path Finder */}
         <div className="hud-panel-clean rounded-lg p-3">
-          <div className="flex items-center gap-1.5 mb-2">
+          <div className="flex items-center gap-1.5 mb-1">
             <RouteIcon className="w-3 h-3 text-[#999999]/50" />
             <span className="hud-label">Citation Path Finder</span>
           </div>
+          <p className="text-[9px] font-mono text-[#999999]/35 mb-2 leading-relaxed">
+            Trace the intellectual lineage between two papers
+          </p>
           <div className="flex flex-col gap-1.5">
             <button
               onClick={() => {
@@ -393,18 +412,75 @@ export default function PaperDetailPanel({
               </button>
             )}
             {activePath && (
-              <div className="text-[10px] font-mono text-center py-1">
+              <div className="mt-1">
                 {activePath.length > 0 ? (
-                  <span className="text-[#D4AF37]">Path: {activePath.length} nodes</span>
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-[10px] font-mono text-[#D4AF37]">
+                        Path: {activePath.length} nodes
+                      </span>
+                      <button
+                        onClick={() => { setActivePath(null); setPathStart(null); setPathEnd(null); }}
+                        className="text-[9px] font-mono text-[#999999]/40 hover:text-[#999999] transition-colors"
+                      >
+                        clear
+                      </button>
+                    </div>
+                    <div className="space-y-0.5">
+                      {activePath.map((nodeId, idx) => {
+                        const pathPaper = graphData?.nodes.find(n => n.id === nodeId);
+                        const nextPaper = idx < activePath.length - 1
+                          ? graphData?.nodes.find(n => n.id === activePath[idx + 1])
+                          : null;
+                        const yearGap = pathPaper?.year && nextPaper?.year
+                          ? Math.abs(nextPaper.year - pathPaper.year)
+                          : null;
+                        return (
+                          <div key={nodeId}>
+                            <button
+                              onClick={() => {
+                                if (pathPaper) {
+                                  const store = useGraphStore.getState();
+                                  store.selectPaper(pathPaper);
+                                }
+                              }}
+                              className="w-full text-left px-2 py-1 rounded hover:bg-[rgba(212,175,55,0.06)] transition-colors group"
+                            >
+                              <div className="flex items-center gap-1.5">
+                                <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                                  idx === 0 ? 'bg-[#2ECC71]' : idx === activePath.length - 1 ? 'bg-[#E74C3C]' : 'bg-[#D4AF37]'
+                                }`} />
+                                <span className="text-[10px] font-mono text-[#999999]/70 line-clamp-1 group-hover:text-[#D4AF37] transition-colors">
+                                  {pathPaper?.title || nodeId}
+                                </span>
+                              </div>
+                              {pathPaper && (
+                                <div className="text-[9px] font-mono text-[#999999]/30 ml-3 mt-0.5">
+                                  {pathPaper.year} · {(pathPaper.citation_count || 0).toLocaleString()} cit.
+                                </div>
+                              )}
+                            </button>
+                            {yearGap != null && idx < activePath.length - 1 && (
+                              <div className="text-[8px] font-mono text-[#999999]/20 text-center py-0.5">
+                                ↓ {yearGap} yr gap
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 ) : (
-                  <span className="text-red-400">No path found</span>
+                  <div className="text-[10px] font-mono text-center py-1">
+                    <span className="text-red-400">No path found</span>
+                    <button
+                      onClick={() => { setActivePath(null); setPathStart(null); setPathEnd(null); }}
+                      className="ml-2 text-[#999999]/40 hover:text-[#999999] transition-colors"
+                    >
+                      clear
+                    </button>
+                  </div>
                 )}
-                <button
-                  onClick={() => { setActivePath(null); setPathStart(null); setPathEnd(null); }}
-                  className="ml-2 text-[#999999]/40 hover:text-[#999999] transition-colors"
-                >
-                  clear
-                </button>
               </div>
             )}
           </div>
@@ -453,5 +529,102 @@ export default function PaperDetailPanel({
         </div>
       </div>
     </div>
+  );
+}
+
+function InGraphConnections({ paper, graphData }: { paper: Paper; graphData: NonNullable<ReturnType<typeof useGraphStore.getState>['graphData']> }) {
+  const [showRefs, setShowRefs] = useState(false);
+  const [showCitedBy, setShowCitedBy] = useState(false);
+
+  const references = useMemo(() => {
+    return graphData.edges
+      .filter(e => e.type === 'citation' && e.source === paper.id)
+      .map(e => graphData.nodes.find(n => n.id === e.target))
+      .filter((n): n is Paper => n != null);
+  }, [graphData, paper.id]);
+
+  const citedBy = useMemo(() => {
+    return graphData.edges
+      .filter(e => e.type === 'citation' && e.target === paper.id)
+      .map(e => graphData.nodes.find(n => n.id === e.source))
+      .filter((n): n is Paper => n != null);
+  }, [graphData, paper.id]);
+
+  if (references.length === 0 && citedBy.length === 0) return null;
+
+  return (
+    <>
+      <div className="hud-divider my-4" />
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <span className="hud-label text-[#D4AF37]/50">In-Graph Connections</span>
+          <div className="flex-1 h-px bg-gradient-to-r from-[rgba(255,255,255,0.08)] to-transparent" />
+        </div>
+
+        {references.length > 0 && (
+          <div className="mb-2">
+            <button
+              onClick={() => setShowRefs(!showRefs)}
+              className="flex items-center gap-1.5 w-full text-left mb-1"
+            >
+              <span className="hud-label">References in Graph</span>
+              <span className="text-[9px] font-mono text-[#999999]/30">{references.length}</span>
+              <div className="flex-1" />
+              <ChevronDown className={`w-3 h-3 text-[#999999]/30 transition-transform ${showRefs ? 'rotate-180' : ''}`} />
+            </button>
+            {showRefs && (
+              <div className="space-y-0.5 ml-1">
+                {references.map(ref => (
+                  <button
+                    key={ref.id}
+                    onClick={() => useGraphStore.getState().selectPaper(ref)}
+                    className="w-full text-left px-2 py-1 rounded hover:bg-[rgba(255,255,255,0.02)] transition-colors group"
+                  >
+                    <div className="text-[10px] font-mono text-[#999999]/60 line-clamp-1 group-hover:text-[#D4AF37] transition-colors">
+                      {ref.title}
+                    </div>
+                    <div className="text-[9px] font-mono text-[#999999]/25 mt-0.5">
+                      {ref.year} · {(ref.citation_count || 0).toLocaleString()} cit.
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {citedBy.length > 0 && (
+          <div>
+            <button
+              onClick={() => setShowCitedBy(!showCitedBy)}
+              className="flex items-center gap-1.5 w-full text-left mb-1"
+            >
+              <span className="hud-label">Cited by in Graph</span>
+              <span className="text-[9px] font-mono text-[#999999]/30">{citedBy.length}</span>
+              <div className="flex-1" />
+              <ChevronDown className={`w-3 h-3 text-[#999999]/30 transition-transform ${showCitedBy ? 'rotate-180' : ''}`} />
+            </button>
+            {showCitedBy && (
+              <div className="space-y-0.5 ml-1">
+                {citedBy.map(citer => (
+                  <button
+                    key={citer.id}
+                    onClick={() => useGraphStore.getState().selectPaper(citer)}
+                    className="w-full text-left px-2 py-1 rounded hover:bg-[rgba(255,255,255,0.02)] transition-colors group"
+                  >
+                    <div className="text-[10px] font-mono text-[#999999]/60 line-clamp-1 group-hover:text-[#D4AF37] transition-colors">
+                      {citer.title}
+                    </div>
+                    <div className="text-[9px] font-mono text-[#999999]/25 mt-0.5">
+                      {citer.year} · {(citer.citation_count || 0).toLocaleString()} cit.
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </>
   );
 }

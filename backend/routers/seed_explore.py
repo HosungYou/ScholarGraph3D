@@ -66,6 +66,7 @@ class SeedGraphEdge(BaseModel):
     type: str  # "citation" or "similarity"
     weight: float = 1.0
     intent: Optional[str] = None
+    is_influential: bool = False
 
 
 class SeedClusterInfo(BaseModel):
@@ -388,17 +389,25 @@ async def _seed_explore_pipeline(request: SeedExploreRequest, start_time: float)
                     seed_paper.paper_id, s2_client
                 )
                 intent_lookup: Dict[tuple, str] = {}
+                influential_lookup: Dict[tuple, bool] = {}
                 for ci in seed_intents:
-                    intent_lookup[(ci["citing_id"], ci["cited_id"])] = ci.get("intent", "background")
+                    key = (ci["citing_id"], ci["cited_id"])
+                    intent_lookup[key] = ci.get("intent", "background")
+                    influential_lookup[key] = ci.get("is_influential", False)
 
                 updated_count = 0
                 for (citing_id, cited_id), edge in citation_edge_map.items():
                     intent = intent_lookup.get((citing_id, cited_id))
+                    influential = influential_lookup.get((citing_id, cited_id))
                     if not intent:
                         intent = intent_lookup.get((cited_id, citing_id))
+                    if influential is None:
+                        influential = influential_lookup.get((cited_id, citing_id))
                     if intent:
                         edge.intent = intent
                         updated_count += 1
+                    if influential:
+                        edge.is_influential = influential
 
                 logger.info(f"Updated {updated_count}/{len(citation_edge_map)} citation edges with S2 intents")
             except Exception as e:

@@ -190,10 +190,16 @@ async def seed_chat(request: SeedChatRequest):
         )
         reply = response.content or ""
     except Exception as e:
-        logger.error(f"Seed chat LLM error: {e}")
+        error_msg = str(e)
+        logger.error(f"Seed chat LLM error: {error_msg}")
+        if "authentication" in error_msg.lower() or "401" in error_msg or "api key" in error_msg.lower():
+            raise HTTPException(
+                status_code=500,
+                detail="LLM authentication error. Check GROQ_API_KEY configuration.",
+            )
         raise HTTPException(
             status_code=502,
-            detail=f"LLM request failed: {str(e)[:200]}",
+            detail=f"LLM request failed: {error_msg[:200]}",
         )
     finally:
         await provider.close()

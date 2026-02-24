@@ -438,7 +438,7 @@ function SeedExploreContent() {
       {/* ═══════════════════════════════════════════
           MAIN CONTENT — Sidebar + Graph + Drawer
           ═══════════════════════════════════════════ */}
-      <div className="flex-1 flex overflow-hidden relative">
+      <div className="flex-1 flex overflow-hidden">
         {/* ─── Left Sidebar — Collapsible ─── */}
         <motion.div
           animate={{ width: leftCollapsed ? SIDEBAR_COLLAPSED : SIDEBAR_EXPANDED }}
@@ -560,41 +560,6 @@ function SeedExploreContent() {
           <GraphControls />
           <GraphLegend />
 
-          {/* ─── Right Drawer Overlay ─── */}
-          <AnimatePresence>
-            {showPaperDetail && (
-              <>
-                {/* Backdrop */}
-                <motion.div
-                  key="drawer-backdrop"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="absolute inset-0 bg-black/30 z-20"
-                  onClick={() => handlePaperSelect(null)}
-                />
-                {/* Drawer panel */}
-                <motion.div
-                  key="paper-drawer"
-                  initial={{ x: DRAWER_WIDTH }}
-                  animate={{ x: 0 }}
-                  exit={{ x: DRAWER_WIDTH }}
-                  transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-                  style={{ width: DRAWER_WIDTH }}
-                  className="absolute top-0 right-0 bottom-0 z-30 border-l border-[rgba(255,255,255,0.06)] bg-[rgba(10,10,10,0.95)] backdrop-blur-xl overflow-y-auto"
-                >
-                  <PaperDetailPanel
-                    paper={selectedPaper}
-                    onClose={() => handlePaperSelect(null)}
-                    onExpand={() => handleExpandPaper(selectedPaper)}
-                    isExpanding={isExpanding}
-                  />
-                </motion.div>
-              </>
-            )}
-          </AnimatePresence>
-
           {/* ─── Bottom Status Bar ─── */}
           {graphData && seedMeta && (
             <div className="absolute bottom-4 left-4 right-4 z-10 pointer-events-none">
@@ -632,6 +597,29 @@ function SeedExploreContent() {
             </div>
           )}
         </div>
+
+        {/* ─── Right Panel — Push Layout ─── */}
+        <AnimatePresence>
+          {showPaperDetail && (
+            <motion.div
+              key="paper-drawer"
+              initial={{ width: 0 }}
+              animate={{ width: DRAWER_WIDTH }}
+              exit={{ width: 0 }}
+              transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+              className="flex-shrink-0 border-l border-[rgba(255,255,255,0.06)] bg-[rgba(10,10,10,0.95)] backdrop-blur-xl overflow-hidden"
+            >
+              <div style={{ width: DRAWER_WIDTH }} className="h-full overflow-y-auto">
+                <PaperDetailPanel
+                  paper={selectedPaper}
+                  onClose={() => handlePaperSelect(null)}
+                  onExpand={() => handleExpandPaper(selectedPaper)}
+                  isExpanding={isExpanding}
+                />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* ═══════════════════════════════════════════

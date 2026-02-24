@@ -8,7 +8,7 @@ import { STAR_COLOR_MAP } from './cosmic/cosmicConstants';
 export default function GraphLegend() {
   const [collapsed, setCollapsed] = useState(false);
   const [guideCollapsed, setGuideCollapsed] = useState(true);
-
+  const { edgeVisMode, setEdgeVisMode } = useGraphStore();
 
   const LEGEND_FIELDS = [
     'Computer Science',
@@ -91,6 +91,53 @@ export default function GraphLegend() {
         <div className="flex items-center gap-2">
           <div className="w-5 h-0 border-t border-dashed border-emerald-400/60 flex-shrink-0" />
           <span>Similarity</span>
+        </div>
+      </div>
+
+      {/* Edge Mode Selector */}
+      <div className="mb-1.5 pt-1.5 border-t border-[#1A1A1A]/70">
+        <div className="text-[10px] font-mono uppercase tracking-widest text-[#D4AF37]/60 mb-1.5">
+          Edge Mode
+        </div>
+        <div className="flex flex-col gap-1">
+          {([
+            { mode: 'similarity' as const, label: 'Similarity', desc: 'Intent colors' },
+            { mode: 'temporal' as const, label: 'Temporal', desc: 'Year distance' },
+            { mode: 'crossCluster' as const, label: 'Cross-Cluster', desc: 'Inter-cluster' },
+          ]).map(({ mode, label, desc }) => (
+            <button
+              key={mode}
+              onClick={() => setEdgeVisMode(mode)}
+              className={`flex items-center gap-2 px-1.5 py-1 rounded transition-all text-left ${
+                edgeVisMode === mode
+                  ? 'bg-[#D4AF37]/10 text-[#D4AF37]'
+                  : 'text-[#999999]/50 hover:text-[#999999] hover:bg-[rgba(255,255,255,0.02)]'
+              }`}
+            >
+              <div className={`w-2 h-2 rounded-full border ${
+                edgeVisMode === mode
+                  ? 'border-[#D4AF37] bg-[#D4AF37]'
+                  : 'border-[#999999]/30'
+              }`} />
+              <div>
+                <div className="text-[10px] font-mono">{label}</div>
+                <div className="text-[8px] font-mono opacity-50">{desc}</div>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Always-on edge indicators */}
+      <div className="mb-1.5 flex flex-col gap-0.5">
+        <div className="text-[9px] font-mono text-[#999999]/40 mb-0.5">Always visible:</div>
+        <div className="flex items-center gap-2">
+          <div className="w-5 h-0.5 bg-[#FFD700] flex-shrink-0 rounded-full" />
+          <span>Bidirectional</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-5 h-0.5 bg-[#2ECC71] flex-shrink-0 rounded-full" />
+          <span>Shared authors</span>
         </div>
       </div>
 

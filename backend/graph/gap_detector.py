@@ -151,7 +151,9 @@ class GapDetector:
                 gap_strength=round(gap_strength, 4),
                 bridge_papers=bridge_papers,
                 potential_edges=potential_edges,
-                research_questions=[],
+                research_questions=self._generate_heuristic_questions(
+                    cluster_a, cluster_b, bridge_papers
+                ),
             ))
 
         # Apply adaptive threshold filtering
@@ -196,6 +198,22 @@ class GapDetector:
         )
 
         return result
+
+    def _generate_heuristic_questions(self, cluster_a: dict, cluster_b: dict, bridge_papers: list) -> list:
+        """Generate heuristic research questions from cluster labels and bridge papers."""
+        questions = []
+        label_a = cluster_a.get("label", "Cluster A")
+        label_b = cluster_b.get("label", "Cluster B")
+
+        questions.append(f"How might methods from {label_a} be applied to problems in {label_b}?")
+        questions.append(f"What shared mechanisms or principles connect {label_a} and {label_b}?")
+
+        if bridge_papers:
+            top_bridge = bridge_papers[0].get("title", "") if isinstance(bridge_papers[0], dict) else str(bridge_papers[0])
+            if top_bridge:
+                questions.append(f"How does the work on '{top_bridge[:80]}' bridge these two research areas?")
+
+        return questions[:3]
 
     def _compute_connectivity(
         self,

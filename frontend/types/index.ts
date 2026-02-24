@@ -1,5 +1,6 @@
 export interface Author {
   name: string;
+  id?: string;
   affiliations?: string[];
 }
 
@@ -38,6 +39,7 @@ export interface GraphEdge {
   target: string;
   type: 'citation' | 'similarity' | 'ghost';
   weight: number;
+  is_influential?: boolean;
   // Best-effort intent from the search endpoint (heuristic for similarity edges,
   // S2-native for citation edges). Full LLM-enhanced intents are available via
   // the /api/papers/{id}/intents endpoint and use the CitationIntent interface.

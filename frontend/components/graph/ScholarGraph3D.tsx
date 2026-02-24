@@ -68,6 +68,12 @@ interface ForceGraphLink {
   dashed: boolean;
   intentLabel?: string;
   intentContext?: string;
+  isInfluential?: boolean;
+  isBidirectional?: boolean;
+  hasSharedAuthors?: boolean;
+  weight?: number;
+  yearGap?: number;
+  isCrossCluster?: boolean;
 }
 
 export interface ScholarGraph3DRef {
@@ -138,6 +144,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     showCosmicTheme,
     expandedFromMap,
     activePath,
+    edgeVisMode,
   } = useGraphStore();
 
   const lastClickRef = useRef<{ nodeId: string; timestamp: number } | null>(
@@ -204,6 +211,10 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     if (!graphData)
       return { nodes: [] as ForceGraphNode[], links: [] as ForceGraphLink[] };
 
+    // Build nodeMap for O(1) lookups in edge processing
+    const nodeMap = new Map<string, Paper>();
+    graphData.nodes.forEach(n => nodeMap.set(n.id, n));
+
     // Sort papers by citation count for percentile computation
     const sortedByCitations = [...graphData.nodes].sort(
       (a, b) => (b.citation_count || 0) - (a.citation_count || 0)
@@ -254,6 +265,19 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       intentMap.set(`${ci.citing_id}-${ci.cited_id}`, ci);
     });
 
+    // Detect bidirectional citations
+    const citationPairSet = new Set<string>();
+    graphData.edges.filter(e => e.type === 'citation').forEach(e => {
+      citationPairSet.add(`${e.source}->${e.target}`);
+    });
+    const bidirectionalPairs = new Set<string>();
+    graphData.edges.filter(e => e.type === 'citation').forEach(e => {
+      if (citationPairSet.has(`${e.target}->${e.source}`)) {
+        const key = [e.source, e.target].sort().join('--');
+        bidirectionalPairs.add(key);
+      }
+    });
+
     const links: ForceGraphLink[] = filteredEdges.map((edge) => {
       const isSimilarity = edge.type === 'similarity';
 
@@ -281,6 +305,25 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         intentLabel = edge.intent;
       }
 
+      // Edge metadata for visualization modes
+      const sourceNode = nodeMap.get(edge.source);
+      const targetNode = nodeMap.get(edge.target);
+      const yearGap = sourceNode?.year && targetNode?.year
+        ? Math.abs(sourceNode.year - targetNode.year)
+        : undefined;
+      const isCrossCluster = sourceNode && targetNode
+        ? sourceNode.cluster_id !== targetNode.cluster_id
+        : false;
+      const biKey = [edge.source, edge.target].sort().join('--');
+      const isBidirectional = bidirectionalPairs.has(biKey);
+
+      // Check shared authors
+      const hasSharedAuthors = (() => {
+        if (!sourceNode || !targetNode) return false;
+        const srcAuthors = new Set(sourceNode.authors?.map(a => typeof a === 'string' ? a : a.name) || []);
+        return targetNode.authors?.some(a => srcAuthors.has(typeof a === 'string' ? a : a.name)) || false;
+      })();
+
       return {
         source: edge.source,
         target: edge.target,
@@ -290,6 +333,12 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         dashed: isSimilarity,
         intentLabel,
         intentContext,
+        isInfluential,
+        isBidirectional,
+        hasSharedAuthors,
+        weight: edge.weight,
+        yearGap,
+        isCrossCluster,
       };
     });
 
@@ -323,7 +372,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     }
 
     return { nodes, links };
-  }, [graphData, yearRange, showCitationEdges, showSimilarityEdges, citationIntents, hiddenClusterIds, showGhostEdges]);
+  }, [graphData, yearRange, showCitationEdges, showSimilarityEdges, citationIntents, hiddenClusterIds, showGhostEdges, edgeVisMode]);
 
   // Node rendering
   const nodeThreeObject = useCallback(
@@ -708,8 +757,15 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         return 3.0;
       }
     }
+    // Mode-specific width adjustments
+    if (edgeVisMode === 'crossCluster') {
+      return link.isCrossCluster ? Math.max(link.width || 0.5, 1.5) : 0.3;
+    }
+    if (link.isInfluential) {
+      return (link.width || 0.5) * 1.5; // Extra boost for influential
+    }
     return Math.max(0.5, link.width || 0.5);
-  }, []);
+  }, [edgeVisMode]);
 
   // Build active path edge set for fast lookup
   const activePathEdgeSet = useMemo(() => {
@@ -764,19 +820,41 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         return '#050510'; // hide weak edges at far distances
       }
 
-      if (!selectedPaper) {
-        // Subtle default colors for constellation map aesthetic
-        return link.dashed
-          ? '#555555'   // similarity = dim gray dashed
-          : link.color || '#44444480';  // citation = dark gray (semi-transparent)
-      }
+      // Always-on special edges (rare, high-signal)
+      if (link.isBidirectional) return '#FFD700'; // gold for mutual citation
+      if (link.hasSharedAuthors) return '#2ECC71'; // green for shared authors
 
-      if (highlightSet.has(sourceId) && highlightSet.has(targetId)) {
-        return link.color || '#D4AF37';
+      // Mode-dependent coloring
+      switch (edgeVisMode) {
+        case 'temporal': {
+          if (link.dashed) return '#333333'; // similarity edges dim in temporal mode
+          const gap = link.yearGap ?? 0;
+          const t = Math.min(gap / 10, 1);
+          // Lerp from gold (recent/close) to dim gray (distant)
+          const r = Math.round(212 + (85 - 212) * t);
+          const g = Math.round(175 + (85 - 175) * t);
+          const b = Math.round(55 + (85 - 55) * t);
+          return `rgb(${r},${g},${b})`;
+        }
+        case 'crossCluster': {
+          return link.isCrossCluster ? '#D4AF37' : '#222222';
+        }
+        case 'similarity':
+        default: {
+          // Original behavior: selection-based highlighting + intent colors
+          if (!selectedPaper) {
+            return link.dashed
+              ? '#555555'
+              : link.color || '#44444480';
+          }
+          if (highlightSet.has(sourceId) && highlightSet.has(targetId)) {
+            return link.color || '#D4AF37';
+          }
+          return '#050510';
+        }
       }
-      return '#050510'; // near-invisible on dark background
     },
-    [selectedPaper, highlightSet, fgRef, activePathEdgeSet]
+    [selectedPaper, highlightSet, fgRef, activePathEdgeSet, edgeVisMode]
   );
 
   // Custom dashed link rendering for similarity edges

@@ -105,7 +105,7 @@ if settings.environment == "development":
     ]))
 
 # Allow all Vercel preview/production URLs via regex
-_cors_origin_regex = r"https://.*\.vercel\.app"
+_cors_origin_regex = r"https://(.*\.vercel\.app|.*\.onrender\.com)"
 
 app.add_middleware(
     CORSMiddleware,

@@ -1,31 +1,26 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useGraphStore } from '@/hooks/useGraphStore';
-import { Radar, Waypoints, Sparkles } from 'lucide-react';
-import type { StructuralGap } from '@/types';
+import { Radar, Waypoints, Sparkles, ChevronDown } from 'lucide-react';
+import type { StructuralGap, Paper } from '@/types';
 
 export default function GapSpotterPanel() {
   const {
     gaps,
     graphData,
     frontierIds,
+    selectPaper,
     setHighlightedPaperIds,
     clearHighlightedPaperIds,
   } = useGraphStore();
 
-  const paperTitleMap = useMemo(() => {
-    const map = new Map<string, string>();
-    if (!graphData) return map;
-    graphData.nodes.forEach((n) => map.set(n.id, n.title));
-    return map;
-  }, [graphData]);
-
   const frontierPapers = useMemo(() => {
+    if (!graphData) return [];
     return frontierIds
-      .map((id) => ({ id, title: paperTitleMap.get(id) ?? id }))
-      .filter((p) => p.title !== p.id || paperTitleMap.has(p.id));
-  }, [frontierIds, paperTitleMap]);
+      .map((id) => graphData.nodes.find((n) => n.id === id))
+      .filter((p): p is NonNullable<typeof p> => p != null);
+  }, [frontierIds, graphData]);
 
   // Empty state
   if (gaps.length === 0) {
@@ -63,6 +58,8 @@ export default function GapSpotterPanel() {
           <GapCard
             key={gap.gap_id}
             gap={gap}
+            graphData={graphData!}
+            selectPaper={selectPaper}
             onMouseEnter={() => {
               const ids = new Set(gap.bridge_papers.map((bp) => bp.paper_id));
               setHighlightedPaperIds(ids);
@@ -89,14 +86,26 @@ export default function GapSpotterPanel() {
           </p>
           <div className="space-y-1">
             {frontierPapers.slice(0, 8).map((paper) => (
-              <div
+              <button
                 key={paper.id}
-                className="p-2 rounded-lg border border-[rgba(212,175,55,0.08)] bg-[rgba(212,175,55,0.02)] hover:border-[rgba(212,175,55,0.15)] hover:bg-[rgba(212,175,55,0.04)] transition-all"
+                onClick={() => selectPaper(paper)}
+                onMouseEnter={() => setHighlightedPaperIds(new Set([paper.id]))}
+                onMouseLeave={() => clearHighlightedPaperIds()}
+                className="w-full text-left p-2 rounded-lg border border-[rgba(212,175,55,0.08)] bg-[rgba(212,175,55,0.02)] hover:border-[rgba(212,175,55,0.15)] hover:bg-[rgba(212,175,55,0.04)] transition-all group"
               >
-                <p className="text-[10px] font-mono text-[#D4AF37]/70 leading-snug line-clamp-2">
+                <p className="text-[10px] font-mono text-[#D4AF37]/70 leading-snug line-clamp-2 group-hover:text-[#D4AF37] transition-colors">
                   {paper.title}
                 </p>
-              </div>
+                <div className="flex items-center gap-2 text-[9px] font-mono text-[#999999]/30 mt-0.5">
+                  {paper.year && <span>{paper.year}</span>}
+                  <span>{(paper.citation_count || 0).toLocaleString()} cit.</span>
+                  {paper.frontier_score != null && (
+                    <span className="text-[#D4AF37]/40 ml-auto">
+                      frontier {Math.round(paper.frontier_score * 100)}%
+                    </span>
+                  )}
+                </div>
+              </button>
             ))}
             {frontierPapers.length > 8 && (
               <p className="text-[10px] font-mono text-[#999999]/30 pt-1 text-center">
@@ -114,11 +123,13 @@ export default function GapSpotterPanel() {
 
 interface GapCardProps {
   gap: StructuralGap;
+  graphData: NonNullable<ReturnType<typeof useGraphStore.getState>['graphData']>;
+  selectPaper: (paper: Paper) => void;
   onMouseEnter: () => void;
   onMouseLeave: () => void;
 }
 
-function GapCard({ gap, onMouseEnter, onMouseLeave }: GapCardProps) {
+function GapCard({ gap, graphData, selectPaper, onMouseEnter, onMouseLeave }: GapCardProps) {
   const strengthPct = Math.round(gap.gap_strength * 100);
 
   const strengthColor =
@@ -177,23 +188,27 @@ function GapCard({ gap, onMouseEnter, onMouseLeave }: GapCardProps) {
           <div className="mb-1">
             <span className="hud-label mb-1 block">Bridge Papers</span>
             <div className="space-y-0.5">
-              {gap.bridge_papers.slice(0, 3).map((bp) => (
-                <div
-                  key={bp.paper_id}
-                  className="flex items-start gap-1.5 px-1.5 py-1 rounded hover:bg-[rgba(255,255,255,0.02)] transition-colors"
-                >
-                  <div
-                    className="w-1 h-1 rounded-full flex-shrink-0 mt-1.5"
-                    style={{ backgroundColor: '#D4AF37', opacity: bp.score * 0.8 }}
-                  />
-                  <span className="text-[10px] font-mono text-[#999999]/60 leading-snug line-clamp-2">
-                    {bp.title}
-                  </span>
-                  <span className="text-[9px] font-mono text-[#999999]/25 flex-shrink-0 ml-auto">
-                    {Math.round(bp.score * 100)}%
-                  </span>
-                </div>
-              ))}
+              {gap.bridge_papers.slice(0, 3).map((bp) => {
+                const fullPaper = graphData.nodes.find((n) => n.id === bp.paper_id);
+                return (
+                  <button
+                    key={bp.paper_id}
+                    onClick={() => fullPaper && selectPaper(fullPaper)}
+                    className="w-full flex items-start gap-1.5 px-1.5 py-1 rounded hover:bg-[rgba(255,255,255,0.04)] transition-colors text-left"
+                  >
+                    <div
+                      className="w-1 h-1 rounded-full flex-shrink-0 mt-1.5"
+                      style={{ backgroundColor: '#D4AF37', opacity: bp.score * 0.8 }}
+                    />
+                    <span className="text-[10px] font-mono text-[#999999]/60 leading-snug line-clamp-2 hover:text-[#D4AF37]/80 transition-colors">
+                      {bp.title}
+                    </span>
+                    <span className="text-[9px] font-mono text-[#999999]/25 flex-shrink-0 ml-auto">
+                      {Math.round(bp.score * 100)}%
+                    </span>
+                  </button>
+                );
+              })}
               {gap.bridge_papers.length > 3 && (
                 <p className="text-[9px] font-mono text-[#999999]/25 px-1.5">
                   +{gap.bridge_papers.length - 3} more
@@ -202,7 +217,46 @@ function GapCard({ gap, onMouseEnter, onMouseLeave }: GapCardProps) {
             </div>
           </div>
         )}
+
+        {/* Research Questions */}
+        {gap.research_questions.length > 0 && (
+          <ResearchQuestions questions={gap.research_questions} />
+        )}
       </div>
+    </div>
+  );
+}
+
+// ─── Research Questions Accordion ────────────────────────────────────────────
+
+function ResearchQuestions({ questions }: { questions: string[] }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="mt-1">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex items-center gap-1.5 w-full text-left"
+      >
+        <span className="hud-label">Research Questions</span>
+        <span className="text-[9px] font-mono text-[#999999]/25">{questions.length}</span>
+        <div className="flex-1" />
+        <ChevronDown
+          className={`w-3 h-3 text-[#999999]/30 transition-transform ${expanded ? 'rotate-180' : ''}`}
+        />
+      </button>
+      {expanded && (
+        <div className="mt-1.5 space-y-1">
+          {questions.map((q, i) => (
+            <div
+              key={i}
+              className="text-[10px] font-mono text-[#999999]/50 leading-snug pl-2 border-l border-[rgba(212,175,55,0.1)]"
+            >
+              {q}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

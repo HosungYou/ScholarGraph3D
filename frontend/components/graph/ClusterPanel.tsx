@@ -16,6 +16,7 @@ export default function ClusterPanel() {
     setHighlightedPaperIds,
     clearHighlightedPaperIds,
     selectPaper,
+    selectedPaper,
   } = useGraphStore();
 
   const [expandedPaperList, setExpandedPaperList] = useState<number | null>(null);
@@ -77,7 +78,33 @@ export default function ClusterPanel() {
       else if (srcIn || tgtIn) externalEdges++;
     });
 
-    return { avgCitations, yearMin, yearMax, topField, internalEdges, externalEdges };
+    // H-index: largest h where h papers have >= h citations
+    const sortedCitations = [...citations].sort((a, b) => b - a);
+    let hIndex = 0;
+    for (let i = 0; i < sortedCitations.length; i++) {
+      if (sortedCitations[i] >= i + 1) hIndex = i + 1;
+      else break;
+    }
+
+    // Recency: percentage of papers from last 3 years
+    const currentYear = new Date().getFullYear();
+    const recentCount = years.filter(y => y >= currentYear - 3).length;
+    const recencyPct = years.length > 0 ? Math.round((recentCount / years.length) * 100) : 0;
+
+    // Top authors: most frequent authors across papers
+    const authorCounts = new Map<string, number>();
+    papers.forEach(p => {
+      p.authors?.forEach(a => {
+        const name = typeof a === 'string' ? a : a.name;
+        if (name) authorCounts.set(name, (authorCounts.get(name) || 0) + 1);
+      });
+    });
+    const topAuthors = Array.from(authorCounts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([name, count]) => ({ name, count }));
+
+    return { avgCitations, yearMin, yearMax, topField, internalEdges, externalEdges, hIndex, recencyPct, topAuthors };
   }, [graphData, selectedCluster]);
 
   const handleClusterSelect = useCallback((cluster: typeof selectedCluster) => {
@@ -268,12 +295,20 @@ export default function ClusterPanel() {
                     <div className="hud-value text-sm">{clusterStats.avgCitations.toLocaleString()}</div>
                   </div>
                   <div>
+                    <div className="hud-label mb-0.5">H-Index</div>
+                    <div className="hud-value text-sm">{clusterStats.hIndex}</div>
+                  </div>
+                  <div>
                     <div className="hud-label mb-0.5">Year Range</div>
                     <div className="hud-value text-sm">
                       {clusterStats.yearMin && clusterStats.yearMax
                         ? `${clusterStats.yearMin}–${clusterStats.yearMax}`
                         : 'N/A'}
                     </div>
+                  </div>
+                  <div>
+                    <div className="hud-label mb-0.5">Recent (3yr)</div>
+                    <div className="hud-value text-sm">{clusterStats.recencyPct}%</div>
                   </div>
                   <div>
                     <div className="hud-label mb-0.5">Primary Field</div>
@@ -286,6 +321,20 @@ export default function ClusterPanel() {
                     </div>
                   </div>
                 </div>
+                {/* Top Authors */}
+                {clusterStats.topAuthors.length > 0 && (
+                  <div className="mt-2 pt-2 border-t border-[rgba(255,255,255,0.04)]">
+                    <div className="hud-label mb-1">Top Authors</div>
+                    <div className="space-y-0.5">
+                      {clusterStats.topAuthors.map((a) => (
+                        <div key={a.name} className="flex items-center gap-1.5 text-[10px] font-mono">
+                          <span className="text-text-primary truncate">{a.name}</span>
+                          <span className="text-[#999999]/30 flex-shrink-0">{a.count} papers</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -303,9 +352,17 @@ export default function ClusterPanel() {
                   <button
                     key={paper.id}
                     onClick={() => selectPaper(paper)}
-                    className="w-full text-left p-2 rounded-lg hover:bg-[rgba(255,255,255,0.02)] border border-transparent hover:border-[rgba(255,255,255,0.04)] transition-all group"
+                    className={`w-full text-left p-2 rounded-lg transition-all group ${
+                      selectedPaper?.id === paper.id
+                        ? 'bg-[rgba(212,175,55,0.06)] border-l-2 border-[#D4AF37] border-t border-r border-b border-t-[rgba(212,175,55,0.12)] border-r-[rgba(212,175,55,0.12)] border-b-[rgba(212,175,55,0.12)]'
+                        : 'hover:bg-[rgba(255,255,255,0.02)] border border-transparent hover:border-[rgba(255,255,255,0.04)]'
+                    }`}
                   >
-                    <div className="text-xs text-text-primary truncate group-hover:text-[#D4AF37] transition-colors">
+                    <div className={`text-xs line-clamp-2 transition-colors ${
+                      selectedPaper?.id === paper.id
+                        ? 'text-[#D4AF37] font-semibold'
+                        : 'text-text-primary truncate group-hover:text-[#D4AF37]'
+                    }`}>
                       {paper.title}
                     </div>
                     <div className="flex items-center gap-2 text-[10px] font-mono text-[#999999]/40 mt-0.5">

@@ -58,6 +58,10 @@ interface GraphStore {
   showLabels: boolean;
   showCosmicTheme: boolean;
 
+  // Edge visualization mode
+  edgeVisMode: 'similarity' | 'temporal' | 'crossCluster';
+  setEdgeVisMode: (mode: 'similarity' | 'temporal' | 'crossCluster') => void;
+
   // Actions
   setGraphData: (data: GraphData) => void;
   selectPaper: (paper: Paper | null) => void;
@@ -129,6 +133,8 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
   showClusterHulls: true,
   showLabels: true,
   showCosmicTheme: true,
+  edgeVisMode: 'similarity' as const,
+  setEdgeVisMode: (mode) => set({ edgeVisMode: mode }),
 
   setGraphData: (data) => set({ graphData: data, error: null }),
 
