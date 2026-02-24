@@ -15,6 +15,7 @@ import RadarLoader from '@/components/cosmic/RadarLoader';
 import SeedChatPanel from '@/components/graph/SeedChatPanel';
 import GapSpotterPanel from '@/components/graph/GapSpotterPanel';
 import GapReportView from '@/components/graph/GapReportView';
+import AcademicAnalysisPanel from '@/components/graph/AcademicAnalysisPanel';
 import type { Paper, CitationIntent, GraphData, StructuralGap } from '@/types';
 
 /* ──────────────────────────────────────────────
@@ -72,6 +73,7 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
+  BarChart3,
 } from 'lucide-react';
 
 /* ──────────────────────────────────────────────
@@ -101,6 +103,7 @@ function SeedExploreContent() {
     setGaps,
     setFrontierIds,
     activeGapReport,
+    academicReport,
   } = useGraphStore();
 
   const graphRef = useRef<ScholarGraph3DRef>(null);
@@ -415,6 +418,7 @@ function SeedExploreContent() {
     { id: 'clusters' as const, icon: Layers, label: 'CLUSTERS' },
     { id: 'gaps' as const, icon: ScanSearch, label: 'GAPS' },
     { id: 'chat' as const, icon: MessageCircle, label: 'CHAT' },
+    { id: 'academic' as const, icon: BarChart3, label: 'ACADEMIC' },
   ];
 
   return (
@@ -564,6 +568,7 @@ function SeedExploreContent() {
                   activeGapReport ? <GapReportView /> : <GapSpotterPanel />
                 )}
                 {activeTab === 'chat' && <SeedChatPanel />}
+                {activeTab === 'academic' && <AcademicAnalysisPanel />}
               </div>
             </>
           )}

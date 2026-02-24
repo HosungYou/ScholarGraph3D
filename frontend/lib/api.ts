@@ -6,6 +6,8 @@ import type {
   ChatAction,
   GapReport,
   StructuralGap,
+  AcademicReport,
+  NetworkOverview,
 } from '@/types';
 import { getSession } from './supabase';
 
@@ -303,6 +305,28 @@ export const api = {
         include_citations: options?.include_citations ?? true,
       }),
     }, 30000),
+  // ─── Academic Analysis ────────────────────────────────────────────
+  generateAcademicReport: (
+    graphContext: { papers: any[]; clusters: any[]; edges: any[]; total_papers: number },
+    gapIds?: string[],
+    analysisParameters?: Record<string, any>
+  ): Promise<AcademicReport> =>
+    request<AcademicReport>(`${API_BASE}/api/academic-report`, {
+      method: 'POST',
+      body: JSON.stringify({
+        graph_context: graphContext,
+        gap_ids: gapIds,
+        analysis_parameters: analysisParameters,
+      }),
+    }, 60000),
+
+  getNetworkOverview: (
+    graphContext: { papers: any[]; clusters: any[]; edges: any[] }
+  ): Promise<NetworkOverview> =>
+    request<NetworkOverview>(`${API_BASE}/api/network-overview`, {
+      method: 'POST',
+      body: JSON.stringify({ graph_context: graphContext }),
+    }),
 };
 
 export default api;

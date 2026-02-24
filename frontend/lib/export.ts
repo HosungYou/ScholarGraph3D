@@ -1,4 +1,4 @@
-import type { Paper, GapReport } from '@/types';
+import type { Paper, GapReport, AcademicReport } from '@/types';
 
 export function toBibtex(paper: Paper): string {
   const authorStr = paper.authors.map(a => a.name).join(' and ');
@@ -122,4 +122,95 @@ export function toGapReportMarkdown(report: GapReport): string {
 
 export function toGapReportBibtex(report: GapReport): string {
   return report.bibtex;
+}
+
+// ─── Academic Report Export ──────────────────────────────────────────
+
+export function toAcademicReportMarkdown(report: AcademicReport): string {
+  const lines: string[] = [];
+
+  lines.push('# Citation Network Analysis Report');
+  lines.push(`*Generated: ${new Date(report.generated_at).toLocaleDateString()}*`);
+  lines.push('');
+
+  // Methods
+  lines.push('## Methods');
+  lines.push('');
+  lines.push(report.methods_section);
+  lines.push('');
+
+  // Tables
+  lines.push('## Results');
+  lines.push('');
+
+  for (const key of ['table_1', 'table_2', 'table_3', 'table_4', 'table_5'] as const) {
+    const table = report.tables[key];
+    if (!table) continue;
+    lines.push(table.title);
+    lines.push('');
+    // Markdown table
+    lines.push('| ' + table.headers.join(' | ') + ' |');
+    lines.push('| ' + table.headers.map(() => '---').join(' | ') + ' |');
+    for (const row of table.rows) {
+      lines.push('| ' + row.join(' | ') + ' |');
+    }
+    lines.push('');
+    if (table.note) {
+      lines.push(`*Note.* ${table.note}`);
+      lines.push('');
+    }
+  }
+
+  // Figure captions
+  lines.push('## Figure Captions');
+  lines.push('');
+  lines.push(report.figure_captions.figure_1);
+  lines.push('');
+  lines.push(report.figure_captions.figure_2);
+  lines.push('');
+  lines.push(report.figure_captions.figure_3);
+  lines.push('');
+
+  // References
+  lines.push('## References');
+  lines.push('');
+  for (const ref of report.reference_list.methodology_refs) {
+    lines.push(ref);
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}
+
+export function toMethodsSection(report: AcademicReport): string {
+  return report.methods_section;
+}
+
+export function toResultsTables(report: AcademicReport): string {
+  const lines: string[] = [];
+  for (const key of ['table_1', 'table_2', 'table_3', 'table_4', 'table_5'] as const) {
+    const table = report.tables[key];
+    if (!table) continue;
+    lines.push(table.title);
+    lines.push('');
+    lines.push('| ' + table.headers.join(' | ') + ' |');
+    lines.push('| ' + table.headers.map(() => '---').join(' | ') + ' |');
+    for (const row of table.rows) {
+      lines.push('| ' + row.join(' | ') + ' |');
+    }
+    lines.push('');
+    if (table.note) {
+      lines.push(`*Note.* ${table.note}`);
+      lines.push('');
+    }
+  }
+  return lines.join('\n');
+}
+
+export function toAPAReferenceList(report: AcademicReport): string {
+  const lines = [...report.reference_list.methodology_refs];
+  for (const ref of report.reference_list.analysis_refs) {
+    lines.push(ref.apa_citation);
+  }
+  return lines.join('\n\n');
 }

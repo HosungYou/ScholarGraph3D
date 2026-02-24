@@ -189,6 +189,101 @@ export interface GapReport {
   llm_status?: 'success' | 'failed';
 }
 
+// ─── Academic Analysis (SNA) ─────────────────────────────────────────
+
+export interface NetworkLevelMetrics {
+  density: number;
+  diameter: number | null;
+  avg_path_length: number | null;
+  reciprocity: number;
+  transitivity: number;
+  component_count: number;
+  avg_degree: number;
+  node_count: number;
+  edge_count: number;
+}
+
+export interface NodeCentrality {
+  paper_id: string;
+  title: string;
+  cluster_id: number;
+  cluster_label: string;
+  degree_in: number;
+  degree_out: number;
+  betweenness: number;
+  closeness: number;
+  pagerank: number;
+  eigenvector: number;
+}
+
+export interface CommunityMetrics {
+  cluster_id: number;
+  label: string;
+  paper_count: number;
+  intra_density: number;
+  avg_year: number;
+  year_range: [number, number];
+  h_index: number;
+}
+
+export interface StructuralHolesNode {
+  paper_id: string;
+  title: string;
+  cluster_id: number;
+  constraint: number;
+  effective_size: number;
+  efficiency: number;
+}
+
+export interface NetworkMetrics {
+  network_level: NetworkLevelMetrics;
+  node_centrality: NodeCentrality[];
+  community_metrics: CommunityMetrics[];
+  structural_holes: StructuralHolesNode[];
+  modularity: number;
+  silhouette: number;
+}
+
+export interface AcademicReportTable {
+  title: string;
+  headers: string[];
+  rows: (string | number)[][];
+  note: string;
+}
+
+export interface AcademicReport {
+  methods_section: string;
+  tables: {
+    table_1: AcademicReportTable;
+    table_2: AcademicReportTable;
+    table_3: AcademicReportTable;
+    table_4: AcademicReportTable;
+    table_5: AcademicReportTable;
+  };
+  figure_captions: {
+    figure_1: string;
+    figure_2: string;
+    figure_3: string;
+  };
+  reference_list: {
+    methodology_refs: string[];
+    analysis_refs: { paper_id: string; apa_citation: string }[];
+  };
+  network_metrics: NetworkMetrics;
+  parameters: Record<string, any>;
+  generated_at: string;
+  feasibility: 'full' | 'partial' | 'insufficient';
+  warnings: string[];
+}
+
+export interface NetworkOverview {
+  node_count: number;
+  edge_count: number;
+  density: number;
+  cluster_count: number;
+  modularity: number;
+}
+
 // ─── Citation Intent (Enhanced) ──────────────────────────────────────
 
 export interface CitationIntent {

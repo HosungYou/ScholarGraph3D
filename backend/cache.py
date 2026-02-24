@@ -234,3 +234,34 @@ async def cache_gap_report(cache_key: str, result: Dict[str, Any]) -> None:
         await r.setex(f"gap_report:{cache_key}", _TTL_GAP_REPORT, json.dumps(result))
     except Exception as e:
         logger.debug(f"Gap report cache set failed: {e}")
+
+
+# ==================== Academic Report Cache ====================
+
+_TTL_ACADEMIC_REPORT = 60 * 60 * 24  # 24 hours
+
+
+async def get_cached_academic_report(cache_key: str) -> Optional[Dict[str, Any]]:
+    """Return cached academic report or None."""
+    r = await _get_redis()
+    if not r:
+        return None
+    try:
+        data = await r.get(f"academic_report:{cache_key}")
+        if data:
+            logger.debug(f"Cache HIT for academic_report:{cache_key}")
+            return json.loads(data)
+    except Exception as e:
+        logger.debug(f"Academic report cache get failed: {e}")
+    return None
+
+
+async def cache_academic_report(cache_key: str, result: Dict[str, Any]) -> None:
+    """Cache academic report for 24 hours."""
+    r = await _get_redis()
+    if not r:
+        return
+    try:
+        await r.setex(f"academic_report:{cache_key}", _TTL_ACADEMIC_REPORT, json.dumps(result))
+    except Exception as e:
+        logger.debug(f"Academic report cache set failed: {e}")

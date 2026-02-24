@@ -7,6 +7,8 @@ import type {
   CitationIntent,
   StructuralGap,
   GapReport,
+  AcademicReport,
+  NetworkOverview,
 } from '@/types';
 
 interface GraphStore {
@@ -16,7 +18,7 @@ interface GraphStore {
   isLoading: boolean;
   error: string | null;
 
-  activeTab: 'clusters' | 'gaps' | 'chat';
+  activeTab: 'clusters' | 'gaps' | 'chat' | 'academic';
   highlightedPaperIds: Set<string>;
 
   // Phase 1.5: Visual enhancement state
@@ -46,6 +48,14 @@ interface GraphStore {
   gapReportLoading: boolean;
   setActiveGapReport: (report: GapReport | null) => void;
   setGapReportLoading: (loading: boolean) => void;
+
+  // Academic Analysis
+  academicReport: AcademicReport | null;
+  academicReportLoading: boolean;
+  networkOverview: NetworkOverview | null;
+  setAcademicReport: (report: AcademicReport | null) => void;
+  setAcademicReportLoading: (loading: boolean) => void;
+  setNetworkOverview: (overview: NetworkOverview | null) => void;
 
   // Panel selection → camera focus
   panelSelectionId: string | null;
@@ -93,7 +103,7 @@ interface GraphStore {
   toggleLabels: () => void;
   toggleCosmicTheme: () => void;
 
-  setActiveTab: (tab: 'clusters' | 'gaps' | 'chat') => void;
+  setActiveTab: (tab: 'clusters' | 'gaps' | 'chat' | 'academic') => void;
   setHighlightedPaperIds: (ids: Set<string>) => void;
   clearHighlightedPaperIds: () => void;
 
@@ -140,6 +150,13 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
   gapReportLoading: false,
   setActiveGapReport: (report) => set({ activeGapReport: report }),
   setGapReportLoading: (loading) => set({ gapReportLoading: loading }),
+
+  academicReport: null,
+  academicReportLoading: false,
+  networkOverview: null,
+  setAcademicReport: (report) => set({ academicReport: report }),
+  setAcademicReportLoading: (loading) => set({ academicReportLoading: loading }),
+  setNetworkOverview: (overview) => set({ networkOverview: overview }),
 
   panelSelectionId: null,
   setPanelSelectionId: (id) => set({ panelSelectionId: id }),
