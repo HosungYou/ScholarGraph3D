@@ -413,6 +413,13 @@ function SeedExploreContent() {
 
   const showPaperDetail = !!selectedPaper;
 
+  /* ── Responsive auto-collapse: narrow viewports ── */
+  useEffect(() => {
+    if (showPaperDetail && typeof window !== 'undefined' && window.innerWidth < 1200) {
+      setLeftCollapsed(true);
+    }
+  }, [showPaperDetail]);
+
   /* ── Tab metadata for sidebar ── */
   const tabs = [
     { id: 'clusters' as const, icon: Layers, label: 'CLUSTERS' },
@@ -584,7 +591,7 @@ function SeedExploreContent() {
         </motion.div>
 
         {/* ─── Center: 3D Graph ─── */}
-        <div className="flex-1 relative min-w-0 overflow-hidden">
+        <div className="flex-1 relative overflow-hidden" style={{ minWidth: '400px' }}>
           {isLoading && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/80">
               <div className="text-center">

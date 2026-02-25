@@ -581,3 +581,75 @@ class NetworkMetricsComputer:
             "modularity": 0.0,
             "silhouette": -1.0,
         }
+
+
+# ─── Lightweight node metrics (v3.5.0) ────────────────────────────────
+
+def compute_node_lightweight(
+    papers: List[Dict[str, Any]],
+    edges: List[Dict[str, Any]],
+    clusters: List[Dict[str, Any]],
+) -> Dict[str, Dict[str, float]]:
+    """
+    Compute lightweight SNA metrics for each paper node.
+
+    Metrics computed:
+    - PageRank (alpha=0.85): importance based on citation graph topology
+    - Betweenness centrality: how often a node lies on shortest paths
+
+    Performance: ~50ms for 80 nodes (negligible impact).
+
+    Args:
+        papers: List of paper dicts with 'id' key
+        edges: List of edge dicts with 'source', 'target', 'type' keys
+        clusters: List of cluster dicts (unused, reserved for future)
+
+    Returns:
+        Dict mapping paper_id to {pagerank: float, betweenness: float}
+    """
+    if not papers or not edges:
+        return {}
+
+    paper_ids = {p["id"] for p in papers}
+
+    # Build directed graph from citation edges
+    G = nx.DiGraph()
+    G.add_nodes_from(paper_ids)
+
+    for edge in edges:
+        src = edge.get("source", "")
+        tgt = edge.get("target", "")
+        etype = edge.get("type", "citation")
+        if src in paper_ids and tgt in paper_ids and etype == "citation":
+            G.add_edge(src, tgt)
+
+    # PageRank
+    try:
+        pagerank = nx.pagerank(G, alpha=0.85, max_iter=100)
+    except Exception as e:
+        logger.warning(f"PageRank computation failed: {e}")
+        pagerank = {pid: 0.0 for pid in paper_ids}
+
+    # Betweenness centrality (on undirected version for speed)
+    try:
+        G_undirected = G.to_undirected()
+        betweenness = nx.betweenness_centrality(G_undirected)
+    except Exception as e:
+        logger.warning(f"Betweenness computation failed: {e}")
+        betweenness = {pid: 0.0 for pid in paper_ids}
+
+    # Combine results
+    metrics: Dict[str, Dict[str, float]] = {}
+    for pid in paper_ids:
+        metrics[pid] = {
+            "pagerank": round(pagerank.get(pid, 0.0), 6),
+            "betweenness": round(betweenness.get(pid, 0.0), 6),
+        }
+
+    logger.info(
+        f"SNA metrics computed: {len(metrics)} nodes, "
+        f"max_pagerank={max((m['pagerank'] for m in metrics.values()), default=0):.4f}, "
+        f"max_betweenness={max((m['betweenness'] for m in metrics.values()), default=0):.4f}"
+    )
+
+    return metrics

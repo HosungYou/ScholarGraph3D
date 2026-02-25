@@ -7,9 +7,16 @@ import {
   Type,
   RotateCcw,
   Maximize,
+  Circle,
 } from 'lucide-react';
 import { useGraphStore } from '@/hooks/useGraphStore';
 import { cn } from '@/lib/utils';
+
+const NODE_SIZE_OPTIONS = [
+  { value: 'citations' as const, label: 'Citations' },
+  { value: 'pagerank' as const, label: 'PageRank' },
+  { value: 'betweenness' as const, label: 'Betweenness' },
+];
 
 export default function GraphControls() {
   const {
@@ -21,6 +28,8 @@ export default function GraphControls() {
     toggleSimilarityEdges,
     toggleClusterHulls,
     toggleLabels,
+    nodeSizeMode,
+    setNodeSizeMode,
   } = useGraphStore();
 
   const controls = [
@@ -77,6 +86,37 @@ export default function GraphControls() {
           <ctrl.icon className="w-4 h-4" />
         </button>
       ))}
+      <div className="h-px bg-[rgba(255,255,255,0.03)] my-0.5" />
+      {/* Node Size Mode Dropdown */}
+      <div className="relative group">
+        <button
+          title="Node Size"
+          className="p-2 rounded-lg bg-[rgba(10,10,10,0.8)] border border-[rgba(255,255,255,0.03)] text-[#999999]/40 hover:text-[#999999] hover:border-[rgba(255,255,255,0.06)] transition-all"
+        >
+          <Circle className="w-4 h-4" />
+        </button>
+        <div className="absolute right-10 top-0 hidden group-hover:block">
+          <div className="bg-[rgba(10,10,10,0.95)] border border-[rgba(255,255,255,0.08)] rounded-lg p-1 min-w-[120px] shadow-xl">
+            <div className="text-[9px] font-mono text-[#999999]/40 px-2 py-1 uppercase tracking-wider">
+              Node Size
+            </div>
+            {NODE_SIZE_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setNodeSizeMode(opt.value)}
+                className={cn(
+                  'w-full text-left px-2 py-1.5 rounded text-[10px] font-mono transition-colors',
+                  nodeSizeMode === opt.value
+                    ? 'text-[#D4AF37] bg-[rgba(212,175,55,0.1)]'
+                    : 'text-[#999999]/60 hover:text-[#999999] hover:bg-[rgba(255,255,255,0.03)]'
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
       <div className="h-px bg-[rgba(255,255,255,0.03)] my-0.5" />
       <button
         onClick={() => {

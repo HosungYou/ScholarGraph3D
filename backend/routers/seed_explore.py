@@ -21,6 +21,7 @@ from graph.embedding_reducer import EmbeddingReducer
 from graph.similarity import SimilarityComputer
 from graph.bridge_detector import detect_bridge_nodes
 from graph.gap_detector import GapDetector
+from graph.network_metrics import compute_node_lightweight
 from integrations.semantic_scholar import get_s2_client, SemanticScholarRateLimitError
 from services.citation_intent import CitationIntentService
 
@@ -58,6 +59,8 @@ class SeedGraphNode(BaseModel):
     cluster_label: str = ""
     is_bridge: bool = False
     is_seed: bool = False
+    pagerank: float = 0.0
+    betweenness: float = 0.0
 
 
 class SeedGraphEdge(BaseModel):
@@ -275,24 +278,36 @@ async def _seed_explore_pipeline(request: SeedExploreRequest, start_time: float)
 
         logger.info(f"[timing] umap: {time.time() - start_time:.2f}s")
 
-        # 5. HDBSCAN clustering (on 50D, skips internal UMAP) + Similarity edges (on 768D)
+        # 5a. Similarity edges FIRST (needed as clustering input)
         clusterer = PaperClusterer()
         min_cluster = max(3, min(5, len(papers_with_emb) // 5))
         sim_computer = SimilarityComputer()
 
-        # Pass 50D to clusterer — it will skip internal UMAP since dim <= 50
-        cluster_task = asyncio.to_thread(clusterer.cluster, embeddings_50d, min_cluster)
-        sim_task = asyncio.to_thread(sim_computer.compute_edges, embeddings, paper_ids, 0.7)
-        cluster_labels, sim_edges = await asyncio.gather(cluster_task, sim_task)
+        sim_edges = await asyncio.to_thread(sim_computer.compute_edges, embeddings, paper_ids, 0.7)
 
-        logger.info(f"[timing] hdbscan_and_similarity: {time.time() - start_time:.2f}s")
+        # 5b. Build reference_lists from citation_pairs (no extra API calls)
+        reference_lists: Dict[str, List[str]] = {}
+        for p in papers_with_emb:
+            reference_lists[p.paper_id] = [
+                cited for citing, cited in citation_pairs if citing == p.paper_id
+            ]
 
+        # 5c. Hybrid clustering: Leiden + bib coupling + HDBSCAN fallback
+        cluster_labels = await asyncio.to_thread(
+            clusterer.cluster_hybrid,
+            paper_ids, citation_pairs, sim_edges, embeddings_50d,
+            reference_lists, min_cluster,
+        )
+
+        logger.info(f"[timing] clustering_and_similarity: {time.time() - start_time:.2f}s")
+
+        # 5d. TF-IDF cluster labels (replaces fieldsOfStudy frequency)
         paper_dicts = [{
             "title": p.title,
             "abstract": p.abstract or "",
             "fields_of_study": p.fields_of_study,
         } for p in papers_with_emb]
-        cluster_meta = clusterer.label_clusters(paper_dicts, cluster_labels)
+        cluster_meta = clusterer.label_clusters_tfidf(paper_dicts, cluster_labels)
         # Deduplicate cluster labels (e.g., multiple "Computer Science" clusters)
         label_counts: Dict[str, int] = {}
         for cid, info in cluster_meta.items():
@@ -468,6 +483,22 @@ async def _seed_explore_pipeline(request: SeedExploreRequest, start_time: float)
                 logger.warning(f"Gap detection failed (non-fatal): {e}")
 
         logger.info(f"[timing] intents_and_gaps: {time.time() - start_time:.2f}s")
+
+        # 8. SNA metrics (PageRank, Betweenness) — non-fatal
+        try:
+            sna_papers = [{"id": n.id} for n in nodes]
+            sna_edges = [{"source": e.source, "target": e.target, "type": e.type} for e in edges]
+            sna_clusters = [{"id": c.id} for c in clusters_info]
+            sna_metrics = await asyncio.to_thread(
+                compute_node_lightweight, sna_papers, sna_edges, sna_clusters
+            )
+            for n in nodes:
+                m = sna_metrics.get(n.id, {})
+                n.pagerank = m.get("pagerank", 0.0)
+                n.betweenness = m.get("betweenness", 0.0)
+            logger.info(f"[timing] sna_metrics: {time.time() - start_time:.2f}s")
+        except Exception as e:
+            logger.warning(f"SNA metrics failed (non-fatal): {e}")
 
     else:
         # Not enough for graph — arrange in spiral

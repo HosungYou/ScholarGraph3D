@@ -89,6 +89,10 @@ interface GraphStore {
   edgeVisMode: 'similarity' | 'temporal' | 'crossCluster';
   setEdgeVisMode: (mode: 'similarity' | 'temporal' | 'crossCluster') => void;
 
+  // Node size encoding mode
+  nodeSizeMode: 'citations' | 'pagerank' | 'betweenness';
+  setNodeSizeMode: (mode: 'citations' | 'pagerank' | 'betweenness') => void;
+
   // Actions
   setGraphData: (data: GraphData) => void;
   selectPaper: (paper: Paper | null) => void;
@@ -182,6 +186,9 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
   showCosmicTheme: true,
   edgeVisMode: 'similarity' as const,
   setEdgeVisMode: (mode) => set({ edgeVisMode: mode }),
+
+  nodeSizeMode: 'citations' as const,
+  setNodeSizeMode: (mode) => set({ nodeSizeMode: mode }),
 
   setGraphData: (data) => set({ graphData: data, error: null }),
 

@@ -32,6 +32,8 @@ export interface Paper {
   oa_url?: string;
   is_bridge?: boolean;
   frontier_score?: number;  // 0-1: how many unexplored connections
+  pagerank?: number;
+  betweenness?: number;
 }
 
 export interface GraphEdge {
@@ -116,6 +118,7 @@ export interface GapScoreBreakdown {
   temporal: number;
   intent: number;
   directional: number;
+  structural_holes: number;
   composite: number;
 }
 

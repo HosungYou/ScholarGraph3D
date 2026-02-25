@@ -270,7 +270,7 @@ export default function ClusterPanel() {
           >
             {/* Topics */}
             <div className="hud-panel-clean rounded-lg p-3" style={{ borderLeft: `2px solid ${selectedCluster.color}` }}>
-              <span className="hud-label text-[#999999]/50">Top Topics</span>
+              <span className="hud-label text-[#999999]/50">Key Terms</span>
               <div className="flex flex-wrap gap-1.5 mt-2">
                 {selectedCluster.topics.slice(0, 6).map((topic) => (
                   <span

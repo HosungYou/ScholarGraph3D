@@ -346,6 +346,7 @@ function ScoreBreakdown({ breakdown }: { breakdown: GapScoreBreakdown }) {
     { key: 'temporal', label: 'TMP' },
     { key: 'intent', label: 'INT' },
     { key: 'directional', label: 'DIR' },
+    { key: 'structural_holes', label: 'SHL' },
   ];
 
   return (

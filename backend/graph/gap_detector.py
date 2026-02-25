@@ -29,7 +29,7 @@ class StructuralGap:
     bridge_papers: List[Dict[str, Any]] = field(default_factory=list)  # [{paper_id, title, score}]
     potential_edges: List[Dict[str, Any]] = field(default_factory=list)  # [{source, target, similarity}]
     research_questions: List[Any] = field(default_factory=list)  # str (legacy) or Dict (grounded)
-    gap_score_breakdown: Dict[str, float] = field(default_factory=dict)  # {structural, relatedness, temporal, intent, directional, composite}
+    gap_score_breakdown: Dict[str, float] = field(default_factory=dict)  # {structural, relatedness, temporal, intent, directional, structural_holes, composite}
     key_papers_a: List[Dict] = field(default_factory=list)  # cluster A top 3 papers {paper_id, title, tldr, citation_count}
     key_papers_b: List[Dict] = field(default_factory=list)  # cluster B top 3 papers
     temporal_context: Dict = field(default_factory=dict)  # {year_range_a, year_range_b, overlap_years}
@@ -150,18 +150,24 @@ class GapDetector:
                 cid_a, cid_b, paper_cluster, intent_edges or edges
             )
 
-            # ── Directional score (weight 0.15) ──
+            # ── Directional score (weight 0.10) ──
             directional_score, citations_a_to_b, citations_b_to_a = self._compute_directional_score(
                 cid_a, cid_b, paper_cluster, citation_pairs
             )
 
-            # ── Composite score ──
+            # ── Structural holes score (weight 0.15) ──
+            structural_holes_score = self._compute_structural_holes_score(
+                cid_a, cid_b, paper_cluster, edges
+            )
+
+            # ── Composite score (rebalanced with structural holes) ──
             composite = (
-                0.35 * structural_score
+                0.25 * structural_score
                 + 0.25 * relatedness_score
                 + 0.15 * temporal_score
-                + 0.15 * intent_score
+                + 0.10 * intent_score
                 + 0.10 * directional_score
+                + 0.15 * structural_holes_score
             )
 
             gap_score_breakdown = {
@@ -170,6 +176,7 @@ class GapDetector:
                 "temporal": round(temporal_score, 4),
                 "intent": round(intent_score, 4),
                 "directional": round(directional_score, 4),
+                "structural_holes": round(structural_holes_score, 4),
                 "composite": round(composite, 4),
             }
 
@@ -694,6 +701,73 @@ class GapDetector:
         # Asymmetry: |A→B - B→A| / (A→B + B→A)
         asymmetry = abs(a_to_b - b_to_a) / total
         return round(asymmetry, 4), a_to_b, b_to_a
+
+    def _compute_structural_holes_score(
+        self,
+        cid_a: int,
+        cid_b: int,
+        paper_cluster: Dict[str, int],
+        edges: List[Dict[str, Any]],
+    ) -> float:
+        """
+        Compute structural holes score between two clusters using Burt's constraint.
+
+        Nodes that span structural holes have low constraint values.
+        High average constraint among cross-cluster nodes → larger structural hole → higher gap score.
+
+        Returns a score from 0 (well-brokered, no hole) to 1 (deep structural hole).
+        """
+        try:
+            import networkx as nx
+        except ImportError:
+            return 0.5  # neutral fallback
+
+        papers_in_a = {pid for pid, cid in paper_cluster.items() if cid == cid_a}
+        papers_in_b = {pid for pid, cid in paper_cluster.items() if cid == cid_b}
+        combined = papers_in_a | papers_in_b
+
+        if len(combined) < 4:
+            return 0.5
+
+        # Build subgraph for the two clusters
+        G = nx.Graph()
+        G.add_nodes_from(combined)
+        for edge in edges:
+            src = str(edge.get("source", ""))
+            tgt = str(edge.get("target", ""))
+            if src in combined and tgt in combined:
+                G.add_edge(src, tgt)
+
+        if G.number_of_edges() == 0:
+            return 0.9  # no edges = strong structural hole
+
+        # Compute constraint for cross-cluster nodes
+        try:
+            constraint = nx.constraint(G)
+        except Exception:
+            return 0.5
+
+        # Focus on nodes that have connections in both clusters
+        cross_nodes = []
+        for node in combined:
+            neighbors = set(G.neighbors(node))
+            has_a = bool(neighbors & papers_in_a)
+            has_b = bool(neighbors & papers_in_b)
+            if has_a and has_b:
+                cross_nodes.append(node)
+
+        if not cross_nodes:
+            return 0.8  # no cross-cluster nodes = significant hole
+
+        # Average constraint of cross-cluster nodes
+        # High constraint = few brokerage opportunities = deeper hole
+        avg_constraint = sum(
+            constraint.get(n, 1.0) for n in cross_nodes
+        ) / len(cross_nodes)
+
+        # Normalize: constraint ranges 0-1 for well-connected, can exceed 1
+        score = min(1.0, avg_constraint)
+        return round(score, 4)
 
     @staticmethod
     def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:

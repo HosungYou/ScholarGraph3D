@@ -148,6 +148,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     setPanelSelectionId,
     highlightedClusterPair,
     hoveredGapEdges,
+    nodeSizeMode,
   } = useGraphStore();
 
   const lastClickRef = useRef<{ nodeId: string; timestamp: number } | null>(
@@ -227,6 +228,14 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       citationRankMap.set(p.id, 1 - idx / sortedByCitations.length);
     });
 
+    // Precompute max values for PageRank/Betweenness normalization
+    const maxPagerank = Math.max(
+      ...graphData.nodes.map(n => n.pagerank ?? 0), 0.0001
+    );
+    const maxBetweenness = Math.max(
+      ...graphData.nodes.map(n => n.betweenness ?? 0), 0.0001
+    );
+
     const nodes: ForceGraphNode[] = graphData.nodes
       .filter((paper) => !hiddenClusterIds.has(paper.cluster_id))
       .map((paper) => {
@@ -237,8 +246,28 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         const paperYear = paper.year || yearRange.min;
         const opacity =
           0.3 + 0.7 * ((paperYear - yearRange.min) / yearSpan);
-        const rawCitations = paper.citation_count || 0;
-        const size = Math.min(12, Math.max(2, Math.sqrt(rawCitations + 1) * 0.8));
+
+        // Node size based on selected mode
+        let size: number;
+        switch (nodeSizeMode) {
+          case 'pagerank': {
+            const pr = paper.pagerank ?? 0;
+            size = Math.min(12, Math.max(2, (pr / maxPagerank) * 12));
+            break;
+          }
+          case 'betweenness': {
+            const bt = paper.betweenness ?? 0;
+            size = Math.min(12, Math.max(2, (bt / maxBetweenness) * 12));
+            break;
+          }
+          case 'citations':
+          default: {
+            const rawCitations = paper.citation_count || 0;
+            size = Math.min(12, Math.max(2, Math.sqrt(rawCitations + 1) * 0.8));
+            break;
+          }
+        }
+
         const authorName = paper.authors?.[0]?.name?.split(' ').pop() || 'Unknown';
         const citationPercentile = citationRankMap.get(paper.id) || 0;
 
@@ -388,7 +417,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     }
 
     return { nodes, links };
-  }, [graphData, yearRange, showCitationEdges, showSimilarityEdges, citationIntents, hiddenClusterIds, showGhostEdges, edgeVisMode, hoveredGapEdges]);
+  }, [graphData, yearRange, showCitationEdges, showSimilarityEdges, citationIntents, hiddenClusterIds, showGhostEdges, edgeVisMode, hoveredGapEdges, nodeSizeMode]);
 
   // Camera auto-focus when paper selected from panel
   useEffect(() => {
@@ -1317,8 +1346,49 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
           hotspot.position.copy(mid);
           hotspot.userData.isPulsingHotspot = true;
           overlayGroup.add(hotspot);
+
+          // Distance label at midpoint
+          const dist = centA.distanceTo(centB);
+          const distCanvas = document.createElement('canvas');
+          const distCtx = distCanvas.getContext('2d');
+          if (distCtx) {
+            distCanvas.width = 96;
+            distCanvas.height = 32;
+            distCtx.fillStyle = `rgba(255, 255, 255, 0.5)`;
+            distCtx.font = 'bold 16px Arial, sans-serif';
+            distCtx.textAlign = 'center';
+            distCtx.textBaseline = 'middle';
+            distCtx.fillText(Math.round(dist).toString(), 48, 16);
+            const distTexture = new THREE.CanvasTexture(distCanvas);
+            const distSprite = new THREE.Sprite(
+              new THREE.SpriteMaterial({ map: distTexture, transparent: true, depthTest: false })
+            );
+            distSprite.scale.set(20, 7, 1);
+            distSprite.position.copy(mid);
+            distSprite.position.y += 6;
+            overlayGroup.add(distSprite);
+          }
         }
       }
+
+      // Cluster centroid markers
+      clusterCentroids.forEach((centroid, clusterId) => {
+        const cluster = graphData!.clusters.find(c => c.id === clusterId);
+        if (!cluster) return;
+
+        // Diamond marker at centroid
+        const markerGeo = new THREE.OctahedronGeometry(4, 0);
+        const markerMat = new THREE.MeshBasicMaterial({
+          color: new THREE.Color(cluster.color),
+          transparent: true,
+          opacity: 0.7,
+          depthWrite: false,
+        });
+        const marker = new THREE.Mesh(markerGeo, markerMat);
+        marker.position.copy(centroid);
+        marker.userData.isCentroidMarker = true;
+        overlayGroup.add(marker);
+      });
     };
 
     const interval = setInterval(updateGapOverlay, 1500);
@@ -1333,6 +1403,10 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         if (child.userData?.isPulsingHotspot) {
           const scale = 1 + Math.sin(t) * 0.3;
           child.scale.setScalar(scale);
+        }
+        if (child.userData?.isCentroidMarker) {
+          child.rotation.y = t * 0.5;
+          child.rotation.x = Math.sin(t * 0.3) * 0.2;
         }
       });
     };
