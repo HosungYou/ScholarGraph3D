@@ -5,6 +5,7 @@ ScholarGraph3D FastAPI Backend
 UMAP dimensionality reduction, and HDBSCAN clustering.
 """
 
+import asyncio
 import logging
 import re
 from contextlib import asynccontextmanager
@@ -79,6 +80,22 @@ async def lifespan(app: FastAPI):
     logger.info(f"  S2 API Key: {'configured' if settings.s2_api_key else 'not set (unauthenticated)'}")
     logger.info(f"  CORS origins: {_cors_origins}")
     logger.info(f"  CORS regex: {_cors_origin_regex}")
+
+    # Warm up UMAP/Numba JIT kernels before first request.
+    # UMAP uses Numba which JIT-compiles on first call (~30s on 0.5 vCPU).
+    # Pre-compiling at startup prevents the first seed-explore from timing out.
+    async def _warm_up_umap():
+        try:
+            import numpy as np
+            from graph.embedding_reducer import EmbeddingReducer
+            dummy = np.random.rand(12, 768).astype(np.float32)
+            reducer = EmbeddingReducer()
+            await asyncio.to_thread(reducer.reduce_to_3d, dummy)
+            logger.info("  UMAP warm-up: complete (Numba JIT kernels compiled)")
+        except Exception as e:
+            logger.warning(f"  UMAP warm-up failed (non-fatal): {e}")
+
+    asyncio.create_task(_warm_up_umap())
 
     yield
 
