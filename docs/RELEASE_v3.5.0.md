@@ -1,4 +1,4 @@
-# ScholarGraph3D v3.4.0 — Release Notes
+# ScholarGraph3D v3.5.0 — Release Notes
 
 **Release Date:** 2026-02-25
 **Type:** Major Feature Release (Clustering/SNA Architecture Overhaul)
@@ -7,7 +7,7 @@
 
 ## Overview
 
-v3.4.0 fundamentally redesigns the clustering pipeline to align with bibliometric SNA standards (VOSviewer, CiteSpace). The core change replaces HDBSCAN embedding-only clustering with a **Leiden algorithm on a 3-layer hybrid graph** (citation + bibliographic coupling + SPECTER2 similarity), producing clusters that reflect actual research communities rather than mere semantic similarity. Cluster labels now come from TF-IDF abstract analysis instead of Semantic Scholar's coarse `fieldsOfStudy` taxonomy. Additionally, SNA metrics (PageRank, Betweenness Centrality), Structural Holes gap analysis, and node size encoding are introduced.
+v3.5.0 fundamentally redesigns the clustering pipeline to align with bibliometric SNA standards (VOSviewer, CiteSpace). The core change replaces HDBSCAN embedding-only clustering with a **Leiden algorithm on a 3-layer hybrid graph** (citation + bibliographic coupling + SPECTER2 similarity), producing clusters that reflect actual research communities rather than mere semantic similarity. Cluster labels now come from TF-IDF abstract analysis instead of Semantic Scholar's coarse `fieldsOfStudy` taxonomy. Additionally, lightweight SNA metrics (PageRank, Betweenness Centrality), Structural Holes gap analysis, and node size encoding are introduced.
 
 ---
 
@@ -27,9 +27,9 @@ Leiden community detection (`leidenalg.find_partition` with `RBConfigurationVert
 
 `fieldsOfStudy` frequency labeling replaced with `TfidfVectorizer(ngram_range=(1,2))` on paper abstracts. Produces domain-specific labels like "attention mechanism" or "drug discovery" instead of "Computer Science".
 
-### SNA Metrics
+### Lightweight SNA Node Metrics
 
-New `network_metrics.py` module computes PageRank (alpha=0.85) and Betweenness Centrality via NetworkX. Results added to each node in the graph response.
+New `compute_node_lightweight()` function in `network_metrics.py` computes PageRank (alpha=0.85) and Betweenness Centrality for each node. Complements the comprehensive `NetworkMetricsComputer` class added in v3.4.0.
 
 ### Structural Holes Gap Dimension
 
@@ -55,12 +55,12 @@ Canvas enforces `minWidth: 400px`. On viewports < 1200px, opening the right deta
 | Bibliographic coupling | `graph/clusterer.py` | `_compute_bib_coupling()` — shared reference edges from existing citation_pairs |
 | TF-IDF labeling | `graph/clusterer.py` | `label_clusters_tfidf()` — bigram/unigram abstract analysis replaces fieldsOfStudy |
 | CLUSTERING_MODE env var | `graph/clusterer.py` | `"hybrid"` (default) / `"leiden"` / `"hdbscan"` runtime control |
-| SNA metrics module | `graph/network_metrics.py` | **New file** — `compute_node_lightweight()` for PageRank + Betweenness |
+| Lightweight SNA metrics | `graph/network_metrics.py` | `compute_node_lightweight()` for PageRank + Betweenness per node |
 | Structural Holes | `graph/gap_detector.py` | `_compute_structural_holes_score()` using `nx.constraint()` (Burt 1992) |
 | Gap weight rebalance | `graph/gap_detector.py` | structural 0.25, relatedness 0.25, temporal 0.15, intent 0.10, directional 0.10, structural_holes 0.15 |
 | Pipeline restructure | `routers/seed_explore.py` | reference_lists construction, hybrid clustering call, TF-IDF labels, SNA metric computation |
 | SeedGraphNode extension | `routers/seed_explore.py` | `pagerank: float`, `betweenness: float` fields added |
-| New dependencies | `requirements.txt` | `leidenalg>=0.10.0`, `python-igraph>=0.11.0`, `networkx>=3.0` |
+| New dependencies | `requirements.txt` | `leidenalg>=0.10.0`, `python-igraph>=0.11.0` |
 
 ### Frontend
 
@@ -91,7 +91,7 @@ Canvas enforces `minWidth: 400px`. On viewports < 1200px, opening the right deta
 
 ---
 
-## Gap Score Weights (v3.4.0)
+## Gap Score Weights (v3.5.0)
 
 | Dimension | Weight | Direction | Description |
 |-----------|--------|-----------|-------------|
@@ -106,7 +106,7 @@ Canvas enforces `minWidth: 400px`. On viewports < 1200px, opening the right deta
 
 ## Clustering Mode Comparison
 
-| Criterion | Leiden (v3.4.0) | HDBSCAN (legacy) |
+| Criterion | Leiden (v3.5.0) | HDBSCAN (legacy) |
 |-----------|-----------------|-------------------|
 | Input | Graph (nodes + weighted edges) | Point cloud (50D embeddings) |
 | Optimization | Modularity (community detection) | Density-based clustering |
@@ -126,7 +126,7 @@ Canvas enforces `minWidth: 400px`. On viewports < 1200px, opening the right deta
 | Gap score weights | structural 0.35→0.25, intent 0.15→0.10 | Existing gap scores will shift; cache invalidation recommended |
 | `structural_holes` field | New field in `gap_score_breakdown` | Frontend updated; API consumers should handle new field |
 | `pagerank`, `betweenness` fields | New fields on graph nodes | Optional fields, default 0.0 — backward compatible |
-| New dependencies | `leidenalg`, `python-igraph`, `networkx` | Already in `requirements.txt`, auto-installed via Docker |
+| New dependencies | `leidenalg`, `python-igraph` | Already in `requirements.txt`, auto-installed via Docker |
 
 ---
 
@@ -137,7 +137,7 @@ Canvas enforces `minWidth: 400px`. On viewports < 1200px, opening the right deta
 | Bibliographic coupling (80 papers) | <5ms | New |
 | Leiden clustering (80 nodes) | <10ms | Replaces HDBSCAN ~500ms |
 | TF-IDF labeling (80 abstracts) | <50ms | Replaces fieldsOfStudy lookup |
-| SNA metrics (80 nodes) | ~50ms | New |
+| Lightweight SNA metrics (80 nodes) | ~50ms | New |
 | **Net pipeline impact** | **~-0.3s** | **Faster overall** |
 
 ---
@@ -148,7 +148,8 @@ Canvas enforces `minWidth: 400px`. On viewports < 1200px, opening the right deta
 |---------|---------|---------|
 | `leidenalg` | >=0.10.0 | Leiden community detection algorithm |
 | `python-igraph` | >=0.11.0 | Graph data structure for Leiden |
-| `networkx` | >=3.0 | PageRank, Betweenness, Structural Holes (constraint) |
+
+Note: `networkx>=3.2.0` was already added in v3.4.0.
 
 ---
 
@@ -178,16 +179,16 @@ Canvas enforces `minWidth: 400px`. On viewports < 1200px, opening the right deta
 | 8 | Panel layout | 1280px viewport → both panels open → canvas >= 400px |
 | 9 | Responsive collapse | < 1200px → open right panel → left sidebar auto-collapses |
 | 10 | HDBSCAN fallback | Set `CLUSTERING_MODE=hdbscan` → legacy behavior preserved |
-| 11 | Docker build | Dockerfile installs leidenalg, python-igraph, networkx via requirements.txt |
+| 11 | Docker build | Dockerfile installs leidenalg, python-igraph via requirements.txt |
 
 ---
 
 ## Stats
 
 - **14 files changed**, ~680 insertions, ~80 deletions
-- **2 new files** (network_metrics.py, test_clusterer_hybrid.py)
+- **1 new file** (test_clusterer_hybrid.py)
 - **1 new discussion doc** (2026-02-25 architecture review)
-- **3 new dependencies** (leidenalg, python-igraph, networkx)
+- **2 new dependencies** (leidenalg, python-igraph)
 - **8 new tests** (all passing)
 - **0 new API endpoints** (existing seed-explore enhanced)
 - **1 new environment variable** (CLUSTERING_MODE)

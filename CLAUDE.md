@@ -5,7 +5,7 @@
 
 ## Project Overview
 
-ScholarGraph3D v2.0 is a focused Seed Paper exploration platform. Users search via natural language → select a seed paper → explore its citation network in 3D. The system fetches references and citations from Semantic Scholar, computes SPECTER2 embeddings, reduces via UMAP to 3D, clusters with HDBSCAN, detects research gaps, and renders everything as an interactive cosmic universe.
+ScholarGraph3D v2.0 is a focused Seed Paper exploration platform. Users search via natural language → select a seed paper → explore its citation network in 3D. The system fetches references and citations from Semantic Scholar, computes SPECTER2 embeddings, reduces via UMAP to 3D, clusters with Leiden hybrid algorithm (citation + bibliographic coupling + similarity graph, HDBSCAN fallback), detects research gaps (6-dim scoring with structural holes), and renders everything as an interactive cosmic universe.
 
 v2.0 is a major simplification from v1.x — keyword search, multi-provider LLM, watch queries, lit review, personalization, trends, and GraphRAG chat were all removed to focus on the seed paper exploration workflow.
 
@@ -67,12 +67,12 @@ backend/
 │   └── crossref.py          # CrossRef DOI lookup
 ├── graph/
 │   ├── embedding_reducer.py   # PCA 768→100D + UMAP 100→50D→3D (v2.0.2)
-│   ├── clusterer.py           # HDBSCAN + cluster labeling
+│   ├── clusterer.py           # Leiden hybrid clustering (citation + bib coupling + similarity) + HDBSCAN fallback + TF-IDF labeling
 │   ├── similarity.py          # Cosine similarity edges (>0.7)
 │   ├── bridge_detector.py     # Cross-cluster bridge node detection (top-5%)
 │   ├── incremental_layout.py  # k-NN position interpolation for stable expand
-│   ├── gap_detector.py        # Inter-cluster gap detection + 5-dim scoring + bridge papers + research questions
-│   └── network_metrics.py       # v3.4.0: SNA metrics (networkx) — centrality, structural holes, modularity, silhouette
+│   ├── gap_detector.py        # Inter-cluster gap detection + 6-dim scoring (structural holes) + bridge papers + research questions
+│   └── network_metrics.py     # SNA metrics (networkx) — centrality, structural holes, modularity, silhouette + lightweight node metrics
 ├── llm/
 │   ├── base.py              # Abstract BaseLLMProvider + LLMResponse
 │   └── groq_provider.py     # LLaMA 3.3-70b (rate limiter + retry)
@@ -125,7 +125,7 @@ frontend/
 │   │   ├── ClusterPanel.tsx           # Sector Scanner — density, visibility, paper list, stats
 │   │   ├── GraphLegend.tsx            # Star Chart — field colors, size/edge/cluster visual guide
 │   │   ├── GraphControls.tsx          # Ship Controls — floating toggles
-│   │   ├── GapSpotterPanel.tsx        # Gap Spotter — research gaps, 5-dim scoring (relatedness), bridge papers, frontier papers
+│   │   ├── GapSpotterPanel.tsx        # Gap Spotter — research gaps, 6-dim scoring (structural holes), bridge papers, frontier papers
 │   │   ├── GapReportView.tsx          # Gap Report — full report rendering with export (Markdown/BibTeX)
 │   │   ├── SeedChatPanel.tsx          # Seed Chat — Groq-powered conversational graph exploration
 │   │   └── AcademicAnalysisPanel.tsx  # v3.4.0: Academic Analysis — Network Overview, APA report, centrality chart, export
@@ -192,7 +192,7 @@ Seed explore returns: `{ nodes: Paper[], edges: GraphEdge[], clusters: Cluster[]
 - Landing: Three.js starfield (3000 stars + Milky Way) + warp transition on search
 
 ### Node Visual Mapping (Cosmic Star Nodes)
-- Size: `Math.min(30, Math.max(4, Math.sqrt(citation_count + 1) * 1.5))` — sqrt scale
+- Size: `Math.min(30, Math.max(4, Math.sqrt(citation_count + 1) * 1.5))` — sqrt scale (default); switchable to PageRank or Betweenness via `nodeSizeMode`
 - Color: STAR_COLOR_MAP — 26 fields with max hue separation. Top 10: CS=Blue, Med=Red, Bio=Green, Physics=Magenta, Econ=Gold, Eng=Purple, Business=Orange, Chem=Pink, Psych=Seafoam, EnvSci=Lime
 - Twinkle: GLSL shader — 1.5Hz (old) → 6.0Hz (new papers)
 - Star layers: glow sprite (additive), lens flare (selected), corona (OA), supernova (top 10%), binary (bridge)
@@ -235,17 +235,19 @@ Seed explore returns: `{ nodes: Paper[], edges: GraphEdge[], clusters: Cluster[]
 - Three.js MUST stay at 0.152.2 (ESM compatibility)
 - S2 API: 1 RPS authenticated, 0.3 RPS unauthenticated (auto-detected), non-commercial license
 - pgvector: 768-dim SPECTER2 vectors, ivfflat index with 100 lists
-- HDBSCAN min_cluster_size=5; UMAP n_neighbors=15 (50D intermediate) / 10 (3D visualization)
-- UMAP pipeline: PCA 768→100D (instant) + UMAP 100→50D (shared) + 50D→3D for viz; 50D direct to HDBSCAN
+- Clustering: Leiden hybrid (default) on 3-layer graph (citation + bibliographic coupling + similarity) via `CLUSTERING_MODE` env var ("hybrid"/"leiden"/"hdbscan")
+- Leiden fallback: HDBSCAN when graph too sparse (total_edges < N*0.5) or `CLUSTERING_MODE=hdbscan`
+- Cluster labels: TF-IDF bigram/unigram from abstracts (not fieldsOfStudy frequency)
+- SNA metrics: PageRank (alpha=0.85) + Betweenness Centrality via NetworkX
+- UMAP pipeline: PCA 768→100D (instant) + UMAP 100→50D (shared) + 50D→3D for viz; 50D for HDBSCAN fallback
 - PCA pre-reduction triggers when input dim > 200 (_PCA_THRESHOLD); cuts UMAP from ~51s to ~3s on 0.5 vCPU
-- HDBSCAN runs on 50-dim intermediate UMAP embeddings (NOT 3D coords)
 - Z-axis = publication year (semantic topology on X/Y, time depth on Z)
 - Backend: 1 uvicorn worker (async handles concurrency; CPU ops via asyncio.to_thread)
 - DB pool: min=1, max=3 connections
 - expand endpoints: refs/cites fetched independently — partial S2 failures return available data (not 404)
 - get_references/get_citations: (data.get("data") or []) — S2 may return {"data": null} for unindexed papers
 - Groq rate limiter: 28 RPM for LLaMA 3.3-70b
-- Gap score: structural(0.35) + relatedness(0.25) + temporal(0.15) + intent(0.15) + directional(0.10) = composite
+- Gap score: structural(0.25) + relatedness(0.25) + temporal(0.15) + intent(0.10) + directional(0.10) + structural_holes(0.15) = composite
 - Academic report: template-based (no LLM), <1s for 50-200 nodes, minimum 10 papers + 2 clusters
 
 ## Zustand Store (useGraphStore)
@@ -268,6 +270,7 @@ Key state slices:
 - `academicReport`: AcademicReport | null — generated academic analysis report (v3.4.0)
 - `academicReportLoading`: boolean — report generation in progress (v3.4.0)
 - `networkOverview`: NetworkOverview | null — lightweight network stats (v3.4.0)
+- `nodeSizeMode`: 'citations' | 'pagerank' | 'betweenness' — node size encoding mode (v3.5.0)
 
 ## Documentation Map
 
@@ -280,6 +283,8 @@ Key state slices:
 | PHILOSOPHY | docs/PHILOSOPHY.md |
 | TECH_PROOF | docs/TECH_PROOF.md |
 | DESIGN_THEME | docs/DESIGN_THEME.md |
+| RELEASE_v3.4.0 | docs/RELEASE_v3.4.0.md |
+| RELEASE_v3.5.0 | docs/RELEASE_v3.5.0.md |
 | RELEASE_v3.4.0 | docs/RELEASE_v3.4.0.md |
 | RELEASE_v3.3.1 | docs/RELEASE_v3.3.1.md |
 | RELEASE_v3.3.0 | docs/RELEASE_v3.3.0.md |
@@ -317,6 +322,20 @@ Key state slices:
 - Graph save/load with JSONB: 003_seed_graphs.sql
 - Tabbed left panel: Clusters | Gaps | Chat
 - Depth control: 1/2/3 hop exploration
+
+### v3.5.0 Clustering/SNA Architecture Overhaul (2026-02-25)
+- Clustering: HDBSCAN (embedding-only) → Leiden hybrid (citation + bibliographic coupling + similarity 3-layer graph)
+- Cluster labels: fieldsOfStudy frequency → TF-IDF abstract bigrams ("attention mechanism" instead of "Computer Science")
+- SNA metrics: `network_metrics.py` — PageRank + Betweenness Centrality per node (lightweight `compute_node_lightweight`)
+- Structural Holes: Burt (1992) constraint-based gap dimension (15% weight), gap score rebalanced to 6 dimensions
+- Gap weights: structural 0.25, relatedness 0.25, temporal 0.15, intent 0.10, directional 0.10, structural_holes 0.15
+- Node size encoding: dropdown for citations/pagerank/betweenness in Ship Controls
+- Panel layout: canvas minWidth 400px, responsive auto-collapse left sidebar on narrow viewports (<1200px)
+- Centroid visualization: diamond markers at cluster centroids, distance labels on gap hover
+- ClusterPanel: "Top Topics" → "Key Terms"
+- Environment: `CLUSTERING_MODE` env var ("hybrid"/"leiden"/"hdbscan", default "hybrid")
+- New dependencies: leidenalg, python-igraph
+- Tests: 8 new tests in test_clusterer_hybrid.py (Leiden, bib coupling, HDBSCAN fallback, TF-IDF, min cluster size)
 
 ### v3.4.0 SNA Academic Output — Citation Network Analysis Report (2026-02-24)
 - Network Metrics Module: `network_metrics.py` — networkx DiGraph, 3-tier SNA (network/node/community level)
