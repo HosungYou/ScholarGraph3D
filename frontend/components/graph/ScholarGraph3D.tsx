@@ -1133,12 +1133,26 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       while (overlayGroup.children.length > 0) {
         const child = overlayGroup.children[0];
         // Deregister shader materials from CosmicAnimationManager before disposal
-        if (child instanceof THREE.Points && child.material instanceof THREE.ShaderMaterial) {
-          CosmicAnimationManager.getInstance().deregisterShaderMaterial(child.material);
+        // Handle THREE.Group (new nebula) and THREE.Points (legacy) cases
+        if (child instanceof THREE.Group) {
+          child.traverse((obj) => {
+            if (obj instanceof THREE.Points && obj.material instanceof THREE.ShaderMaterial) {
+              CosmicAnimationManager.getInstance().deregisterShaderMaterial(obj.material);
+            }
+            if (obj instanceof THREE.Mesh && obj.material instanceof THREE.ShaderMaterial) {
+              CosmicAnimationManager.getInstance().deregisterShaderMaterial(obj.material);
+            }
+            if ((obj as any).geometry) (obj as any).geometry.dispose();
+            if ((obj as any).material) (obj as any).material.dispose();
+          });
+        } else {
+          if (child instanceof THREE.Points && child.material instanceof THREE.ShaderMaterial) {
+            CosmicAnimationManager.getInstance().deregisterShaderMaterial(child.material);
+          }
+          if ((child as any).geometry) (child as any).geometry.dispose();
+          if ((child as any).material) (child as any).material.dispose();
         }
         overlayGroup.remove(child);
-        if ((child as any).geometry) (child as any).geometry.dispose();
-        if ((child as any).material) (child as any).material.dispose();
       }
 
       const currentData = fgRef.current?.graphData();
@@ -1164,11 +1178,15 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
             .filter(Boolean) as { x: number; y: number; z: number }[];
           if (positions.length < 2) return;
 
-          const centroid = { x: 0, y: 0, z: 0 };
-          positions.forEach((p) => { centroid.x += p.x; centroid.y += p.y; centroid.z += p.z; });
-          centroid.x /= positions.length;
-          centroid.y /= positions.length;
-          centroid.z /= positions.length;
+          // Use backend PageRank-weighted centroid when available; fallback to arithmetic mean
+          const centroid = cluster.centroid
+            ? { x: cluster.centroid[0], y: cluster.centroid[1], z: cluster.centroid[2] }
+            : (() => {
+                const avg = { x: 0, y: 0, z: 0 };
+                positions.forEach((p) => { avg.x += p.x; avg.y += p.y; avg.z += p.z; });
+                avg.x /= positions.length; avg.y /= positions.length; avg.z /= positions.length;
+                return avg;
+              })();
 
           // Compute spread (average distance from centroid)
           const spread = positions.reduce((sum, p) => {

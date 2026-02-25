@@ -108,7 +108,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="ScholarGraph3D API",
     description="3D academic paper graph visualization with SPECTER2 embeddings",
-    version="2.0.2",
+    version="3.5.1",
     lifespan=lifespan,
 )
 
@@ -170,7 +170,7 @@ async def root():
     return {
         "status": "healthy",
         "service": "ScholarGraph3D",
-        "version": "2.0.2",
+        "version": "3.5.1",
     }
 
 

@@ -79,6 +79,7 @@ class SeedClusterInfo(BaseModel):
     paper_count: int = 0
     color: str = "#888888"
     hull_points: List[List[float]] = []
+    centroid: List[float] = [0.0, 0.0, 0.0]   # PageRank-weighted centroid [x, y, z]
 
 
 class SeedGapInfo(BaseModel):
@@ -499,6 +500,23 @@ async def _seed_explore_pipeline(request: SeedExploreRequest, start_time: float)
             logger.info(f"[timing] sna_metrics: {time.time() - start_time:.2f}s")
         except Exception as e:
             logger.warning(f"SNA metrics failed (non-fatal): {e}")
+
+        # PageRank-weighted centroid — computed after SNA so n.pagerank is set
+        try:
+            for c_info in clusters_info:
+                cid = c_info.id
+                cluster_nodes = [n for n in nodes if n.cluster_id == cid]
+                if not cluster_nodes:
+                    continue
+                total_pr = sum(max(n.pagerank, 0.001) for n in cluster_nodes)
+                c_info.centroid = [
+                    sum(n.x * max(n.pagerank, 0.001) for n in cluster_nodes) / total_pr,
+                    sum(n.y * max(n.pagerank, 0.001) for n in cluster_nodes) / total_pr,
+                    sum(n.z * max(n.pagerank, 0.001) for n in cluster_nodes) / total_pr,
+                ]
+            logger.info(f"[timing] centroid_calc: {time.time() - start_time:.2f}s")
+        except Exception as e:
+            logger.warning(f"Centroid calc failed (non-fatal): {e}")
 
     else:
         # Not enough for graph — arrange in spiral

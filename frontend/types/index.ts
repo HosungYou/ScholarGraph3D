@@ -55,6 +55,7 @@ export interface Cluster {
   paper_count: number;
   hull_points: [number, number, number][];
   color: string;
+  centroid?: [number, number, number];   // PageRank-weighted centroid
 }
 
 export interface GraphData {

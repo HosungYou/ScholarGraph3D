@@ -9,7 +9,7 @@ interface NebulaClusterOptions {
   isEmerging?: boolean;
 }
 
-export function createNebulaCluster(options: NebulaClusterOptions): THREE.Points {
+export function createNebulaCluster(options: NebulaClusterOptions): THREE.Group {
   const { color, centroid, nodeCount, spread, isEmerging } = options;
   const manager = CosmicAnimationManager.getInstance();
 
@@ -46,7 +46,7 @@ export function createNebulaCluster(options: NebulaClusterOptions): THREE.Points
 
   const baseOpacity = isEmerging ? 0.25 : 0.12;
 
-  const material = new THREE.ShaderMaterial({
+  const cloudMaterial = new THREE.ShaderMaterial({
     vertexShader: `
       attribute float alpha;
       varying float vAlpha;
@@ -81,9 +81,56 @@ export function createNebulaCluster(options: NebulaClusterOptions): THREE.Points
     depthWrite: false,
   });
 
-  manager.registerShaderMaterial(material);
+  manager.registerShaderMaterial(cloudMaterial);
 
-  const points = new THREE.Points(geometry, material);
-  points.name = 'nebula-cluster';
-  return points;
+  const points = new THREE.Points(geometry, cloudMaterial);
+  points.name = 'nebula-cluster-cloud';
+
+  // Glow ring: cluster boundary marker with pulse animation
+  const ringRadius = spread * 1.4;
+  const ringGeometry = new THREE.RingGeometry(ringRadius * 0.92, ringRadius, 64);
+
+  const ringMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+      uColor:   { value: new THREE.Color(color) },
+      uTime:    { value: 0.0 },
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform vec3  uColor;
+      uniform float uTime;
+      varying vec2  vUv;
+      void main() {
+        float pulse = 0.6 + 0.4 * sin(uTime * 1.2);
+        float opacity = 0.35 * pulse;
+        gl_FragColor = vec4(uColor, opacity);
+      }
+    `,
+    transparent: true,
+    blending:    THREE.AdditiveBlending,
+    depthWrite:  false,
+    side:        THREE.DoubleSide,
+  });
+
+  manager.registerShaderMaterial(ringMaterial);
+
+  const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+  ring.name = 'nebula-cluster-ring';
+  ring.position.set(centroid.x, centroid.y, centroid.z);
+  // Billboard: face the camera on every frame
+  ring.onBeforeRender = (_renderer, _scene, camera) => {
+    ring.quaternion.copy(camera.quaternion);
+  };
+
+  const group = new THREE.Group();
+  group.name = 'nebula-cluster';
+  group.add(points);
+  group.add(ring);
+  return group;
 }

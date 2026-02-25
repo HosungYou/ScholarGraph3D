@@ -1,4 +1,4 @@
-# ScholarGraph3D v2.0 - Claude Code Instructions
+# ScholarGraph3D v3.5.1 - Claude Code Instructions
 
 > 3D academic paper graph visualization — Seed Paper Exploration Platform
 > GitHub: github.com/HosungYou/ScholarGraph3D
@@ -214,9 +214,12 @@ Seed explore returns: `{ nodes: Paper[], edges: GraphEdge[], clusters: Cluster[]
 - `is_influential` edges rendered 1.5x wider with glow
 
 ### Cluster Visual Mapping (Nebula Clouds)
-- Gaussian-distributed THREE.Points particles per cluster (Box-Muller)
-- Particle count: `min(250, max(50, nodeCount * 20))`
+- `createNebulaCluster()` returns `THREE.Group` (cloud + glow ring) — **not** `THREE.Points`
+- Gaussian-distributed particle cloud (Box-Muller), particle count: `min(120, max(30, nodeCount * 8))`
 - AdditiveBlending, shimmer shader, distance-based alpha falloff
+- **Centroid:** PageRank-weighted mean from backend (`cluster.centroid`); falls back to arithmetic mean
+- **Glow ring:** `RingGeometry(spread×1.29, spread×1.4, 64)` — billboard, pulse shader (`0.6+0.4×sin(uTime×1.2)`), AdditiveBlending
+- Cleanup: traverse `THREE.Group` children, deregister both cloud and ring `ShaderMaterial` from `CosmicAnimationManager`
 
 ### Three.js Disposal Safety (CRITICAL)
 - **Global safety patch** lives in `lib/three-safety.ts`, imported by `providers.tsx` at app root
@@ -230,6 +233,26 @@ Seed explore returns: `{ nodes: Paper[], edges: GraphEdge[], clusters: Cluster[]
   6. Null all refs to prevent stale access
 - Three.js components with async animations (rAF inside Promises, setTimeout callbacks) MUST check `disposedRef` at the start of every frame
 - SPA navigation unmounts components mid-animation — never assume cleanup runs after animations complete
+
+### Deployment Checklist (run before every push to main)
+
+These checks prevent the recurring deployment errors seen in v3.5.0:
+
+| # | Check | Command / How |
+|---|-------|---------------|
+| 1 | **requirements.txt complete** | `pip install -r requirements.txt` in a clean venv — zero ImportErrors |
+| 2 | **Version string matches release** | `grep 'version=' backend/main.py` → must equal the tag being pushed |
+| 3 | **TypeScript clean** | `cd frontend && npx tsc --noEmit` → zero errors |
+| 4 | **Backend tests pass** | `cd backend && pytest -v` → all green |
+| 5 | **S2 API fields** | Any new S2 fetch must use correct field sets: `PAPER_FIELDS` (has tldr) for `/paper/{id}`, `PAPER_FIELDS_SEARCH` (no tldr) for `/paper/search` |
+| 6 | **New env vars in render.yaml** | If a new env var was added → add it (with `sync: false`) to `render.yaml` before push |
+| 7 | **Docker build local** | `docker build -t test ./backend` → must succeed (catches missing apt packages / pip deps) |
+
+Known recurring issues already fixed:
+- **UMAP cold start 504** → `_warm_up_umap()` in `main.py` lifespan (fixed v3.5.0)
+- **`openai` missing in requirements.txt** → already added (fixed v3.5.0)
+- **`tldr` field in S2 search** → `PAPER_FIELDS_SEARCH` without tldr (fixed v3.5.0)
+- **Version string "2.0.2"** → now `"3.5.1"`, update with every release (fixed v3.5.1)
 
 ### Important Constraints
 - Three.js MUST stay at 0.152.2 (ESM compatibility)
@@ -284,6 +307,7 @@ Key state slices:
 | TECH_PROOF | docs/TECH_PROOF.md |
 | DESIGN_THEME | docs/DESIGN_THEME.md |
 | RELEASE_v3.4.0 | docs/RELEASE_v3.4.0.md |
+| RELEASE_v3.5.1 | docs/RELEASE_v3.5.1.md |
 | RELEASE_v3.5.0 | docs/RELEASE_v3.5.0.md |
 | RELEASE_v3.4.0 | docs/RELEASE_v3.4.0.md |
 | RELEASE_v3.3.1 | docs/RELEASE_v3.3.1.md |
@@ -322,6 +346,14 @@ Key state slices:
 - Graph save/load with JSONB: 003_seed_graphs.sql
 - Tabbed left panel: Clusters | Gaps | Chat
 - Depth control: 1/2/3 hop exploration
+
+### v3.5.1 Centrality-Driven Cluster Layout & Nebula Frame (2026-02-25)
+- Backend centroid: PageRank-weighted mean `Σ(pos_i × max(pagerank_i, 0.001)) / Σ(max(pagerank_i, 0.001))` computed after SNA metrics, returned in `SeedClusterInfo.centroid`
+- Frontend: nebula cloud centers on backend centroid (arithmetic mean fallback)
+- Nebula glow ring: `RingGeometry` with billboard + pulse shader per cluster boundary
+- `createNebulaCluster()` return type: `THREE.Points` → `THREE.Group`
+- Cleanup: group-aware traversal for `CosmicAnimationManager` deregistration + geometry/material disposal
+- Fix: `main.py` version string updated from hard-coded `"2.0.2"` to `"3.5.1"`
 
 ### v3.5.0 Clustering/SNA Architecture Overhaul (2026-02-25)
 - Clustering: HDBSCAN (embedding-only) → Leiden hybrid (citation + bibliographic coupling + similarity 3-layer graph)
