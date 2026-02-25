@@ -105,6 +105,17 @@ class SemanticScholarClient:
 
     PAPER_FIELDS_WITH_EMBEDDING = PAPER_FIELDS + ["embedding"]
 
+    # S2 does NOT support 'tldr' on /paper/search endpoint (returns 500).
+    # Use these for search; PAPER_FIELDS (with tldr) for /paper/{id} and /paper/batch.
+    PAPER_FIELDS_SEARCH = [
+        "paperId", "title", "abstract", "year", "venue",
+        "citationCount", "influentialCitationCount", "referenceCount",
+        "openAccessPdf", "externalIds", "authors", "fieldsOfStudy",
+        "publicationTypes",
+    ]
+
+    PAPER_FIELDS_SEARCH_WITH_EMBEDDING = PAPER_FIELDS_SEARCH + ["embedding"]
+
     # S2 does NOT support 'tldr' or 'embedding' as nested fields on
     # /references and /citations endpoints (returns 400 Bad Request).
     NESTED_PAPER_FIELDS = [
@@ -212,7 +223,8 @@ class SemanticScholarClient:
         include_embedding: bool = False,
     ) -> List[SemanticScholarPaper]:
         """Search for papers by query string."""
-        fields = self.PAPER_FIELDS_WITH_EMBEDDING if include_embedding else self.PAPER_FIELDS
+        # /paper/search does not support 'tldr' — use PAPER_FIELDS_SEARCH
+        fields = self.PAPER_FIELDS_SEARCH_WITH_EMBEDDING if include_embedding else self.PAPER_FIELDS_SEARCH
 
         params = {
             "query": query,
