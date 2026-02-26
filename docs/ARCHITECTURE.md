@@ -2042,4 +2042,71 @@ This design keeps the LLM's natural language response clean while enabling struc
 
 ---
 
+## 20. v3.6.0 — View Toggle + Multi-seed Merge (2026-02-25)
+
+### 20.1 Frontend Store Additions (useGraphStore)
+
+New state fields in `frontend/hooks/useGraphStore.ts`:
+
+| Field | Type | Default | Purpose |
+|-------|------|---------|---------|
+| `layoutMode` | `'semantic' \| 'network'` | `'semantic'` | UMAP-pinned vs d3-force citation layout toggle (v3.6.0) |
+| `secondSeedIds` | `string[]` | `[]` | Paper IDs added via multi-seed merge, rendered with teal ring (#00E5FF) (v3.6.0) |
+| `addSeedMerging` | `boolean` | `false` | Loading state for multi-seed merge operation (v3.6.0) |
+| `gapRefreshNeeded` | `boolean` | `false` | Banner trigger: "Gap analysis may have changed" after multi-seed merge (v3.6.0) |
+
+New actions: `setLayoutMode(mode)`, `setSecondSeedIds(ids)`, `setAddSeedMerging(loading)`, `setGapRefreshNeeded(needed)`.
+
+### 20.2 View Toggle Implementation
+
+**Semantic Mode (default):**
+- Nodes have `fx/fy/fz` pinned to UMAP 3D coordinates from backend
+- Force simulation runs with `cooldownTicks=0` (stops immediately after warmup)
+- `d3VelocityDecay=0.9` (high damping, minimal drift)
+- Preserves global UMAP topology; good for understanding semantic structure
+
+**Network Mode:**
+- `fx/fy/fz` are undefined (removed) — nodes float freely
+- Force simulation runs with `cooldownTicks=Infinity` (runs continuously)
+- `d3VelocityDecay=0.6` (lower damping, more fluid motion)
+- Citation links have lower spring force (30 units, vs 60 for similarity)
+- Similarity links have higher spring force (60 units) to spread out similar papers
+- Better for exploring dense citation networks; organic layout
+
+**Implementation:** `layoutMode` toggle in `GraphControls.tsx` → dispatches `setLayoutMode()` → ScholarGraph3D useMemo recomputes node constraints and force parameters on next render. No backend call needed.
+
+### 20.3 Multi-seed Merge Implementation
+
+**User Flow:**
+1. User searches for seed paper (landing page)
+2. Explores graph (seed explore page)
+3. Finds another interesting paper in the graph
+4. Clicks "ADD AS SECOND SEED" button in OBJECT SCAN panel (teal, below EXPAND NETWORK)
+
+**Backend:**
+- Reuses `POST /api/papers/{id}/expand-stable?limit=80` (existing endpoint, no changes)
+- Returns new papers with `initial_x/y/z` from k-NN interpolation on shared 50D embedding space
+
+**Frontend:**
+- `api.addPaperAsSeed(paperId)` — wrapper around `expandPaperStable()` with `limit=80`
+- Calls `addNodes(newNodes, newEdges)` to merge into existing graph
+- Sets `secondSeedIds` array with new paper IDs
+- Displays teal ring (`#00E5FF`) on second-seed nodes (rendered as additional RingGeometry in starNodeRenderer)
+- Sets `gapRefreshNeeded=true` to show banner: "Gap analysis may have changed"
+
+**Visual Indication:**
+- Teal ring `#00E5FF` on second-seed paper nodes (matches Ship Controls accent color)
+- Dismissible banner in gap panel or top-level alert
+- Store persists across renders; clears on new seed explore
+
+### 20.4 No Backend Changes
+
+- Zero new API endpoints
+- Zero new database migrations
+- Zero new environment variables
+- `layoutMode` is purely client-side (no server state)
+- `addPaperAsSeed()` reuses existing `expand-stable` endpoint
+
+---
+
 *This document is the authoritative source for system structure and design decisions. For product requirements, see [PRD.md](./PRD.md). For API contracts and database schema, see [SPEC.md](./SPEC.md). For test strategy, see [SDD/TDD Plan](./SDD_TDD_PLAN.md).*

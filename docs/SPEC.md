@@ -1639,6 +1639,25 @@ interface TimelineViewProps {
 
 ---
 
+## v3.6.0 Features
+
+**View Toggle (Layout Mode)**
+- `layoutMode: 'semantic' | 'network'` — toggle between UMAP-pinned and d3-force citation layout
+- Semantic mode: nodes pinned via `fx/fy/fz` at SPECTER2 UMAP coordinates (force sim frozen, `cooldownTicks=0`, high d3VelocityDecay=0.9)
+- Network mode: `fx/fy/fz` removed → d3-force runs freely with citation-weighted links (citation: 30u, similarity: 60u, `d3VelocityDecay=0.6`)
+- Ship Controls: layout mode dropdown (cyan highlight for network mode)
+- No backend endpoint changes — mode is client-side layout control only
+
+**Multi-seed Merge**
+- "ADD AS SECOND SEED" button in OBJECT SCAN panel (teal, below EXPAND NETWORK)
+- Fetches full citation network (depth 1, up to 80 papers) of any paper via `POST /api/papers/{id}/expand-stable?limit=80`
+- New papers positioned via k-NN interpolation on shared 50D embedding space, assigned to nearest cluster
+- Visual: teal ring (`#00E5FF`) on second-seed nodes, stored in `secondSeedIds: string[]`
+- Banner: "Gap analysis may have changed" after merge (`gapRefreshNeeded: boolean` in store)
+- `api.addPaperAsSeed()` wrapper — convenience method around `expandPaperStable` with higher limit
+
+---
+
 ## 11. Testing Requirements
 
 > Full test strategy in [SDD/TDD Plan](./SDD_TDD_PLAN.md).

@@ -149,6 +149,8 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     highlightedClusterPair,
     hoveredGapEdges,
     nodeSizeMode,
+    layoutMode,
+    secondSeedIds,
   } = useGraphStore();
 
   const lastClickRef = useRef<{ nodeId: string; timestamp: number } | null>(
@@ -159,11 +161,22 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
   const expandedFromRef = useRef<Map<string, string>>(new Map());
   const expandedEdgeIdsRef = useRef<Set<string>>(new Set());
   const expandedEdgeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const umapPositionsRef = useRef<Map<string, { x: number; y: number; z: number }>>(new Map());
 
   // Sync expandedFromMap from store to local ref
   useEffect(() => {
     expandedFromRef.current = new Map(expandedFromMap);
   }, [expandedFromMap]);
+
+  // Store UMAP positions whenever graphData loads (for semantic mode restore)
+  useEffect(() => {
+    if (!graphData) return;
+    const map = new Map<string, { x: number; y: number; z: number }>();
+    graphData.nodes.forEach((n) => {
+      map.set(n.id, { x: n.x, y: n.y, z: n.z });
+    });
+    umapPositionsRef.current = map;
+  }, [graphData]);
 
   // Compute year range for opacity
   const yearRange = useMemo(() => {
@@ -282,6 +295,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
           x: paper.x,
           y: paper.y,
           z: paper.z,
+          ...(layoutMode === 'semantic' ? { fx: paper.x, fy: paper.y, fz: paper.z } : {}),
         };
       });
 
@@ -417,7 +431,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     }
 
     return { nodes, links };
-  }, [graphData, yearRange, showCitationEdges, showSimilarityEdges, citationIntents, hiddenClusterIds, showGhostEdges, edgeVisMode, hoveredGapEdges, nodeSizeMode]);
+  }, [graphData, yearRange, showCitationEdges, showSimilarityEdges, citationIntents, hiddenClusterIds, showGhostEdges, edgeVisMode, hoveredGapEdges, nodeSizeMode, layoutMode]);
 
   // Camera auto-focus when paper selected from panel
   useEffect(() => {
@@ -432,6 +446,17 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     }
     setPanelSelectionId(null);
   }, [panelSelectionId, forceGraphData.nodes, setPanelSelectionId]);
+
+  // Configure d3-force for network layout mode
+  useEffect(() => {
+    if (!fgRef.current || layoutMode !== 'network') return;
+    const linkForce = fgRef.current.d3Force('link');
+    if (linkForce) {
+      linkForce.distance((d: ForceGraphLink) =>
+        (d as ForceGraphLink).edgeType === 'citation' ? 30 : 60
+      );
+    }
+  }, [layoutMode]);
 
   // Node rendering
   const nodeThreeObject = useCallback(
@@ -528,6 +553,22 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
           frontierRing.rotation.x = Math.PI / 2;
           frontierRing.userData.isFrontierRing = true;
           group.add(frontierRing);
+        }
+
+        // Second-seed node indicator (teal ring)
+        if (secondSeedIds.includes(node.id)) {
+          const seedRingGeo = new THREE.RingGeometry(node.val * 1.6, node.val * 1.9, 32);
+          const seedRingMat = new THREE.MeshBasicMaterial({
+            color: 0x00E5FF,
+            transparent: true,
+            opacity: 0.4,
+            side: THREE.DoubleSide,
+            depthWrite: false,
+          });
+          const seedRing = new THREE.Mesh(seedRingGeo, seedRingMat);
+          seedRing.rotation.x = Math.PI / 2;
+          seedRing.userData.isSecondSeedRing = true;
+          group.add(seedRing);
         }
 
         // Selection pulsing ring (gold, animated via CosmicAnimationManager)
@@ -852,7 +893,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
 
       return group;
     },
-    [highlightSet, showLabels, showBloom, bridgeNodeIds, showOARings, showCitationAura, highlightedPaperIds, showCosmicTheme, yearRange, highlightedClusterPair]
+    [highlightSet, showLabels, showBloom, bridgeNodeIds, showOARings, showCitationAura, highlightedPaperIds, showCosmicTheme, yearRange, highlightedClusterPair, secondSeedIds]
   );
 
   // Link width
@@ -1905,8 +1946,8 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         onLinkClick={handleLinkClick}
         onBackgroundClick={handleBackgroundClick}
         warmupTicks={100}
-        cooldownTicks={0}
-        d3VelocityDecay={0.9}
+        cooldownTicks={layoutMode === 'network' ? Infinity : 0}
+        d3VelocityDecay={layoutMode === 'network' ? 0.6 : 0.9}
         enableNodeDrag={true}
         onNodeDrag={(node: any) => {
           node.fx = node.x;

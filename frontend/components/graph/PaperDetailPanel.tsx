@@ -36,6 +36,8 @@ interface PaperDetailPanelProps {
   onClose: () => void;
   onExpand: () => void;
   isExpanding?: boolean;
+  onAddAsSeed?: () => void;
+  isAddingAsSeed?: boolean;
 }
 
 export default function PaperDetailPanel({
@@ -43,6 +45,8 @@ export default function PaperDetailPanel({
   onClose,
   onExpand,
   isExpanding = false,
+  onAddAsSeed,
+  isAddingAsSeed = false,
 }: PaperDetailPanelProps) {
   const [showFullAbstract, setShowFullAbstract] = useState(false);
   const {
@@ -537,6 +541,26 @@ export default function PaperDetailPanel({
             </>
           )}
         </button>
+
+        {onAddAsSeed && (
+          <button
+            onClick={onAddAsSeed}
+            disabled={isAddingAsSeed || isExpanding}
+            className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg uppercase text-xs tracking-wider transition-all border border-[rgba(0,229,255,0.15)] bg-[rgba(0,229,255,0.05)] hover:bg-[rgba(0,229,255,0.12)] text-[#00E5FF]/70 hover:text-[#00E5FF] disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {isAddingAsSeed ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                MERGING NETWORK...
+              </>
+            ) : (
+              <>
+                <Network className="w-4 h-4" />
+                ADD AS SECOND SEED
+              </>
+            )}
+          </button>
+        )}
 
         {/* Citation Path Finder */}
         <div className="hud-panel-clean rounded-lg p-3">

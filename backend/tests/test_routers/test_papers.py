@@ -36,6 +36,7 @@ def make_s2_paper(
     paper.tldr = "Test TLDR"
     paper.fields_of_study = fields_of_study or ["Computer Science"]
     paper.embedding = embedding or [0.01 * i for i in range(768)]
+    paper.reference_count = 5
     return paper
 
 
@@ -56,7 +57,7 @@ class TestExpandStable:
         mock_client.get_references = AsyncMock(return_value=refs)
         mock_client.get_citations = AsyncMock(return_value=cites)
 
-        with patch("routers.papers._create_s2_client", return_value=mock_client), \
+        with patch("routers.papers.get_s2_client", return_value=mock_client), \
              patch("routers.papers.get_db") as mock_get_db:
             mock_db = AsyncMock()
             mock_db.is_connected = False
@@ -90,7 +91,7 @@ class TestExpandStable:
         mock_client.get_references = AsyncMock(return_value=refs)
         mock_client.get_citations = AsyncMock(return_value=cites)
 
-        with patch("routers.papers._create_s2_client", return_value=mock_client), \
+        with patch("routers.papers.get_s2_client", return_value=mock_client), \
              patch("routers.papers.get_db") as mock_get_db:
             mock_db = AsyncMock()
             mock_db.is_connected = False
@@ -124,7 +125,7 @@ class TestExpandStable:
         mock_client.get_references = AsyncMock(side_effect=Exception("Timeout fetching references"))
         mock_client.get_citations = AsyncMock(return_value=cites)
 
-        with patch("routers.papers._create_s2_client", return_value=mock_client), \
+        with patch("routers.papers.get_s2_client", return_value=mock_client), \
              patch("routers.papers.get_db") as mock_get_db:
             mock_db = AsyncMock()
             mock_db.is_connected = False
@@ -160,7 +161,7 @@ class TestExpandStable:
         mock_client.get_references = AsyncMock(return_value=refs)
         mock_client.get_citations = AsyncMock(side_effect=Exception("Citations fetch failed"))
 
-        with patch("routers.papers._create_s2_client", return_value=mock_client), \
+        with patch("routers.papers.get_s2_client", return_value=mock_client), \
              patch("routers.papers.get_db") as mock_get_db:
             mock_db = AsyncMock()
             mock_db.is_connected = False
@@ -192,7 +193,7 @@ class TestExpandStable:
         mock_client.get_references = AsyncMock(side_effect=Exception("refs timeout"))
         mock_client.get_citations = AsyncMock(side_effect=Exception("cites timeout"))
 
-        with patch("routers.papers._create_s2_client", return_value=mock_client), \
+        with patch("routers.papers.get_s2_client", return_value=mock_client), \
              patch("routers.papers.get_db") as mock_get_db:
             mock_db = AsyncMock()
             mock_db.is_connected = False
@@ -225,7 +226,7 @@ class TestExpandStable:
         mock_client.get_references = AsyncMock(side_effect=Exception("TimeoutException: connection timed out"))
         mock_client.get_citations = AsyncMock(return_value=[make_s2_paper(paper_id="c1")])
 
-        with patch("routers.papers._create_s2_client", return_value=mock_client), \
+        with patch("routers.papers.get_s2_client", return_value=mock_client), \
              patch("routers.papers.get_db") as mock_get_db:
             mock_db = AsyncMock()
             mock_db.is_connected = False
@@ -255,7 +256,7 @@ class TestExpandStable:
         mock_client.get_references = AsyncMock(return_value=refs)
         mock_client.get_citations = AsyncMock(return_value=[])
 
-        with patch("routers.papers._create_s2_client", return_value=mock_client), \
+        with patch("routers.papers.get_s2_client", return_value=mock_client), \
              patch("routers.papers.get_db") as mock_get_db:
             mock_db = AsyncMock()
             mock_db.is_connected = False
@@ -287,7 +288,7 @@ class TestExpandStable:
         mock_client.get_references = AsyncMock(return_value=refs)
         mock_client.get_citations = AsyncMock(return_value=[])
 
-        with patch("routers.papers._create_s2_client", return_value=mock_client), \
+        with patch("routers.papers.get_s2_client", return_value=mock_client), \
              patch("routers.papers.get_db") as mock_get_db:
             mock_db = AsyncMock()
             mock_db.is_connected = False

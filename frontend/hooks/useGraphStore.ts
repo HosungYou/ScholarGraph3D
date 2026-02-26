@@ -93,6 +93,18 @@ interface GraphStore {
   nodeSizeMode: 'citations' | 'pagerank' | 'betweenness';
   setNodeSizeMode: (mode: 'citations' | 'pagerank' | 'betweenness') => void;
 
+  // Layout mode toggle (v3.6.0)
+  layoutMode: 'semantic' | 'network';
+  setLayoutMode: (mode: 'semantic' | 'network') => void;
+
+  // Multi-seed state (v3.6.0)
+  addSeedMerging: boolean;
+  secondSeedIds: string[];
+  gapRefreshNeeded: boolean;
+  setAddSeedMerging: (v: boolean) => void;
+  addSecondSeedId: (id: string) => void;
+  setGapRefreshNeeded: (v: boolean) => void;
+
   // Actions
   setGraphData: (data: GraphData) => void;
   selectPaper: (paper: Paper | null) => void;
@@ -189,6 +201,16 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
 
   nodeSizeMode: 'citations' as const,
   setNodeSizeMode: (mode) => set({ nodeSizeMode: mode }),
+
+  layoutMode: 'semantic' as const,
+  setLayoutMode: (mode) => set({ layoutMode: mode }),
+
+  addSeedMerging: false,
+  secondSeedIds: [],
+  gapRefreshNeeded: false,
+  setAddSeedMerging: (v) => set({ addSeedMerging: v }),
+  addSecondSeedId: (id) => set((s) => ({ secondSeedIds: [...s.secondSeedIds, id] })),
+  setGapRefreshNeeded: (v) => set({ gapRefreshNeeded: v }),
 
   setGraphData: (data) => set({ graphData: data, error: null }),
 

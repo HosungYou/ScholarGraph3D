@@ -121,7 +121,7 @@ describe('toRIS', () => {
     const paper = makePaper({ doi: undefined, venue: undefined });
     const result = toRIS(paper);
     expect(result.startsWith('TY  - JOUR')).toBe(true);
-    expect(result.trimEnd().endsWith('ER  - ')).toBe(true);
+    expect(result.endsWith('ER  - ')).toBe(true);
   });
 });
 

@@ -153,6 +153,51 @@ export const api = {
       meta: r.meta,
     })),
 
+  addPaperAsSeed: (
+    id: string,
+    existingNodes: import('@/types').Paper[],
+    existingEdges: import('@/types').GraphEdge[]
+  ): Promise<{ nodes: import('@/types').Paper[]; edges: import('@/types').GraphEdge[]; meta?: { references_ok: boolean; citations_ok: boolean; refs_count: number; cites_count: number; error_detail?: string } }> =>
+    request(`${API_BASE}/api/papers/${encodeURIComponent(id)}/expand-stable`, {
+      method: 'POST',
+      body: JSON.stringify({
+        existing_nodes: existingNodes.map((n) => ({
+          id: n.id,
+          x: n.x,
+          y: n.y,
+          z: n.z,
+          cluster_id: n.cluster_id,
+        })),
+        limit: 80,
+      }),
+    }).then((r: any) => ({
+      nodes: (r.nodes || []).map((n: any) => ({
+        id: n.paper_id,
+        title: n.title || '',
+        authors: n.authors || [],
+        year: n.year || 0,
+        venue: n.venue,
+        citation_count: n.citation_count || 0,
+        abstract: n.abstract || undefined,
+        tldr: n.tldr || undefined,
+        fields: n.fields || [],
+        topics: [],
+        x: n.initial_x || 0,
+        y: n.initial_y || 0,
+        z: n.initial_z || 0,
+        cluster_id: n.cluster_id ?? -1,
+        cluster_label: 'Second Seed',
+        is_open_access: n.is_open_access || false,
+        oa_url: undefined,
+        is_bridge: false,
+        frontier_score: n.frontier_score || 0,
+        s2_paper_id: n.paper_id,
+        doi: n.doi || undefined,
+      })),
+      edges: r.edges || [],
+      meta: r.meta,
+    })),
+
   // Saved Graphs (auth required)
   listGraphs: async (): Promise<SavedGraph[]> =>
     request<SavedGraph[]>(`${API_BASE}/api/graphs`),

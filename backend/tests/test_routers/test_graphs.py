@@ -30,6 +30,14 @@ from auth.models import User
 
 # ==================== Helpers ====================
 
+_FAKE_USER_DATA = {
+    "id": "00000000-0000-0000-0000-000000000001",
+    "email": "test@example.com",
+    "email_confirmed": True,
+    "created_at": datetime(2024, 1, 1, tzinfo=timezone.utc),
+}
+
+
 def _make_user(
     user_id: str = "00000000-0000-0000-0000-000000000001",
     email: str = "test@example.com",
@@ -93,24 +101,24 @@ def _make_db(connected: bool = True) -> AsyncMock:
 @pytest.mark.asyncio
 async def test_list_graphs_empty(test_client):
     """Authenticated user with no saved graphs → 200 with empty list."""
-    user = _make_user()
     mock_db = _make_db()
     mock_db.fetch = AsyncMock(return_value=[])
 
-    with (
-        patch("routers.graphs.get_current_user", return_value=user),
-        patch("routers.graphs.get_db", return_value=mock_db),
-    ):
-        from main import app
-        from auth.dependencies import get_current_user
-        from database import get_db
+    from main import app
+    from auth.dependencies import get_current_user
+    from database import get_db
 
-        app.dependency_overrides[get_current_user] = lambda: user
-        app.dependency_overrides[get_db] = lambda: mock_db
+    user = _make_user()
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_db] = lambda: mock_db
 
-        response = await test_client.get("/api/graphs")
+    with patch("auth.middleware.verify_jwt", return_value=_FAKE_USER_DATA):
+        response = await test_client.get(
+            "/api/graphs",
+            headers={"Authorization": "Bearer fake-token"},
+        )
 
-        app.dependency_overrides.clear()
+    app.dependency_overrides.clear()
 
     assert response.status_code == 200
     assert response.json() == []
@@ -119,8 +127,6 @@ async def test_list_graphs_empty(test_client):
 @pytest.mark.asyncio
 async def test_list_graphs_returns_summary_fields(test_client):
     """List endpoint returns GraphSummary fields (id, name, paper_count, etc.)."""
-    user = _make_user()
-
     row = _make_db_row(
         graph_id="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
         name="NLP Graph",
@@ -136,10 +142,15 @@ async def test_list_graphs_returns_summary_fields(test_client):
     from auth.dependencies import get_current_user
     from database import get_db
 
+    user = _make_user()
     app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_db] = lambda: mock_db
 
-    response = await test_client.get("/api/graphs")
+    with patch("auth.middleware.verify_jwt", return_value=_FAKE_USER_DATA):
+        response = await test_client.get(
+            "/api/graphs",
+            headers={"Authorization": "Bearer fake-token"},
+        )
 
     app.dependency_overrides.clear()
 
@@ -160,17 +171,21 @@ async def test_list_graphs_returns_summary_fields(test_client):
 @pytest.mark.asyncio
 async def test_list_graphs_db_disconnected(test_client):
     """DB not connected → 503 Service Unavailable."""
-    user = _make_user()
     mock_db = _make_db(connected=False)
 
     from main import app
     from auth.dependencies import get_current_user
     from database import get_db
 
+    user = _make_user()
     app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_db] = lambda: mock_db
 
-    response = await test_client.get("/api/graphs")
+    with patch("auth.middleware.verify_jwt", return_value=_FAKE_USER_DATA):
+        response = await test_client.get(
+            "/api/graphs",
+            headers={"Authorization": "Bearer fake-token"},
+        )
 
     app.dependency_overrides.clear()
 
@@ -182,8 +197,6 @@ async def test_list_graphs_db_disconnected(test_client):
 @pytest.mark.asyncio
 async def test_create_graph_with_graph_data(test_client):
     """Create graph with graph_data containing nodes → paper_count from nodes length."""
-    user = _make_user()
-
     graph_data_payload = {
         "nodes": [{"id": "p1"}, {"id": "p2"}, {"id": "p3"}],
         "links": [],
@@ -204,18 +217,21 @@ async def test_create_graph_with_graph_data(test_client):
     from auth.dependencies import get_current_user
     from database import get_db
 
+    user = _make_user()
     app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_db] = lambda: mock_db
 
-    response = await test_client.post(
-        "/api/graphs",
-        json={
-            "name": "Research Graph",
-            "seed_query": "neural networks",
-            "paper_ids": [],
-            "graph_data": graph_data_payload,
-        },
-    )
+    with patch("auth.middleware.verify_jwt", return_value=_FAKE_USER_DATA):
+        response = await test_client.post(
+            "/api/graphs",
+            json={
+                "name": "Research Graph",
+                "seed_query": "neural networks",
+                "paper_ids": [],
+                "graph_data": graph_data_payload,
+            },
+            headers={"Authorization": "Bearer fake-token"},
+        )
 
     app.dependency_overrides.clear()
 
@@ -234,8 +250,6 @@ async def test_create_graph_with_graph_data(test_client):
 @pytest.mark.asyncio
 async def test_create_graph_minimal(test_client):
     """Create graph with only required field (name) → 201."""
-    user = _make_user()
-
     returned_row = _make_db_row(
         graph_id="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
         name="Minimal Graph",
@@ -251,13 +265,16 @@ async def test_create_graph_minimal(test_client):
     from auth.dependencies import get_current_user
     from database import get_db
 
+    user = _make_user()
     app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_db] = lambda: mock_db
 
-    response = await test_client.post(
-        "/api/graphs",
-        json={"name": "Minimal Graph"},
-    )
+    with patch("auth.middleware.verify_jwt", return_value=_FAKE_USER_DATA):
+        response = await test_client.post(
+            "/api/graphs",
+            json={"name": "Minimal Graph"},
+            headers={"Authorization": "Bearer fake-token"},
+        )
 
     app.dependency_overrides.clear()
 
@@ -271,20 +288,22 @@ async def test_create_graph_minimal(test_client):
 @pytest.mark.asyncio
 async def test_create_graph_missing_name(test_client):
     """Missing required 'name' field → 422."""
-    user = _make_user()
     mock_db = _make_db()
 
     from main import app
     from auth.dependencies import get_current_user
     from database import get_db
 
+    user = _make_user()
     app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_db] = lambda: mock_db
 
-    response = await test_client.post(
-        "/api/graphs",
-        json={"seed_query": "transformers"},
-    )
+    with patch("auth.middleware.verify_jwt", return_value=_FAKE_USER_DATA):
+        response = await test_client.post(
+            "/api/graphs",
+            json={"seed_query": "transformers"},
+            headers={"Authorization": "Bearer fake-token"},
+        )
 
     app.dependency_overrides.clear()
 
@@ -296,9 +315,7 @@ async def test_create_graph_missing_name(test_client):
 @pytest.mark.asyncio
 async def test_get_graph_with_graph_data(test_client):
     """GET /api/graphs/{id} returns GraphDetail including graph_data."""
-    user = _make_user()
     graph_id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
-
     graph_data = {"nodes": [{"id": "p1"}, {"id": "p2"}], "links": []}
 
     row = _make_db_row(
@@ -316,10 +333,15 @@ async def test_get_graph_with_graph_data(test_client):
     from auth.dependencies import get_current_user
     from database import get_db
 
+    user = _make_user()
     app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_db] = lambda: mock_db
 
-    response = await test_client.get(f"/api/graphs/{graph_id}")
+    with patch("auth.middleware.verify_jwt", return_value=_FAKE_USER_DATA):
+        response = await test_client.get(
+            f"/api/graphs/{graph_id}",
+            headers={"Authorization": "Bearer fake-token"},
+        )
 
     app.dependency_overrides.clear()
 
@@ -337,7 +359,6 @@ async def test_get_graph_with_graph_data(test_client):
 @pytest.mark.asyncio
 async def test_get_graph_not_found(test_client):
     """GET with non-existent graph_id → 404 Not Found."""
-    user = _make_user()
     mock_db = _make_db()
     mock_db.fetchrow = AsyncMock(return_value=None)  # no row found
 
@@ -345,10 +366,15 @@ async def test_get_graph_not_found(test_client):
     from auth.dependencies import get_current_user
     from database import get_db
 
+    user = _make_user()
     app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_db] = lambda: mock_db
 
-    response = await test_client.get("/api/graphs/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+    with patch("auth.middleware.verify_jwt", return_value=_FAKE_USER_DATA):
+        response = await test_client.get(
+            "/api/graphs/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+            headers={"Authorization": "Bearer fake-token"},
+        )
 
     app.dependency_overrides.clear()
 
@@ -359,7 +385,6 @@ async def test_get_graph_not_found(test_client):
 @pytest.mark.asyncio
 async def test_get_graph_paper_count_from_paper_ids_fallback(test_client):
     """When graph_data is None, paper_count falls back to len(paper_ids)."""
-    user = _make_user()
     graph_id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 
     row = _make_db_row(
@@ -376,10 +401,15 @@ async def test_get_graph_paper_count_from_paper_ids_fallback(test_client):
     from auth.dependencies import get_current_user
     from database import get_db
 
+    user = _make_user()
     app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_db] = lambda: mock_db
 
-    response = await test_client.get(f"/api/graphs/{graph_id}")
+    with patch("auth.middleware.verify_jwt", return_value=_FAKE_USER_DATA):
+        response = await test_client.get(
+            f"/api/graphs/{graph_id}",
+            headers={"Authorization": "Bearer fake-token"},
+        )
 
     app.dependency_overrides.clear()
 
@@ -392,7 +422,6 @@ async def test_get_graph_paper_count_from_paper_ids_fallback(test_client):
 @pytest.mark.asyncio
 async def test_delete_graph(test_client):
     """DELETE /api/graphs/{id} returns 204 No Content on success."""
-    user = _make_user()
     graph_id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 
     mock_db = _make_db()
@@ -402,10 +431,15 @@ async def test_delete_graph(test_client):
     from auth.dependencies import get_current_user
     from database import get_db
 
+    user = _make_user()
     app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_db] = lambda: mock_db
 
-    response = await test_client.delete(f"/api/graphs/{graph_id}")
+    with patch("auth.middleware.verify_jwt", return_value=_FAKE_USER_DATA):
+        response = await test_client.delete(
+            f"/api/graphs/{graph_id}",
+            headers={"Authorization": "Bearer fake-token"},
+        )
 
     app.dependency_overrides.clear()
 
@@ -416,7 +450,6 @@ async def test_delete_graph(test_client):
 @pytest.mark.asyncio
 async def test_delete_graph_not_found(test_client):
     """DELETE non-existent graph → 404 Not Found."""
-    user = _make_user()
     graph_id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 
     mock_db = _make_db()
@@ -426,10 +459,15 @@ async def test_delete_graph_not_found(test_client):
     from auth.dependencies import get_current_user
     from database import get_db
 
+    user = _make_user()
     app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_db] = lambda: mock_db
 
-    response = await test_client.delete(f"/api/graphs/{graph_id}")
+    with patch("auth.middleware.verify_jwt", return_value=_FAKE_USER_DATA):
+        response = await test_client.delete(
+            f"/api/graphs/{graph_id}",
+            headers={"Authorization": "Bearer fake-token"},
+        )
 
     app.dependency_overrides.clear()
 
@@ -440,17 +478,21 @@ async def test_delete_graph_not_found(test_client):
 @pytest.mark.asyncio
 async def test_delete_graph_db_disconnected(test_client):
     """DELETE when DB disconnected → 503."""
-    user = _make_user()
     mock_db = _make_db(connected=False)
 
     from main import app
     from auth.dependencies import get_current_user
     from database import get_db
 
+    user = _make_user()
     app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_db] = lambda: mock_db
 
-    response = await test_client.delete("/api/graphs/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+    with patch("auth.middleware.verify_jwt", return_value=_FAKE_USER_DATA):
+        response = await test_client.delete(
+            "/api/graphs/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+            headers={"Authorization": "Bearer fake-token"},
+        )
 
     app.dependency_overrides.clear()
 

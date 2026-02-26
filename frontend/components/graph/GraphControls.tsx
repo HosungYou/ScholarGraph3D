@@ -8,6 +8,8 @@ import {
   RotateCcw,
   Maximize,
   Circle,
+  Network,
+  Map,
 } from 'lucide-react';
 import { useGraphStore } from '@/hooks/useGraphStore';
 import { cn } from '@/lib/utils';
@@ -16,6 +18,11 @@ const NODE_SIZE_OPTIONS = [
   { value: 'citations' as const, label: 'Citations' },
   { value: 'pagerank' as const, label: 'PageRank' },
   { value: 'betweenness' as const, label: 'Betweenness' },
+];
+
+const LAYOUT_OPTIONS = [
+  { value: 'semantic' as const, label: 'Semantic', icon: Map, tooltip: 'SPECTER2 similarity positions' },
+  { value: 'network' as const, label: 'Network', icon: Network, tooltip: 'Citation-force positions' },
 ];
 
 export default function GraphControls() {
@@ -30,6 +37,8 @@ export default function GraphControls() {
     toggleLabels,
     nodeSizeMode,
     setNodeSizeMode,
+    layoutMode,
+    setLayoutMode,
   } = useGraphStore();
 
   const controls = [
@@ -112,6 +121,45 @@ export default function GraphControls() {
                 )}
               >
                 {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="relative group">
+        <button
+          title={`Layout: ${layoutMode === 'semantic' ? 'Semantic (SEM)' : 'Network (NET)'}`}
+          className={cn(
+            'p-2 rounded-lg transition-all border',
+            layoutMode === 'network'
+              ? 'bg-[rgba(0,229,255,0.1)] border-[rgba(0,229,255,0.2)] text-[#00E5FF] shadow-[0_0_10px_rgba(0,229,255,0.12)]'
+              : 'bg-[rgba(10,10,10,0.8)] border-[rgba(255,255,255,0.03)] text-[#999999]/40 hover:text-[#999999] hover:border-[rgba(255,255,255,0.06)]'
+          )}
+        >
+          <Network className="w-4 h-4" />
+        </button>
+        <div className="absolute right-10 top-0 hidden group-hover:block">
+          <div className="bg-[rgba(10,10,10,0.95)] border border-[rgba(255,255,255,0.08)] rounded-lg p-1 min-w-[160px] shadow-xl">
+            <div className="text-[9px] font-mono text-[#999999]/40 px-2 py-1 uppercase tracking-wider">
+              Layout Mode
+            </div>
+            {LAYOUT_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setLayoutMode(opt.value)}
+                className={cn(
+                  'w-full text-left px-2 py-1.5 rounded text-[10px] font-mono transition-colors',
+                  layoutMode === opt.value
+                    ? 'text-[#00E5FF] bg-[rgba(0,229,255,0.1)]'
+                    : 'text-[#999999]/60 hover:text-[#999999] hover:bg-[rgba(255,255,255,0.03)]'
+                )}
+                title={opt.tooltip}
+              >
+                <div className="flex items-center gap-1.5">
+                  <opt.icon className="w-3 h-3" />
+                  {opt.label}
+                </div>
+                <div className="text-[8px] text-[#999999]/30 mt-0.5">{opt.tooltip}</div>
               </button>
             ))}
           </div>

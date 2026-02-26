@@ -104,6 +104,11 @@ function SeedExploreContent() {
     setFrontierIds,
     activeGapReport,
     academicReport,
+    addSeedMerging,
+    addSecondSeedId,
+    setGapRefreshNeeded,
+    gapRefreshNeeded,
+    setAddSeedMerging,
   } = useGraphStore();
 
   const graphRef = useRef<ScholarGraph3DRef>(null);
@@ -397,6 +402,69 @@ function SeedExploreContent() {
     [graphData, scheduleDebouncedSave, seedMeta]
   );
 
+  const handleAddAsSeed = useCallback(
+    async (paper: Paper) => {
+      const s2Id = paper.s2_paper_id;
+      const doiId = paper.doi ? `DOI:${paper.doi}` : '';
+      if (!s2Id && !doiId) {
+        setExpandError('This paper cannot be added as seed (no identifier available)');
+        setTimeout(() => setExpandError(null), 4000);
+        return;
+      }
+      setAddSeedMerging(true);
+      setExpandError(null);
+      try {
+        const expandId = s2Id || doiId;
+        const result = await api.addPaperAsSeed(expandId, graphData?.nodes || [], graphData?.edges || []);
+        const count = result.nodes.length;
+        if (count > 0) {
+          const store = useGraphStore.getState();
+          const newMap = new Map(store.expandedFromMap);
+          result.nodes.forEach((n: Paper) => newMap.set(n.id, paper.id));
+          store.setExpandedFromMap(newMap);
+          const parentNode = graphData?.nodes.find(
+            (n) => n.id === expandId || n.s2_paper_id === expandId || (n.doi && `DOI:${n.doi}` === expandId)
+          );
+          const nodesAtOrigin = result.nodes.map((n) => ({
+            ...n,
+            x: parentNode?.x ?? 0,
+            y: parentNode?.y ?? 0,
+            z: parentNode?.z ?? 0,
+          }));
+          const targets = new Map(result.nodes.map((n) => [n.id, { x: n.x, y: n.y, z: n.z }]));
+          const newNodeIds = result.nodes.map((n) => n.id);
+          useGraphStore.getState().addNodesStable(nodesAtOrigin, result.edges);
+          // Track second seed IDs
+          newNodeIds.forEach((id) => addSecondSeedId(id));
+          addSecondSeedId(paper.id);
+          setTimeout(() => {
+            graphRef.current?.animateExpandNodes(
+              parentNode?.id || paper.id,
+              newNodeIds,
+              targets
+            );
+          }, 50);
+          setGapRefreshNeeded(true);
+          setExpandSuccess(`Added ${count} papers from "${paper.title.substring(0, 40)}${paper.title.length > 40 ? '...' : ''}"`);
+          const currentGraphData = useGraphStore.getState().graphData;
+          if (currentGraphData) {
+            scheduleDebouncedSave(currentGraphData, seedMeta?.seed_title);
+          }
+        } else {
+          setExpandSuccess('No new papers found for this seed');
+        }
+        setTimeout(() => setExpandSuccess(null), 4000);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Failed to add seed';
+        setExpandError(msg);
+        setTimeout(() => setExpandError(null), 5000);
+      } finally {
+        setAddSeedMerging(false);
+      }
+    },
+    [graphData, scheduleDebouncedSave, seedMeta, setAddSeedMerging, addSecondSeedId, setGapRefreshNeeded]
+  );
+
   // Double-click expand
   useEffect(() => {
     const handle = async (e: Event) => {
@@ -671,6 +739,22 @@ function SeedExploreContent() {
               </div>
             </div>
           )}
+
+          {/* Gap refresh needed banner */}
+          {gapRefreshNeeded && (
+            <div className="absolute bottom-16 left-4 right-4 z-10 pointer-events-none">
+              <div className="inline-flex items-center gap-3 px-3 py-2 bg-[rgba(0,229,255,0.08)] border border-[rgba(0,229,255,0.2)] rounded-lg text-[10px] font-mono text-[#00E5FF]/80 pointer-events-auto">
+                <span>⟳ Gap analysis may have changed after merging new seed network.</span>
+                <button
+                  onClick={() => setGapRefreshNeeded(false)}
+                  className="ml-auto text-[#00E5FF]/60 hover:text-[#00E5FF] transition-colors"
+                  title="Dismiss"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ─── Right Panel — Push Layout ─── */}
@@ -690,6 +774,8 @@ function SeedExploreContent() {
                   onClose={() => handlePaperSelect(null)}
                   onExpand={() => handleExpandPaper(selectedPaper)}
                   isExpanding={isExpanding}
+                  onAddAsSeed={() => handleAddAsSeed(selectedPaper)}
+                  isAddingAsSeed={addSeedMerging}
                 />
               </div>
             </motion.div>

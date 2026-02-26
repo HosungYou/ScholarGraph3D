@@ -1,4 +1,4 @@
-# ScholarGraph3D v3.5.1 - Claude Code Instructions
+# ScholarGraph3D v3.6.0 - Claude Code Instructions
 
 > 3D academic paper graph visualization — Seed Paper Exploration Platform
 > GitHub: github.com/HosungYou/ScholarGraph3D
@@ -252,7 +252,7 @@ Known recurring issues already fixed:
 - **UMAP cold start 504** → `_warm_up_umap()` in `main.py` lifespan (fixed v3.5.0)
 - **`openai` missing in requirements.txt** → already added (fixed v3.5.0)
 - **`tldr` field in S2 search** → `PAPER_FIELDS_SEARCH` without tldr (fixed v3.5.0)
-- **Version string "2.0.2"** → now `"3.5.1"`, update with every release (fixed v3.5.1)
+- **Version string "2.0.2"** → now `"3.6.0"`, update with every release (fixed v3.5.1)
 
 ### Important Constraints
 - Three.js MUST stay at 0.152.2 (ESM compatibility)
@@ -294,6 +294,10 @@ Key state slices:
 - `academicReportLoading`: boolean — report generation in progress (v3.4.0)
 - `networkOverview`: NetworkOverview | null — lightweight network stats (v3.4.0)
 - `nodeSizeMode`: 'citations' | 'pagerank' | 'betweenness' — node size encoding mode (v3.5.0)
+- `layoutMode`: 'semantic' | 'network' — layout mode toggle (v3.6.0)
+- `secondSeedIds`: string[] — IDs of nodes added via second-seed merge (teal ring) (v3.6.0)
+- `addSeedMerging`: boolean — loading state for multi-seed merge (v3.6.0)
+- `gapRefreshNeeded`: boolean — banner trigger after multi-seed merge (v3.6.0)
 
 ## Documentation Map
 
@@ -306,7 +310,7 @@ Key state slices:
 | PHILOSOPHY | docs/PHILOSOPHY.md |
 | TECH_PROOF | docs/TECH_PROOF.md |
 | DESIGN_THEME | docs/DESIGN_THEME.md |
-| RELEASE_v3.4.0 | docs/RELEASE_v3.4.0.md |
+| RELEASE_v3.6.0 | docs/RELEASE_v3.6.0.md |
 | RELEASE_v3.5.1 | docs/RELEASE_v3.5.1.md |
 | RELEASE_v3.5.0 | docs/RELEASE_v3.5.0.md |
 | RELEASE_v3.4.0 | docs/RELEASE_v3.4.0.md |
@@ -346,6 +350,20 @@ Key state slices:
 - Graph save/load with JSONB: 003_seed_graphs.sql
 - Tabbed left panel: Clusters | Gaps | Chat
 - Depth control: 1/2/3 hop exploration
+
+### v3.6.0 View Toggle + Multi-seed Merge (2026-02-25)
+- **View Toggle**: `layoutMode: 'semantic' | 'network'` — switch between UMAP-pinned positions and d3-force citation network layout
+  - Semantic mode: nodes have `fx/fy/fz` = UMAP coordinates (force sim frozen, `cooldownTicks=0`)
+  - Network mode: `fx/fy/fz` removed → d3-force runs freely (`cooldownTicks=Infinity`, `d3VelocityDecay=0.6`, citation links 30u vs similarity 60u)
+  - Ship Controls: layout mode dropdown (cyan highlight for network mode)
+- **Multi-seed Merge**: "ADD AS SECOND SEED" button in OBJECT SCAN (teal, below EXPAND NETWORK)
+  - Reuses `POST /api/papers/{id}/expand-stable` with `limit: 80` (vs default 20)
+  - New papers placed via k-NN interpolation, assigned to nearest cluster
+  - `secondSeedIds: string[]` — teal ring (`0x00E5FF`) distinguishes second-seed nodes
+  - `gapRefreshNeeded: boolean` — dismissible banner after merge: "Gap analysis may have changed"
+  - `api.addPaperAsSeed()` — wrapper around `expandPaperStable` with higher limit
+- **Discussion doc**: `docs/discussion/2026-02-25_platform-direction-multiseed-viewtoggle.md`
+- **No backend changes**: 0 new endpoints, 0 new env vars, 0 new dependencies
 
 ### v3.5.1 Centrality-Driven Cluster Layout & Nebula Frame (2026-02-25)
 - Backend centroid: PageRank-weighted mean `Σ(pos_i × max(pagerank_i, 0.001)) / Σ(max(pagerank_i, 0.001))` computed after SNA metrics, returned in `SeedClusterInfo.centroid`
