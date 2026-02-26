@@ -13,7 +13,7 @@ export function createNebulaCluster(options: NebulaClusterOptions): THREE.Group 
   const { color, centroid, nodeCount, spread, isEmerging } = options;
   const manager = CosmicAnimationManager.getInstance();
 
-  const particleCount = Math.min(120, Math.max(30, nodeCount * 8));
+  const particleCount = Math.min(60, Math.max(20, nodeCount * 4));
   const geometry = new THREE.BufferGeometry();
   const positions = new Float32Array(particleCount * 3);
   const alphas = new Float32Array(particleCount);
@@ -44,7 +44,7 @@ export function createNebulaCluster(options: NebulaClusterOptions): THREE.Group 
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   geometry.setAttribute('alpha', new THREE.BufferAttribute(alphas, 1));
 
-  const baseOpacity = isEmerging ? 0.25 : 0.12;
+  const baseOpacity = isEmerging ? 0.18 : Math.max(0.05, 0.12 * Math.sqrt(20 / particleCount));
 
   const cloudMaterial = new THREE.ShaderMaterial({
     vertexShader: `
@@ -54,7 +54,7 @@ export function createNebulaCluster(options: NebulaClusterOptions): THREE.Group 
       void main() {
         vAlpha = alpha;
         vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-        gl_PointSize = 3.0 * (300.0 / -mvPosition.z);
+        gl_PointSize = min(8.0, 3.0 * (300.0 / -mvPosition.z));
         gl_Position = projectionMatrix * mvPosition;
       }
     `,
@@ -108,7 +108,7 @@ export function createNebulaCluster(options: NebulaClusterOptions): THREE.Group 
       varying vec2  vUv;
       void main() {
         float pulse = 0.6 + 0.4 * sin(uTime * 1.2);
-        float opacity = 0.35 * pulse;
+        float opacity = 0.18 * pulse;
         gl_FragColor = vec4(uColor, opacity);
       }
     `,
