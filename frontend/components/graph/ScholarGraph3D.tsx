@@ -171,9 +171,10 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
   // Store UMAP positions whenever graphData loads (for semantic mode restore)
   useEffect(() => {
     if (!graphData) return;
+    const CS = 15; // coordinate scale: UMAP ~15 units → ~150 units
     const map = new Map<string, { x: number; y: number; z: number }>();
     graphData.nodes.forEach((n) => {
-      map.set(n.id, { x: n.x, y: n.y, z: n.z });
+      map.set(n.id, { x: n.x * CS, y: n.y * CS, z: n.z * CS });
     });
     umapPositionsRef.current = map;
   }, [graphData]);
@@ -284,6 +285,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         const authorName = paper.authors?.[0]?.name?.split(' ').pop() || 'Unknown';
         const citationPercentile = citationRankMap.get(paper.id) || 0;
 
+        const CS = 15; // coordinate scale: UMAP ~15 units → ~150 units
         return {
           id: paper.id,
           name: `${authorName} ${paper.year || ''}`,
@@ -292,10 +294,10 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
           opacity,
           paper,
           citationPercentile,
-          x: paper.x,
-          y: paper.y,
-          z: paper.z,
-          ...(layoutMode === 'semantic' ? { fx: paper.x, fy: paper.y, fz: paper.z } : {}),
+          x: paper.x * CS,
+          y: paper.y * CS,
+          z: paper.z * CS,
+          ...(layoutMode === 'semantic' ? { fx: paper.x * CS, fy: paper.y * CS, fz: paper.z * CS } : {}),
         };
       });
 

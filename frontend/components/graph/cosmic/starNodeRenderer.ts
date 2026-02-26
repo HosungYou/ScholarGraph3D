@@ -79,7 +79,7 @@ export function createStarNode(options: StarNodeOptions): THREE.Group {
       depthWrite: false,
     })
   );
-  glowSprite.scale.setScalar(size * 2.5);
+  glowSprite.scale.setScalar(size * 1.0);
   group.add(glowSprite);
 
   // Selected: lens flare sprite

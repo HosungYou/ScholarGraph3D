@@ -13,7 +13,7 @@ export function createNebulaCluster(options: NebulaClusterOptions): THREE.Group 
   const { color, centroid, nodeCount, spread, isEmerging } = options;
   const manager = CosmicAnimationManager.getInstance();
 
-  const particleCount = Math.min(60, Math.max(20, nodeCount * 4));
+  const particleCount = Math.min(20, Math.max(6, nodeCount * 2));
   const geometry = new THREE.BufferGeometry();
   const positions = new Float32Array(particleCount * 3);
   const alphas = new Float32Array(particleCount);
@@ -44,7 +44,7 @@ export function createNebulaCluster(options: NebulaClusterOptions): THREE.Group 
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   geometry.setAttribute('alpha', new THREE.BufferAttribute(alphas, 1));
 
-  const baseOpacity = isEmerging ? 0.18 : Math.max(0.05, 0.12 * Math.sqrt(20 / particleCount));
+  const baseOpacity = isEmerging ? 0.12 : 0.008;
 
   const cloudMaterial = new THREE.ShaderMaterial({
     vertexShader: `
@@ -88,7 +88,7 @@ export function createNebulaCluster(options: NebulaClusterOptions): THREE.Group 
 
   // Glow ring: cluster boundary marker with pulse animation
   const ringRadius = spread * 1.4;
-  const ringGeometry = new THREE.RingGeometry(ringRadius * 0.92, ringRadius, 64);
+  const ringGeometry = new THREE.RingGeometry(ringRadius * 0.97, ringRadius, 64);
 
   const ringMaterial = new THREE.ShaderMaterial({
     uniforms: {
@@ -108,7 +108,7 @@ export function createNebulaCluster(options: NebulaClusterOptions): THREE.Group 
       varying vec2  vUv;
       void main() {
         float pulse = 0.6 + 0.4 * sin(uTime * 1.2);
-        float opacity = 0.18 * pulse;
+        float opacity = 0.06 * pulse;
         gl_FragColor = vec4(uColor, opacity);
       }
     `,
