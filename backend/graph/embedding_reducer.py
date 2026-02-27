@@ -59,7 +59,7 @@ class EmbeddingReducer:
         self,
         embeddings: np.ndarray,
         n_neighbors: int = 10,
-        min_dist: float = 0.1,
+        min_dist: float = 0.3,
         metric: str = "cosine",
         random_state: int = 42,
         years: Optional[List[Optional[int]]] = None,
