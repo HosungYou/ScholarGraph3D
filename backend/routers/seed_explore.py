@@ -61,6 +61,7 @@ class SeedGraphNode(BaseModel):
     is_seed: bool = False
     pagerank: float = 0.0
     betweenness: float = 0.0
+    direction: str = ""  # "seed" | "reference" | "citation"
 
 
 class SeedGraphEdge(BaseModel):
@@ -160,7 +161,7 @@ async def _seed_explore_pipeline(request: SeedExploreRequest, start_time: float)
     # Check cache first
     try:
         from cache import get_cached_seed_explore
-        cached = await get_cached_seed_explore(request.paper_id)
+        cached = await get_cached_seed_explore(f"{request.paper_id}:v3.7.0")
         if cached:
             logger.info(f"[timing] cache_hit: {time.time() - start_time:.2f}s — returning cached response")
             return SeedGraphResponse(**cached)
@@ -258,6 +259,7 @@ async def _seed_explore_pipeline(request: SeedExploreRequest, start_time: float)
     edges: List[SeedGraphEdge] = []
     clusters_info: List[SeedClusterInfo] = []
 
+    cluster_silhouette = 0.0
     if len(papers_with_emb) >= 2:
         embeddings = np.array([p.embedding for p in papers_with_emb])
         paper_ids = [p.paper_id for p in papers_with_emb]
@@ -322,6 +324,20 @@ async def _seed_explore_pipeline(request: SeedExploreRequest, start_time: float)
             base_label = info["label"].split(" (")[0]
             if label_counts.get(base_label, 0) > 1 and "(" not in info["label"]:
                 info["label"] = f"{base_label} (1)"
+        # Task 3: Cluster quality metric (silhouette score)
+        cluster_silhouette = 0.0
+        try:
+            from sklearn.metrics import silhouette_score
+            valid_mask = cluster_labels != -1
+            if valid_mask.sum() > 2 and len(set(cluster_labels[valid_mask])) > 1:
+                cluster_silhouette = float(silhouette_score(
+                    embeddings_50d[valid_mask], cluster_labels[valid_mask],
+                    metric='euclidean', sample_size=min(500, int(valid_mask.sum()))
+                ))
+                logger.info(f"Cluster silhouette: {cluster_silhouette:.3f}")
+        except Exception as e:
+            logger.warning(f"Silhouette score failed (non-fatal): {e}")
+
         hulls = clusterer.compute_hulls(coords_3d, cluster_labels)
 
         # Build nodes
@@ -330,6 +346,13 @@ async def _seed_explore_pipeline(request: SeedExploreRequest, start_time: float)
             c_info = cluster_meta.get(cid, {})
             is_seed = paper.paper_id == seed_paper.paper_id
             node = _s2_paper_to_node(paper, paper_ids[i], is_seed=is_seed)
+            # Task 4: Set direction
+            if is_seed:
+                node.direction = "seed"
+            elif any(cited == paper.paper_id for _, cited in citation_pairs if _ == seed_paper.paper_id):
+                node.direction = "reference"  # seed cited this paper
+            else:
+                node.direction = "citation"   # this paper cited seed
             node.x = float(coords_3d[i][0])
             node.y = float(coords_3d[i][1])
             node.z = float(coords_3d[i][2])
@@ -391,16 +414,31 @@ async def _seed_explore_pipeline(request: SeedExploreRequest, start_time: float)
                 hull_points=hull_verts,
             ))
 
-        # Add papers without embeddings at periphery
-        offset = len(papers_with_emb)
+        # Task 5: Assign papers without embeddings to nearest cluster centroid (with jitter)
         for i, paper in enumerate(papers_without_emb):
             is_seed = paper.paper_id == seed_paper.paper_id
             node = _s2_paper_to_node(paper, paper.paper_id, is_seed=is_seed)
-            node.x = float(offset + i) * 0.5
-            node.y = 10.0
-            node.z = 0.0
-            node.cluster_id = -1
-            node.cluster_label = "Unclustered"
+            # direction for no-embedding papers
+            if is_seed:
+                node.direction = "seed"
+            elif any(cited == paper.paper_id for _, cited in citation_pairs if _ == seed_paper.paper_id):
+                node.direction = "reference"
+            else:
+                node.direction = "citation"
+            if clusters_info:
+                nearest = clusters_info[i % len(clusters_info)]
+                cx, cy, cz = nearest.centroid
+                node.x = cx + (i % 3 - 1) * 2.0
+                node.y = cy + (i // 3) * 2.0
+                node.z = cz
+                node.cluster_id = nearest.id
+                node.cluster_label = nearest.label
+            else:
+                node.x = float(i) * 0.5
+                node.y = 10.0
+                node.z = 0.0
+                node.cluster_id = -1
+                node.cluster_label = "Unclustered"
             nodes.append(node)
 
         # 6. Citation intents FIRST (enriches edges), then gap detection (uses enriched data)
@@ -569,6 +607,7 @@ async def _seed_explore_pipeline(request: SeedExploreRequest, start_time: float)
         "similarity_edges": len([e for e in edges if e.type == "similarity"]),
         "clusters": len([c for c in clusters_info if c.id != -1]),
         "gaps": len(gaps_info),
+        "cluster_silhouette": round(cluster_silhouette, 3),
         "frontier_papers": len(frontier_ids),
         "depth": 1,
         "elapsed_seconds": round(elapsed, 2),
@@ -581,7 +620,7 @@ async def _seed_explore_pipeline(request: SeedExploreRequest, start_time: float)
     )
     try:
         from cache import cache_seed_explore
-        await cache_seed_explore(request.paper_id, response.model_dump())
+        await cache_seed_explore(f"{request.paper_id}:v3.7.0", response.model_dump())
     except Exception:
         pass  # cache write failure is non-fatal
 

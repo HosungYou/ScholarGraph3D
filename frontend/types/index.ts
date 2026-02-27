@@ -34,6 +34,7 @@ export interface Paper {
   frontier_score?: number;  // 0-1: how many unexplored connections
   pagerank?: number;
   betweenness?: number;
+  direction?: 'seed' | 'reference' | 'citation';
 }
 
 export interface GraphEdge {
@@ -68,6 +69,8 @@ export interface GraphData {
     total: number;
     query: string;
     oa_credits_used: number;
+    cluster_silhouette?: number;
+    [key: string]: any;
   };
 }
 

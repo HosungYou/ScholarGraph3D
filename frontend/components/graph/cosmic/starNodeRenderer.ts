@@ -19,6 +19,7 @@ interface StarNodeOptions {
   showBloom: boolean;
   showOARings: boolean;
   showCitationAura: boolean;
+  direction?: string;
 }
 
 export function createStarNode(options: StarNodeOptions): THREE.Group {
@@ -27,6 +28,7 @@ export function createStarNode(options: StarNodeOptions): THREE.Group {
     isSelected, isHighlighted, isHighlightedByPanel, hasSelection,
     isBridge, isOpenAccess, isTopCited,
     showBloom, showOARings, showCitationAura,
+    direction,
   } = options;
 
   const group = new THREE.Group();
@@ -38,6 +40,19 @@ export function createStarNode(options: StarNodeOptions): THREE.Group {
   if (isSelected) displayColor = '#D4AF37';
   else if (isHighlightedByPanel) displayColor = '#D4AF37';
   else if (isHighlighted) displayColor = '#FFFFFF';
+  else if (direction === 'reference') {
+    // Prior work — subtle blue tint
+    const base = new THREE.Color(starColors.core);
+    const blue = new THREE.Color('#4488FF');
+    base.lerp(blue, 0.15);
+    displayColor = '#' + base.getHexString();
+  } else if (direction === 'citation') {
+    // Follow-on work — subtle orange tint
+    const base = new THREE.Color(starColors.core);
+    const orange = new THREE.Color('#FF8844');
+    base.lerp(orange, 0.15);
+    displayColor = '#' + base.getHexString();
+  }
 
   let displayOpacity = opacity;
   if (isSelected) displayOpacity = 1;

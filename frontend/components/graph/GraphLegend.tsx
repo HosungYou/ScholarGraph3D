@@ -211,6 +211,21 @@ export default function GraphLegend() {
         Nebula cloud = topic cluster
       </div>
 
+      {/* Direction legend */}
+      <div className="mb-1.5 pt-1.5 border-t border-[#1A1A1A]/70">
+        <div className="text-[9px] font-mono text-[#999999]/40 mb-0.5">Direction tint:</div>
+        <div className="flex flex-col gap-0.5">
+          <div className="flex items-center gap-2">
+            <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#4488FF', opacity: 0.7 }} />
+            <span className="text-[9px]">Reference (선행연구)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#FF8844', opacity: 0.7 }} />
+            <span className="text-[9px]">Citation (후속연구)</span>
+          </div>
+        </div>
+      </div>
+
       {/* Visual Guide — collapsible */}
       <div className="border-t border-[#1A1A1A]/70 pt-2 mt-2">
         <button

@@ -96,7 +96,10 @@ class EmbeddingReducer:
             input_data = self._pca_pre_reduce(embeddings, target_dim=100)
 
         # Adjust n_neighbors for small datasets
-        effective_neighbors = min(n_neighbors, input_data.shape[0] - 1)
+        effective_neighbors = min(
+            min(15, max(10, input_data.shape[0] // 3)),  # adaptive: global structure
+            input_data.shape[0] - 1
+        )
 
         t0 = time.time()
         reducer = UMAP(
@@ -231,6 +234,14 @@ class EmbeddingReducer:
         min_year = min(valid_years)
         max_year = max(valid_years)
         span = max(1, max_year - min_year)
+
+        # Skip temporal override when span < 3 years — UMAP Z is more informative
+        if span < 3:
+            logger.info(
+                f"Year span={span} < 3 (years {min_year}–{max_year}): "
+                "Skipping temporal Z override — using UMAP Z for better spread"
+            )
+            return coords_3d
 
         coords_out = coords_3d.copy()
         for i, year in enumerate(years):

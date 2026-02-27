@@ -505,6 +505,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
           showBloom,
           showOARings,
           showCitationAura,
+          direction: node.paper.direction,
         });
         group.userData.nodeId = node.id;
 
@@ -1145,6 +1146,9 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
   // Gap overlay ref
   const gapOverlayRef = useRef<THREE.Group | null>(null);
 
+  // Gap arc ref
+  const gapArcRef = useRef<THREE.Line | null>(null);
+
   // Timeline labels ref
   const timelineOverlayRef = useRef<THREE.Group | null>(null);
 
@@ -1483,6 +1487,66 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       }
     };
   }, [showGapOverlay, graphData]);
+
+  // Gap Arc: QuadraticBezierCurve3 between highlighted cluster centroids
+  useEffect(() => {
+    if (!fgRef.current) return;
+
+    let scene: THREE.Scene;
+    try {
+      scene = fgRef.current.scene();
+      if (!scene) return;
+    } catch {
+      return;
+    }
+
+    // Remove existing arc
+    if (gapArcRef.current) {
+      scene.getObjectByName('gap-arc')?.removeFromParent();
+      gapArcRef.current.geometry.dispose();
+      (gapArcRef.current.material as THREE.Material).dispose();
+      gapArcRef.current = null;
+    }
+
+    if (!highlightedClusterPair || !graphData) return;
+
+    const [cidA, cidB] = highlightedClusterPair;
+    const clusterA = graphData.clusters.find(c => c.id === cidA);
+    const clusterB = graphData.clusters.find(c => c.id === cidB);
+    if (!clusterA?.centroid || !clusterB?.centroid) return;
+
+    const CS = 15;
+    const centA = new THREE.Vector3(
+      clusterA.centroid[0] * CS,
+      clusterA.centroid[1] * CS,
+      clusterA.centroid[2],
+    );
+    const centB = new THREE.Vector3(
+      clusterB.centroid[0] * CS,
+      clusterB.centroid[1] * CS,
+      clusterB.centroid[2],
+    );
+
+    const mid = new THREE.Vector3(
+      (centA.x + centB.x) / 2,
+      (centA.y + centB.y) / 2 + 30,
+      (centA.z + centB.z) / 2,
+    );
+
+    const curve = new THREE.QuadraticBezierCurve3(centA, mid, centB);
+    const points = curve.getPoints(50);
+    const geo = new THREE.BufferGeometry().setFromPoints(points);
+    const mat = new THREE.LineBasicMaterial({
+      color: new THREE.Color('#D4AF37'),
+      transparent: true,
+      opacity: 0.6,
+      depthWrite: false,
+    });
+    const arcLine = new THREE.Line(geo, mat);
+    arcLine.name = 'gap-arc';
+    scene.add(arcLine);
+    gapArcRef.current = arcLine;
+  }, [highlightedClusterPair, graphData]);
 
   // Timeline mode: fix node Y positions by publication year
   useEffect(() => {
@@ -1828,6 +1892,17 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       // NOTE: Do NOT manually traverse/dispose scene objects here.
       // three-forcegraph handles its own object lifecycle via emptyObject/deallocate.
       // Manual disposal causes double-free crashes (children[0] undefined TypeError).
+
+      // Cleanup gap arc
+      if (gapArcRef.current) {
+        try {
+          const scene = fgRef.current?.scene();
+          if (scene) scene.remove(gapArcRef.current);
+        } catch {}
+        gapArcRef.current?.geometry.dispose();
+        (gapArcRef.current?.material as THREE.Material | undefined)?.dispose();
+        gapArcRef.current = null;
+      }
 
       // Clear animation manager (releases refs to shader materials & animated objects)
       CosmicAnimationManager.reset();

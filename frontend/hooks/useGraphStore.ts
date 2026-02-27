@@ -13,6 +13,8 @@ import type {
 
 interface GraphStore {
   graphData: GraphData | null;
+  graphMeta: Record<string, any> | null;
+  setGraphMeta: (meta: Record<string, any>) => void;
   selectedPaper: Paper | null;
   selectedCluster: Cluster | null;
   isLoading: boolean;
@@ -138,6 +140,7 @@ interface GraphStore {
 
 export const useGraphStore = create<GraphStore>((set, get) => ({
   graphData: null,
+  graphMeta: null,
   selectedPaper: null,
   selectedCluster: null,
   isLoading: false,
@@ -213,6 +216,7 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
   setGapRefreshNeeded: (v) => set({ gapRefreshNeeded: v }),
 
   setGraphData: (data) => set({ graphData: data, error: null }),
+  setGraphMeta: (meta) => set({ graphMeta: meta }),
 
   selectPaper: (paper) => set({ selectedPaper: paper }),
 
