@@ -35,6 +35,16 @@ class StructuralGap:
     temporal_context: Dict = field(default_factory=dict)  # {year_range_a, year_range_b, overlap_years}
     intent_summary: Dict = field(default_factory=dict)  # {background, methodology, result} cross-citation distribution
     evidence_detail: Dict[str, Any] = field(default_factory=dict)
+    actionability: Optional["GapActionability"] = None
+
+
+@dataclass
+class GapActionability:
+    """Actionability assessment for a research gap."""
+
+    score: float  # 0-1 composite actionability
+    breakdown: Dict[str, float] = field(default_factory=dict)  # sub-dimension scores
+    recommendation: str = "high_opportunity"  # high_opportunity | needs_collaboration | infrastructure_gap | terminology_barrier
 
 
 @dataclass
@@ -61,6 +71,7 @@ class GapDetector:
         edges: List[Dict[str, Any]],
         citation_pairs: Optional[set] = None,
         intent_edges: Optional[List[Dict[str, Any]]] = None,
+        node_metrics: Optional[Dict[str, Dict[str, float]]] = None,
     ) -> GapAnalysisResult:
         """
         Detect structural gaps between clusters with multi-dimensional scoring.
@@ -71,6 +82,7 @@ class GapDetector:
             edges: List of edge dicts with keys: source, target, type, weight, intent (optional)
             citation_pairs: Set of (citing_id, cited_id) tuples for directional analysis
             intent_edges: List of edge dicts with intent field for intent distribution analysis
+            node_metrics: Dict mapping paper_id to {pagerank, betweenness} from SNA computation
 
         Returns:
             GapAnalysisResult with gaps, connectivity matrix, and summary
@@ -155,19 +167,33 @@ class GapDetector:
                 cid_a, cid_b, paper_cluster, citation_pairs
             )
 
-            # ── Structural holes score (weight 0.15) ──
+            # ── Structural holes score (weight 0.12) ──
             structural_holes_score = self._compute_structural_holes_score(
                 cid_a, cid_b, paper_cluster, edges
             )
 
-            # ── Composite score (rebalanced with structural holes) ──
+            # ── Influence score (weight 0.08) — PageRank/Betweenness gap scoring ──
+            influence_score = self._compute_influence_score(
+                cid_a, cid_b, papers_a, papers_b, node_metrics
+            )
+
+            # ── Author silo score (weight 0.06) ──
+            author_silo_score, author_detail = self._compute_author_overlap_score(papers_a, papers_b)
+
+            # ── Venue diversity score (weight 0.06) ──
+            venue_diversity_score, venue_detail = self._compute_venue_diversity_score(papers_a, papers_b)
+
+            # ── Composite score (rebalanced 9-dimension) ──
             composite = (
-                0.25 * structural_score
-                + 0.25 * relatedness_score
-                + 0.15 * temporal_score
+                0.20 * structural_score
+                + 0.20 * relatedness_score
+                + 0.10 * temporal_score
                 + 0.10 * intent_score
-                + 0.10 * directional_score
-                + 0.15 * structural_holes_score
+                + 0.08 * directional_score
+                + 0.12 * structural_holes_score
+                + 0.08 * influence_score
+                + 0.06 * author_silo_score
+                + 0.06 * venue_diversity_score
             )
 
             gap_score_breakdown = {
@@ -177,6 +203,9 @@ class GapDetector:
                 "intent": round(intent_score, 4),
                 "directional": round(directional_score, 4),
                 "structural_holes": round(structural_holes_score, 4),
+                "influence": round(influence_score, 4),
+                "author_silo": round(author_silo_score, 4),
+                "venue_diversity": round(venue_diversity_score, 4),
                 "composite": round(composite, 4),
             }
 
@@ -190,9 +219,9 @@ class GapDetector:
                 papers_a, papers_b, threshold=0.5, top_k=5,
             )
 
-            # Key papers per cluster (top 3 by citation count)
-            key_papers_a = self._extract_key_papers(papers_a)
-            key_papers_b = self._extract_key_papers(papers_b)
+            # Key papers per cluster (top 3 by PageRank if available, else citation count)
+            key_papers_a = self._extract_key_papers(papers_a, node_metrics=node_metrics)
+            key_papers_b = self._extract_key_papers(papers_b, node_metrics=node_metrics)
 
             # Evidence detail for frontend explainability
             total_cross = sum(intent_dist.values()) if intent_dist else 0
@@ -205,6 +234,13 @@ class GapDetector:
             if year_range_a[0] > 0 and year_range_b[0] > 0:
                 total_year_span = max(year_range_a[1], year_range_b[1]) - min(year_range_a[0], year_range_b[0]) + 1
 
+            # Terminology barrier detection
+            abstracts_a = [p.get("abstract", "") or "" for p in papers_a]
+            abstracts_b = [p.get("abstract", "") or "" for p in papers_b]
+            terminology_detail = self._compute_terminology_barrier(
+                abstracts_a, abstracts_b, centroid_similarity
+            )
+
             evidence_detail = {
                 "actual_edges": actual_edges,
                 "max_possible_edges": max_possible,
@@ -215,7 +251,28 @@ class GapDetector:
                 "background_ratio": round(background_ratio, 4),
                 "citations_a_to_b": citations_a_to_b,
                 "citations_b_to_a": citations_b_to_a,
+                # Author silo details
+                "shared_author_count": author_detail.get("shared_author_count", 0),
+                "unique_authors_a": author_detail.get("unique_authors_a", 0),
+                "unique_authors_b": author_detail.get("unique_authors_b", 0),
+                # Venue diversity details
+                "venues_a": venue_detail.get("venues_a", []),
+                "venues_b": venue_detail.get("venues_b", []),
+                "shared_venues": venue_detail.get("shared_venues", []),
+                # Terminology barrier details
+                "shared_terms": terminology_detail.get("shared_terms", []),
+                "unique_terms_a": terminology_detail.get("unique_terms_a", []),
+                "unique_terms_b": terminology_detail.get("unique_terms_b", []),
+                "terminology_barrier": terminology_detail.get("terminology_barrier", False),
             }
+
+            # Compute actionability score
+            actionability = self._compute_actionability(
+                bridge_papers, key_papers_a, key_papers_b,
+                papers_a, papers_b, temporal_ctx,
+                background_ratio, methodology_ratio,
+                terminology_detail,
+            )
 
             gaps.append(StructuralGap(
                 gap_id=str(uuid.uuid4()),
@@ -244,6 +301,7 @@ class GapDetector:
                 temporal_context=temporal_ctx,
                 intent_summary=intent_dist,
                 evidence_detail=evidence_detail,
+                actionability=actionability,
             ))
 
         # Apply adaptive threshold filtering
@@ -395,6 +453,17 @@ class GapDetector:
                     "methodology_hint": "Interview researchers in both fields to understand barriers to bidirectional citation.",
                 })
 
+        # Q6: Author silo
+        if evidence_detail.get("shared_author_count", 0) == 0:
+            unique_a = evidence_detail.get("unique_authors_a", 0)
+            unique_b = evidence_detail.get("unique_authors_b", 0)
+            if unique_a > 0 and unique_b > 0:
+                questions.append({
+                    "question": f"Why is there no researcher overlap between {label_a} ({unique_a} authors) and {label_b} ({unique_b} authors)?",
+                    "justification": f"Complete author silo: 0 shared authors between {unique_a} and {unique_b} unique researchers.",
+                    "methodology_hint": "Map researcher collaboration networks to identify potential cross-domain matchmakers.",
+                })
+
         # Fill to at least 3
         if len(questions) < 3:
             if top_b and top_b.get("tldr"):
@@ -410,7 +479,7 @@ class GapDetector:
                     "methodology_hint": "Inventory available datasets and tools in each cluster for cross-applicability.",
                 })
 
-        return questions[:5]
+        return questions[:6]
 
     def _compute_connectivity(
         self,
@@ -566,13 +635,25 @@ class GapDetector:
         ]
 
     @staticmethod
-    def _extract_key_papers(papers: List[Dict[str, Any]], top_n: int = 3) -> List[Dict]:
-        """Extract top N papers by citation count from a cluster."""
-        sorted_papers = sorted(
-            papers,
-            key=lambda p: p.get("citation_count", 0),
-            reverse=True,
-        )
+    def _extract_key_papers(
+        papers: List[Dict[str, Any]],
+        top_n: int = 3,
+        node_metrics: Optional[Dict[str, Dict[str, float]]] = None,
+    ) -> List[Dict]:
+        """Extract top N papers by PageRank (if available) or citation count from a cluster."""
+        if node_metrics:
+            # Sort by PageRank when SNA metrics are available
+            sorted_papers = sorted(
+                papers,
+                key=lambda p: node_metrics.get(str(p.get("id", "")), {}).get("pagerank", 0.0),
+                reverse=True,
+            )
+        else:
+            sorted_papers = sorted(
+                papers,
+                key=lambda p: p.get("citation_count", 0),
+                reverse=True,
+            )
         return [
             {
                 "paper_id": str(p.get("id", "")),
@@ -768,6 +849,302 @@ class GapDetector:
         # Normalize: constraint ranges 0-1 for well-connected, can exceed 1
         score = min(1.0, avg_constraint)
         return round(score, 4)
+
+    def _compute_influence_score(
+        self,
+        cid_a: int,
+        cid_b: int,
+        papers_a: List[Dict[str, Any]],
+        papers_b: List[Dict[str, Any]],
+        node_metrics: Optional[Dict[str, Dict[str, float]]] = None,
+    ) -> float:
+        """
+        Compute influence-based gap score using PageRank and Betweenness centrality.
+
+        Formula: (mean_pr_A * mean_pr_B) * (1 - max_betweenness_cross_normalized)
+        High-influence clusters with no cross-cluster brokers → higher gap score.
+
+        Returns a score from 0 to 1.
+        """
+        if not node_metrics:
+            return 0.5  # neutral fallback when metrics unavailable
+
+        def _get_metrics(papers: List[Dict]) -> Tuple[List[float], List[float]]:
+            prs, bets = [], []
+            for p in papers:
+                pid = str(p.get("id", ""))
+                m = node_metrics.get(pid, {})
+                prs.append(m.get("pagerank", 0.0))
+                bets.append(m.get("betweenness", 0.0))
+            return prs, bets
+
+        prs_a, bets_a = _get_metrics(papers_a)
+        prs_b, bets_b = _get_metrics(papers_b)
+
+        mean_pr_a = np.mean(prs_a) if prs_a else 0.0
+        mean_pr_b = np.mean(prs_b) if prs_b else 0.0
+
+        # Combine betweenness from both clusters, find max (cross-cluster broker)
+        all_betweenness = bets_a + bets_b
+        max_bet = max(all_betweenness) if all_betweenness else 0.0
+        # Normalize betweenness (it's already 0-1 from networkx for normalized=True,
+        # but values are often very small, so cap at 1.0)
+        max_bet_norm = min(1.0, max_bet)
+
+        # PageRank product indicates combined influence of the two clusters
+        # Normalize: PageRank values are typically small (1/N), so scale up
+        n_total = len(papers_a) + len(papers_b)
+        if n_total > 0:
+            pr_product = (mean_pr_a * n_total) * (mean_pr_b * n_total)
+        else:
+            pr_product = 0.0
+
+        # Clamp pr_product to [0, 1]
+        pr_product = min(1.0, pr_product)
+
+        # Score: high influence clusters with low cross-cluster brokerage = high gap
+        score = pr_product * (1.0 - max_bet_norm)
+
+        # Ensure reasonable range — blend with neutral to avoid extreme values
+        score = 0.3 + 0.7 * score
+        return round(min(1.0, max(0.0, score)), 4)
+
+    @staticmethod
+    def _compute_author_overlap_score(
+        papers_a: List[Dict[str, Any]],
+        papers_b: List[Dict[str, Any]],
+    ) -> Tuple[float, Dict[str, Any]]:
+        """
+        Compute author silo score based on Jaccard index of author sets.
+
+        score = 1 - jaccard (no overlap = high gap)
+        Returns (score, detail_dict).
+        """
+        authors_a: Set[str] = set()
+        authors_b: Set[str] = set()
+
+        for p in papers_a:
+            for author in (p.get("authors") or []):
+                # Handle both dict-style and string-style author entries
+                if isinstance(author, dict):
+                    aid = author.get("authorId") or author.get("id") or author.get("name", "")
+                else:
+                    aid = str(author)
+                if aid:
+                    authors_a.add(aid)
+
+        for p in papers_b:
+            for author in (p.get("authors") or []):
+                if isinstance(author, dict):
+                    aid = author.get("authorId") or author.get("id") or author.get("name", "")
+                else:
+                    aid = str(author)
+                if aid:
+                    authors_b.add(aid)
+
+        if not authors_a and not authors_b:
+            return 0.5, {"shared_author_count": 0, "unique_authors_a": 0, "unique_authors_b": 0}
+
+        shared = authors_a & authors_b
+        union = authors_a | authors_b
+        jaccard = len(shared) / len(union) if union else 0.0
+        score = 1.0 - jaccard  # no overlap = high gap
+
+        detail = {
+            "shared_author_count": len(shared),
+            "unique_authors_a": len(authors_a - shared),
+            "unique_authors_b": len(authors_b - shared),
+        }
+        return round(score, 4), detail
+
+    @staticmethod
+    def _compute_venue_diversity_score(
+        papers_a: List[Dict[str, Any]],
+        papers_b: List[Dict[str, Any]],
+    ) -> Tuple[float, Dict[str, Any]]:
+        """
+        Compute venue diversity score based on Jaccard overlap of venue sets.
+
+        score = 1 - jaccard_overlap (different venues = high gap)
+        Returns (score, detail_dict).
+        """
+        venues_a: Set[str] = set()
+        venues_b: Set[str] = set()
+
+        for p in papers_a:
+            v = p.get("venue")
+            if v and str(v).strip():
+                venues_a.add(str(v).strip().lower())
+
+        for p in papers_b:
+            v = p.get("venue")
+            if v and str(v).strip():
+                venues_b.add(str(v).strip().lower())
+
+        if not venues_a and not venues_b:
+            return 0.5, {"venues_a": [], "venues_b": [], "shared_venues": []}
+
+        shared = venues_a & venues_b
+        union = venues_a | venues_b
+        jaccard = len(shared) / len(union) if union else 0.0
+        score = 1.0 - jaccard  # different venues = high gap
+
+        detail = {
+            "venues_a": sorted(list(venues_a))[:10],  # cap for response size
+            "venues_b": sorted(list(venues_b))[:10],
+            "shared_venues": sorted(list(shared))[:10],
+        }
+        return round(score, 4), detail
+
+    @staticmethod
+    def _compute_terminology_barrier(
+        abstracts_a: List[str],
+        abstracts_b: List[str],
+        centroid_similarity: float = 0.0,
+    ) -> Dict[str, Any]:
+        """
+        Detect terminology barriers between two clusters using TF-IDF.
+
+        If centroid_sim > 0.3 but term_overlap < 0.1 → terminology_barrier = True.
+        Returns detail dict with shared_terms, unique_terms, and barrier flag.
+        """
+        try:
+            from sklearn.feature_extraction.text import TfidfVectorizer
+        except ImportError:
+            return {"shared_terms": [], "unique_terms_a": [], "unique_terms_b": [], "terminology_barrier": False}
+
+        # Combine abstracts per cluster into single documents
+        text_a = " ".join(a for a in abstracts_a if a)
+        text_b = " ".join(b for b in abstracts_b if b)
+
+        if not text_a.strip() or not text_b.strip():
+            return {"shared_terms": [], "unique_terms_a": [], "unique_terms_b": [], "terminology_barrier": False}
+
+        try:
+            vectorizer = TfidfVectorizer(
+                max_features=200,
+                stop_words="english",
+                min_df=1,
+                ngram_range=(1, 2),
+            )
+            tfidf_matrix = vectorizer.fit_transform([text_a, text_b])
+            feature_names = vectorizer.get_feature_names_out()
+
+            # Get top-20 terms per cluster by TF-IDF score
+            scores_a = tfidf_matrix[0].toarray().flatten()
+            scores_b = tfidf_matrix[1].toarray().flatten()
+
+            top_indices_a = scores_a.argsort()[-20:][::-1]
+            top_indices_b = scores_b.argsort()[-20:][::-1]
+
+            terms_a = set(feature_names[i] for i in top_indices_a if scores_a[i] > 0)
+            terms_b = set(feature_names[i] for i in top_indices_b if scores_b[i] > 0)
+
+            shared_terms = terms_a & terms_b
+            unique_a = terms_a - shared_terms
+            unique_b = terms_b - shared_terms
+
+            # Compute term overlap ratio
+            union = terms_a | terms_b
+            term_overlap = len(shared_terms) / len(union) if union else 0.0
+
+            # Terminology barrier: semantically similar but different vocabulary
+            terminology_barrier = centroid_similarity > 0.3 and term_overlap < 0.1
+
+            return {
+                "shared_terms": sorted(list(shared_terms))[:15],
+                "unique_terms_a": sorted(list(unique_a))[:15],
+                "unique_terms_b": sorted(list(unique_b))[:15],
+                "terminology_barrier": terminology_barrier,
+                "term_overlap": round(term_overlap, 4),
+            }
+        except Exception as e:
+            logger.warning(f"Terminology barrier computation failed: {e}")
+            return {"shared_terms": [], "unique_terms_a": [], "unique_terms_b": [], "terminology_barrier": False}
+
+    def _compute_actionability(
+        self,
+        bridge_papers: List[Dict[str, Any]],
+        key_papers_a: List[Dict],
+        key_papers_b: List[Dict],
+        papers_a: List[Dict[str, Any]],
+        papers_b: List[Dict[str, Any]],
+        temporal_ctx: Dict,
+        background_ratio: float,
+        methodology_ratio: float,
+        terminology_detail: Dict[str, Any],
+    ) -> GapActionability:
+        """
+        Compute gap actionability score with 5 sub-dimensions.
+
+        Returns GapActionability with score, breakdown, and recommendation.
+        """
+        # 1. Bridge feasibility (0.25): max bridge paper score — higher = easier to bridge
+        if bridge_papers:
+            bridge_feasibility = max(bp.get("score", 0.0) for bp in bridge_papers)
+        else:
+            bridge_feasibility = 0.0
+
+        # 2. Open access ratio (0.15): proportion of key papers that are open access
+        all_key_papers = papers_a + papers_b
+        oa_count = sum(1 for p in all_key_papers if p.get("is_open_access", False))
+        oa_ratio = oa_count / len(all_key_papers) if all_key_papers else 0.0
+
+        # 3. Recency (0.20): 1 - (avg_years_since_latest / 10), clamped to [0, 1]
+        import datetime
+        current_year = datetime.datetime.now().year
+        years_a = [p.get("year") for p in papers_a if p.get("year")]
+        years_b = [p.get("year") for p in papers_b if p.get("year")]
+        if years_a and years_b:
+            latest_a = max(years_a)
+            latest_b = max(years_b)
+            avg_years_since = ((current_year - latest_a) + (current_year - latest_b)) / 2.0
+            recency = max(0.0, min(1.0, 1.0 - (avg_years_since / 10.0)))
+        else:
+            recency = 0.5  # neutral
+
+        # 4. Method transferability (0.20): background_ratio * 0.8 + (1 - methodology_ratio) * 0.2
+        #    High background ratio + low methodology sharing = high transferability opportunity
+        method_transferability = background_ratio * 0.8 + (1.0 - methodology_ratio) * 0.2
+
+        # 5. Terminology similarity (0.20): term_overlap from TF-IDF
+        #    Higher overlap = easier to communicate across clusters
+        term_overlap = terminology_detail.get("term_overlap", 0.5)
+        terminology_sim = term_overlap  # Direct: higher overlap = more actionable
+
+        # Composite actionability
+        score = (
+            0.25 * bridge_feasibility
+            + 0.15 * oa_ratio
+            + 0.20 * recency
+            + 0.20 * method_transferability
+            + 0.20 * terminology_sim
+        )
+
+        breakdown = {
+            "bridge_feasibility": round(bridge_feasibility, 4),
+            "open_access_ratio": round(oa_ratio, 4),
+            "recency": round(recency, 4),
+            "method_transferability": round(method_transferability, 4),
+            "terminology_similarity": round(terminology_sim, 4),
+        }
+
+        # Determine recommendation
+        terminology_barrier = terminology_detail.get("terminology_barrier", False)
+        if terminology_barrier:
+            recommendation = "terminology_barrier"
+        elif oa_ratio < 0.2 and bridge_feasibility < 0.3:
+            recommendation = "infrastructure_gap"
+        elif bridge_feasibility < 0.4 and method_transferability < 0.3:
+            recommendation = "needs_collaboration"
+        else:
+            recommendation = "high_opportunity"
+
+        return GapActionability(
+            score=round(score, 4),
+            breakdown=breakdown,
+            recommendation=recommendation,
+        )
 
     @staticmethod
     def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:

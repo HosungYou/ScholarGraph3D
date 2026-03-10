@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useCallback } from 'react';
 import { useGraphStore } from '@/hooks/useGraphStore';
-import { Radar, Waypoints, Sparkles, ChevronDown, FileText, Loader2 } from 'lucide-react';
+import { Radar, Waypoints, Sparkles, ChevronDown, FileText, Loader2, Copy } from 'lucide-react';
 import type { StructuralGap, Paper, GapScoreBreakdown } from '@/types';
 import { api } from '@/lib/api';
 
@@ -96,36 +96,168 @@ export default function GapSpotterPanel() {
         <Radar className="w-4 h-4 text-[#D4AF37]" />
         <span className="hud-label text-[#D4AF37]/60">GAP SPOTTER</span>
         <div className="flex-1 h-px bg-gradient-to-r from-[rgba(255,255,255,0.06)] to-transparent" />
-        <span className="hud-label text-[#999999]/40">
-          {gaps.length} gap{gaps.length !== 1 ? 's' : ''}
-        </span>
       </div>
 
-      {/* Gap cards */}
-      <div className="space-y-2 mb-4">
-        {gaps.map((gap: StructuralGap) => (
-          <GapCard
-            key={gap.gap_id}
-            gap={gap}
-            graphData={graphData!}
-            selectPaper={selectPaper}
-            setPanelSelectionId={setPanelSelectionId}
-            onGenerateReport={() => handleGenerateReport(gap)}
-            isGenerating={gapReportLoading}
-            onMouseEnter={() => {
-              const ids = new Set(gap.bridge_papers.map((bp) => bp.paper_id));
-              setHighlightedPaperIds(ids);
-              setHighlightedClusterPair([gap.cluster_a.id, gap.cluster_b.id]);
-              setHoveredGapEdges(gap.potential_edges);
-            }}
-            onMouseLeave={() => {
-              clearHighlightedPaperIds();
-              setHighlightedClusterPair(null);
-              setHoveredGapEdges([]);
-            }}
-          />
-        ))}
+      {/* Summary Dashboard */}
+      <div className="mb-4 p-3 hud-panel-clean rounded-lg">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl font-mono font-bold text-[#D4AF37]">{gaps.length}</span>
+            <span className="text-[10px] font-mono text-[#999999]/40 uppercase">gaps detected</span>
+          </div>
+          {gaps.length > 0 && (
+            <button
+              onClick={() => {
+                const strongest = gaps[0];
+                setHighlightedClusterPair([strongest.cluster_a.id, strongest.cluster_b.id]);
+                setHoveredGapEdges(strongest.potential_edges);
+              }}
+              className="px-2 py-1 text-[9px] font-mono uppercase tracking-wider text-[#D4AF37]/70 border border-[rgba(212,175,55,0.2)] rounded hover:bg-[rgba(212,175,55,0.1)] transition-colors"
+            >
+              Focus Strongest
+            </button>
+          )}
+        </div>
+        {gaps.length > 0 && (
+          <p className="text-[9px] font-mono text-[#999999]/40">
+            Strongest: <span className="text-[#D4AF37]/60">{gaps[0].cluster_a.label}</span>
+            <span className="text-[#999999]/20"> ↔ </span>
+            <span className="text-[#D4AF37]/60">{gaps[0].cluster_b.label}</span>
+            <span className="text-[#999999]/30"> ({Math.round(gaps[0].gap_strength * 100)}%)</span>
+          </p>
+        )}
       </div>
+
+      {/* Copy All RQs button */}
+      {gaps.length > 0 && (
+        <div className="flex justify-end mb-2">
+          <button
+            onClick={() => {
+              const allRQs = gaps.flatMap(g =>
+                g.research_questions.map(q =>
+                  typeof q === 'string' ? q : q.question
+                )
+              ).join('\n\n');
+              navigator.clipboard.writeText(allRQs);
+            }}
+            className="flex items-center gap-1 px-2 py-1 text-[8px] font-mono uppercase tracking-wider text-[#999999]/40 hover:text-[#D4AF37] border border-[rgba(255,255,255,0.04)] rounded hover:border-[rgba(212,175,55,0.2)] transition-all"
+          >
+            <Copy className="w-3 h-3" />
+            Copy All RQs
+          </button>
+        </div>
+      )}
+
+      {/* Gap cards grouped by severity */}
+      {(() => {
+        const critical = gaps.filter(g => g.gap_strength > 0.75);
+        const notable = gaps.filter(g => g.gap_strength > 0.50 && g.gap_strength <= 0.75);
+        const minor = gaps.filter(g => g.gap_strength <= 0.50);
+
+        return (
+          <div className="space-y-3 mb-4">
+            {critical.length > 0 && (
+              <div>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <span className="text-[9px] font-mono font-bold text-[#D4AF37] uppercase tracking-wider">Critical</span>
+                  <span className="text-[8px] font-mono text-[#D4AF37]/40">{critical.length}</span>
+                </div>
+                <div className="space-y-2">
+                  {critical.map((gap) => (
+                    <GapCard
+                      key={gap.gap_id}
+                      gap={gap}
+                      graphData={graphData!}
+                      selectPaper={selectPaper}
+                      setPanelSelectionId={setPanelSelectionId}
+                      onGenerateReport={() => handleGenerateReport(gap)}
+                      isGenerating={gapReportLoading}
+                      severity="critical"
+                      onMouseEnter={() => {
+                        const ids = new Set(gap.bridge_papers.map((bp) => bp.paper_id));
+                        setHighlightedPaperIds(ids);
+                        setHighlightedClusterPair([gap.cluster_a.id, gap.cluster_b.id]);
+                        setHoveredGapEdges(gap.potential_edges);
+                      }}
+                      onMouseLeave={() => {
+                        clearHighlightedPaperIds();
+                        setHighlightedClusterPair(null);
+                        setHoveredGapEdges([]);
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+            {notable.length > 0 && (
+              <div>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <span className="text-[9px] font-mono font-bold text-[#999999]/60 uppercase tracking-wider">Notable</span>
+                  <span className="text-[8px] font-mono text-[#999999]/30">{notable.length}</span>
+                </div>
+                <div className="space-y-2">
+                  {notable.map((gap) => (
+                    <GapCard
+                      key={gap.gap_id}
+                      gap={gap}
+                      graphData={graphData!}
+                      selectPaper={selectPaper}
+                      setPanelSelectionId={setPanelSelectionId}
+                      onGenerateReport={() => handleGenerateReport(gap)}
+                      isGenerating={gapReportLoading}
+                      severity="notable"
+                      onMouseEnter={() => {
+                        const ids = new Set(gap.bridge_papers.map((bp) => bp.paper_id));
+                        setHighlightedPaperIds(ids);
+                        setHighlightedClusterPair([gap.cluster_a.id, gap.cluster_b.id]);
+                        setHoveredGapEdges(gap.potential_edges);
+                      }}
+                      onMouseLeave={() => {
+                        clearHighlightedPaperIds();
+                        setHighlightedClusterPair(null);
+                        setHoveredGapEdges([]);
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+            {minor.length > 0 && (
+              <div>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <span className="text-[9px] font-mono font-bold text-[#999999]/30 uppercase tracking-wider">Minor</span>
+                  <span className="text-[8px] font-mono text-[#999999]/20">{minor.length}</span>
+                </div>
+                <div className="space-y-2">
+                  {minor.map((gap) => (
+                    <GapCard
+                      key={gap.gap_id}
+                      gap={gap}
+                      graphData={graphData!}
+                      selectPaper={selectPaper}
+                      setPanelSelectionId={setPanelSelectionId}
+                      onGenerateReport={() => handleGenerateReport(gap)}
+                      isGenerating={gapReportLoading}
+                      severity="minor"
+                      onMouseEnter={() => {
+                        const ids = new Set(gap.bridge_papers.map((bp) => bp.paper_id));
+                        setHighlightedPaperIds(ids);
+                        setHighlightedClusterPair([gap.cluster_a.id, gap.cluster_b.id]);
+                        setHoveredGapEdges(gap.potential_edges);
+                      }}
+                      onMouseLeave={() => {
+                        clearHighlightedPaperIds();
+                        setHighlightedClusterPair(null);
+                        setHoveredGapEdges([]);
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Frontier papers section */}
       {frontierPapers.length > 0 && (
@@ -189,11 +321,12 @@ interface GapCardProps {
   setPanelSelectionId: (id: string | null) => void;
   onGenerateReport: () => void;
   isGenerating: boolean;
+  severity: 'critical' | 'notable' | 'minor';
   onMouseEnter: () => void;
   onMouseLeave: () => void;
 }
 
-function GapCard({ gap, graphData, selectPaper, setPanelSelectionId, onGenerateReport, isGenerating, onMouseEnter, onMouseLeave }: GapCardProps) {
+function GapCard({ gap, graphData, selectPaper, setPanelSelectionId, onGenerateReport, isGenerating, severity, onMouseEnter, onMouseLeave }: GapCardProps) {
   const strengthPct = Math.round(gap.gap_strength * 100);
 
   const strengthColor =
@@ -207,7 +340,13 @@ function GapCard({ gap, graphData, selectPaper, setPanelSelectionId, onGenerateR
     <div
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      className="hud-panel-clean rounded-lg hover:border-[rgba(212,175,55,0.15)] transition-all cursor-default"
+      className={`rounded-lg transition-all cursor-default ${
+        severity === 'critical'
+          ? 'hud-panel-clean border-l-2 border-l-[#D4AF37] hover:border-[rgba(212,175,55,0.2)]'
+          : severity === 'notable'
+          ? 'hud-panel-clean border-l-2 border-l-[#999999]/30 hover:border-[rgba(153,153,153,0.15)]'
+          : 'hud-panel-clean hover:border-[rgba(255,255,255,0.06)]'
+      }`}
     >
       <div className="p-3">
         {/* Cluster pair */}
@@ -246,6 +385,26 @@ function GapCard({ gap, graphData, selectPaper, setPanelSelectionId, onGenerateR
             />
           </div>
         </div>
+
+        {/* Actionability badge */}
+        {gap.actionability && (
+          <div className="mb-2">
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[8px] font-mono font-bold uppercase tracking-wider ${
+              gap.actionability.recommendation === 'high_opportunity'
+                ? 'bg-[rgba(46,204,113,0.1)] text-[#2ECC71] border border-[rgba(46,204,113,0.2)]'
+                : gap.actionability.recommendation === 'needs_collaboration'
+                ? 'bg-[rgba(230,126,34,0.1)] text-[#E67E22] border border-[rgba(230,126,34,0.2)]'
+                : gap.actionability.recommendation === 'terminology_barrier'
+                ? 'bg-[rgba(231,76,60,0.1)] text-[#E74C3C] border border-[rgba(231,76,60,0.2)]'
+                : 'bg-[rgba(149,165,166,0.1)] text-[#95A5A6] border border-[rgba(149,165,166,0.2)]'
+            }`}>
+              {gap.actionability.recommendation === 'high_opportunity' ? 'HIGH OPPORTUNITY' :
+               gap.actionability.recommendation === 'needs_collaboration' ? 'NEEDS COLLABORATION' :
+               gap.actionability.recommendation === 'terminology_barrier' ? 'TERMINOLOGY BARRIER' :
+               'INFRASTRUCTURE GAP'}
+            </span>
+          </div>
+        )}
 
         {/* Score breakdown mini bars */}
         {gap.gap_score_breakdown && (
@@ -306,9 +465,20 @@ function GapCard({ gap, graphData, selectPaper, setPanelSelectionId, onGenerateR
           </div>
         )}
 
-        {/* Research Questions */}
+        {/* First Research Question - shown directly */}
         {gap.research_questions.length > 0 && (
-          <ResearchQuestions questions={gap.research_questions} />
+          <div className="mt-1.5">
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className="hud-label">Research Questions</span>
+              <span className="text-[9px] font-mono text-[#999999]/25">{gap.research_questions.length}</span>
+            </div>
+            <div className="text-[10px] font-mono text-[#999999]/60 leading-snug pl-2 border-l border-[rgba(212,175,55,0.15)]">
+              {typeof gap.research_questions[0] === 'string' ? gap.research_questions[0] : gap.research_questions[0].question}
+            </div>
+            {gap.research_questions.length > 1 && (
+              <ResearchQuestions questions={gap.research_questions.slice(1)} />
+            )}
+          </div>
         )}
 
         {/* Generate Report button */}
@@ -347,6 +517,9 @@ function ScoreBreakdown({ breakdown }: { breakdown: GapScoreBreakdown }) {
     { key: 'intent', label: 'INT' },
     { key: 'directional', label: 'DIR' },
     { key: 'structural_holes', label: 'SHL' },
+    { key: 'influence', label: 'INF' },
+    { key: 'author_silo', label: 'AUT' },
+    { key: 'venue_diversity', label: 'VEN' },
   ];
 
   return (
@@ -385,8 +558,7 @@ function ResearchQuestions({ questions }: { questions: (string | { question: str
         onClick={() => setExpanded(!expanded)}
         className="flex items-center gap-1.5 w-full text-left"
       >
-        <span className="hud-label">Research Questions</span>
-        <span className="text-[9px] font-mono text-[#999999]/25">{questions.length}</span>
+        <span className="text-[9px] font-mono text-[#999999]/30">+{questions.length} more</span>
         <div className="flex-1" />
         <ChevronDown
           className={`w-3 h-3 text-[#999999]/30 transition-transform ${expanded ? 'rotate-180' : ''}`}

@@ -83,6 +83,12 @@ class SeedClusterInfo(BaseModel):
     centroid: List[float] = [0.0, 0.0, 0.0]   # PageRank-weighted centroid [x, y, z]
 
 
+class SeedGapActionability(BaseModel):
+    score: float
+    breakdown: Dict[str, float] = {}
+    recommendation: str = "high_opportunity"
+
+
 class SeedGapInfo(BaseModel):
     gap_id: str
     cluster_a: Dict[str, Any]
@@ -97,6 +103,7 @@ class SeedGapInfo(BaseModel):
     temporal_context: Optional[Dict[str, Any]] = None
     intent_summary: Optional[Dict[str, Any]] = None
     evidence_detail: Optional[Dict[str, Any]] = None
+    actionability: Optional[SeedGapActionability] = None
 
 
 class SeedGraphResponse(BaseModel):
@@ -414,7 +421,13 @@ async def _seed_explore_pipeline(request: SeedExploreRequest, start_time: float)
                 hull_points=hull_verts,
             ))
 
-        # Task 5: Assign papers without embeddings to nearest cluster centroid (with jitter)
+        # Task 5: Assign papers without embeddings to best cluster (citation-based) with Gaussian scatter
+        # Build citation adjacency for no-embedding papers
+        rng = np.random.default_rng(42)
+        cluster_node_ids: Dict[int, Set[str]] = {}
+        for c_info in clusters_info:
+            cluster_node_ids[c_info.id] = {n.id for n in nodes if n.cluster_id == c_info.id}
+
         for i, paper in enumerate(papers_without_emb):
             is_seed = paper.paper_id == seed_paper.paper_id
             node = _s2_paper_to_node(paper, paper.paper_id, is_seed=is_seed)
@@ -426,13 +439,34 @@ async def _seed_explore_pipeline(request: SeedExploreRequest, start_time: float)
             else:
                 node.direction = "citation"
             if clusters_info:
-                nearest = clusters_info[i % len(clusters_info)]
-                cx, cy, cz = nearest.centroid
-                node.x = cx + (i % 3 - 1) * 2.0
-                node.y = cy + (i // 3) * 2.0
-                node.z = cz
-                node.cluster_id = nearest.id
-                node.cluster_label = nearest.label
+                # Citation-based cluster assignment: count citation links to each cluster
+                best_cluster = clusters_info[0]
+                best_score = -1
+                paper_citations = set()
+                for citing, cited in citation_pairs:
+                    if citing == paper.paper_id:
+                        paper_citations.add(cited)
+                    if cited == paper.paper_id:
+                        paper_citations.add(citing)
+
+                for c_info in clusters_info:
+                    score = len(paper_citations & cluster_node_ids.get(c_info.id, set()))
+                    if score > best_score:
+                        best_score = score
+                        best_cluster = c_info
+
+                # If no citation links found, fall back to largest cluster
+                if best_score <= 0:
+                    best_cluster = max(clusters_info, key=lambda c: c.paper_count)
+
+                cx, cy, cz = best_cluster.centroid
+                # Gaussian scatter based on cluster spread (approximated from centroid)
+                cluster_spread = 3.0  # base spread in UMAP coordinate space
+                node.x = cx + float(rng.normal(0, cluster_spread))
+                node.y = cy + float(rng.normal(0, cluster_spread))
+                node.z = cz + float(rng.normal(0, cluster_spread * 0.5))
+                node.cluster_id = best_cluster.id
+                node.cluster_label = best_cluster.label
             else:
                 node.x = float(i) * 0.5
                 node.y = 10.0
@@ -474,56 +508,9 @@ async def _seed_explore_pipeline(request: SeedExploreRequest, start_time: float)
 
         logger.info(f"[timing] intents: {time.time() - start_time:.2f}s")
 
-        # 7. Gap detection with enriched intent data and citation_pairs
-        gaps_info: List[SeedGapInfo] = []
-        if len(clusters_info) >= 2 and len(nodes) >= 5:
-            try:
-                gap_detector = GapDetector()
-                gap_papers = [{
-                    "id": n.id,
-                    "title": n.title,
-                    "cluster_id": n.cluster_id,
-                    "year": n.year,
-                    "tldr": getattr(papers_map.get(n.id), 'tldr', None) if papers_map.get(n.id) else None,
-                    "citation_count": n.citation_count,
-                    "embedding": next(
-                        (p.embedding for p in papers_with_emb if p.paper_id == n.id),
-                        None
-                    ),
-                } for n in nodes]
-                gap_clusters = [{"id": c.id, "label": c.label, "paper_count": c.paper_count} for c in clusters_info]
-                gap_edges = [{"source": e.source, "target": e.target, "type": e.type, "weight": e.weight, "intent": e.intent} for e in edges]
-
-                gap_result = await asyncio.to_thread(
-                    gap_detector.detect_gaps,
-                    gap_papers, gap_clusters, gap_edges,
-                    citation_pairs, gap_edges,
-                )
-
-                for gap in gap_result.gaps[:10]:  # Limit to top 10 gaps
-                    gaps_info.append(SeedGapInfo(
-                        gap_id=gap.gap_id,
-                        cluster_a=gap.cluster_a,
-                        cluster_b=gap.cluster_b,
-                        gap_strength=gap.gap_strength,
-                        bridge_papers=gap.bridge_papers,
-                        potential_edges=gap.potential_edges,
-                        research_questions=gap.research_questions,
-                        gap_score_breakdown=gap.gap_score_breakdown if gap.gap_score_breakdown else None,
-                        key_papers_a=gap.key_papers_a if gap.key_papers_a else None,
-                        key_papers_b=gap.key_papers_b if gap.key_papers_b else None,
-                        temporal_context=gap.temporal_context if gap.temporal_context else None,
-                        intent_summary=gap.intent_summary if gap.intent_summary else None,
-                        evidence_detail=gap.evidence_detail if gap.evidence_detail else None,
-                    ))
-
-                logger.info(f"Gap detection: {len(gaps_info)} gaps found")
-            except Exception as e:
-                logger.warning(f"Gap detection failed (non-fatal): {e}")
-
-        logger.info(f"[timing] intents_and_gaps: {time.time() - start_time:.2f}s")
-
-        # 8. SNA metrics (PageRank, Betweenness) — non-fatal
+        # 7. SNA metrics (PageRank, Betweenness) — computed BEFORE gap detection
+        #    so node_metrics can be passed to gap_detector for influence scoring
+        sna_metrics: Dict[str, Dict[str, float]] = {}
         try:
             sna_papers = [{"id": n.id} for n in nodes]
             sna_edges = [{"source": e.source, "target": e.target, "type": e.type} for e in edges]
@@ -538,6 +525,70 @@ async def _seed_explore_pipeline(request: SeedExploreRequest, start_time: float)
             logger.info(f"[timing] sna_metrics: {time.time() - start_time:.2f}s")
         except Exception as e:
             logger.warning(f"SNA metrics failed (non-fatal): {e}")
+
+        # 8. Gap detection with enriched intent data, citation_pairs, and SNA metrics
+        gaps_info: List[SeedGapInfo] = []
+        if len(clusters_info) >= 2 and len(nodes) >= 5:
+            try:
+                # Build embedding lookup for fast access
+                emb_lookup = {p.paper_id: p.embedding for p in papers_with_emb}
+
+                gap_detector = GapDetector()
+                gap_papers = [{
+                    "id": n.id,
+                    "title": n.title,
+                    "cluster_id": n.cluster_id,
+                    "year": n.year,
+                    "tldr": getattr(papers_map.get(n.id), 'tldr', None) if papers_map.get(n.id) else None,
+                    "citation_count": n.citation_count,
+                    "embedding": emb_lookup.get(n.id),
+                    "authors": n.authors,
+                    "venue": n.venue,
+                    "is_open_access": n.is_open_access,
+                    "abstract": n.abstract,
+                } for n in nodes]
+                gap_clusters = [{"id": c.id, "label": c.label, "paper_count": c.paper_count} for c in clusters_info]
+                gap_edges = [{"source": e.source, "target": e.target, "type": e.type, "weight": e.weight, "intent": e.intent} for e in edges]
+
+                gap_result = await asyncio.to_thread(
+                    gap_detector.detect_gaps,
+                    gap_papers, gap_clusters, gap_edges,
+                    citation_pairs, gap_edges,
+                    sna_metrics if sna_metrics else None,
+                )
+
+                for gap in gap_result.gaps[:10]:  # Limit to top 10 gaps
+                    # Build actionability response model
+                    actionability_info = None
+                    if gap.actionability:
+                        actionability_info = SeedGapActionability(
+                            score=gap.actionability.score,
+                            breakdown=gap.actionability.breakdown,
+                            recommendation=gap.actionability.recommendation,
+                        )
+
+                    gaps_info.append(SeedGapInfo(
+                        gap_id=gap.gap_id,
+                        cluster_a=gap.cluster_a,
+                        cluster_b=gap.cluster_b,
+                        gap_strength=gap.gap_strength,
+                        bridge_papers=gap.bridge_papers,
+                        potential_edges=gap.potential_edges,
+                        research_questions=gap.research_questions,
+                        gap_score_breakdown=gap.gap_score_breakdown if gap.gap_score_breakdown else None,
+                        key_papers_a=gap.key_papers_a if gap.key_papers_a else None,
+                        key_papers_b=gap.key_papers_b if gap.key_papers_b else None,
+                        temporal_context=gap.temporal_context if gap.temporal_context else None,
+                        intent_summary=gap.intent_summary if gap.intent_summary else None,
+                        evidence_detail=gap.evidence_detail if gap.evidence_detail else None,
+                        actionability=actionability_info,
+                    ))
+
+                logger.info(f"Gap detection: {len(gaps_info)} gaps found")
+            except Exception as e:
+                logger.warning(f"Gap detection failed (non-fatal): {e}")
+
+        logger.info(f"[timing] intents_and_gaps: {time.time() - start_time:.2f}s")
 
         # PageRank-weighted centroid — computed after SNA so n.pagerank is set
         try:

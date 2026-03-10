@@ -59,7 +59,7 @@ class EmbeddingReducer:
         self,
         embeddings: np.ndarray,
         n_neighbors: int = 10,
-        min_dist: float = 0.3,
+        min_dist: float = 0.15,
         metric: str = "cosine",
         random_state: int = 42,
         years: Optional[List[Optional[int]]] = None,
@@ -97,7 +97,7 @@ class EmbeddingReducer:
 
         # Adjust n_neighbors for small datasets
         effective_neighbors = min(
-            min(15, max(10, input_data.shape[0] // 3)),  # adaptive: global structure
+            min(20, max(10, input_data.shape[0] // 3)),  # adaptive: global structure
             input_data.shape[0] - 1
         )
 
@@ -106,6 +106,7 @@ class EmbeddingReducer:
             n_components=3,
             n_neighbors=effective_neighbors,
             min_dist=min_dist,
+            spread=1.5,
             metric=metric,
             random_state=random_state,
         )
@@ -212,20 +213,26 @@ class EmbeddingReducer:
         coords_3d: np.ndarray,
         years: List[Optional[int]],
         z_range: float = 20.0,
+        temporal_weight: float = 0.5,
     ) -> np.ndarray:
         """
-        Override Z axis with normalized publication year.
+        Blend UMAP Z with normalized publication year (hybrid approach).
 
-        Maps years to [-z_range/2, +z_range/2] range.
-        Papers with no year get Z=0 (center of temporal axis).
+        Instead of fully overriding UMAP Z, blends temporal and semantic Z
+        so that papers in the same year still have Z variation from UMAP.
+
+        Maps years to [-z_range/2, +z_range/2] range, normalizes UMAP Z
+        to the same range, then blends:
+          z_out = temporal_weight * temporal_z + (1 - temporal_weight) * umap_z_normalized
 
         Args:
             coords_3d: (N, 3) UMAP coordinates
             years: Publication years (None for unknown)
             z_range: Total Z-axis range (default 20 units)
+            temporal_weight: Weight for temporal component (0=pure UMAP, 1=pure temporal)
 
         Returns:
-            (N, 3) coordinates with Z replaced by temporal depth
+            (N, 3) coordinates with Z blended between temporal and semantic
         """
         valid_years = [y for y in years if y is not None and not math.isnan(float(y or 0))]
         if not valid_years:
@@ -244,21 +251,34 @@ class EmbeddingReducer:
             return coords_3d
 
         coords_out = coords_3d.copy()
+
+        # Normalize original UMAP Z values to [-z_range/2, +z_range/2]
+        umap_z = coords_3d[:, 2].copy()
+        umap_z_min = umap_z.min()
+        umap_z_max = umap_z.max()
+        umap_z_span = umap_z_max - umap_z_min
+        if umap_z_span > 1e-8:
+            umap_z_normalized = ((umap_z - umap_z_min) / umap_z_span) * z_range - (z_range / 2)
+        else:
+            umap_z_normalized = np.zeros_like(umap_z)
+
         for i, year in enumerate(years):
             if year is not None:
                 try:
                     y_float = float(year)
                     if not math.isnan(y_float):
-                        coords_out[i, 2] = ((y_float - min_year) / span) * z_range - (z_range / 2)
+                        temporal_z = ((y_float - min_year) / span) * z_range - (z_range / 2)
+                        coords_out[i, 2] = temporal_weight * temporal_z + (1 - temporal_weight) * umap_z_normalized[i]
                     else:
-                        coords_out[i, 2] = 0.0
+                        coords_out[i, 2] = (1 - temporal_weight) * umap_z_normalized[i]
                 except (ValueError, TypeError):
-                    coords_out[i, 2] = 0.0
+                    coords_out[i, 2] = (1 - temporal_weight) * umap_z_normalized[i]
             else:
-                coords_out[i, 2] = 0.0
+                coords_out[i, 2] = (1 - temporal_weight) * umap_z_normalized[i]
 
         logger.info(
-            f"Applied temporal Z override: years {min_year}–{max_year} "
-            f"mapped to Z [{-z_range/2:.1f}, {z_range/2:.1f}]"
+            f"Applied hybrid temporal Z: years {min_year}–{max_year} "
+            f"mapped to Z [{-z_range/2:.1f}, {z_range/2:.1f}], "
+            f"temporal_weight={temporal_weight}"
         )
         return coords_out

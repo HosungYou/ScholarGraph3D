@@ -100,6 +100,7 @@ function SeedExploreContent() {
     setCitationIntents,
     activeTab,
     setActiveTab,
+    gaps,
     setGaps,
     setFrontierIds,
     activeGapReport,
@@ -116,6 +117,8 @@ function SeedExploreContent() {
   const [isExpanding, setIsExpanding] = useState(false);
   const [expandSuccess, setExpandSuccess] = useState<string | null>(null);
   const [savedIndicator, setSavedIndicator] = useState(false);
+  const [gapToastVisible, setGapToastVisible] = useState(false);
+  const [gapToastDismissed, setGapToastDismissed] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoSaveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedGraphIdRef = useRef<string | null>(null);
@@ -307,6 +310,14 @@ function SeedExploreContent() {
       window.removeEventListener('focusCluster', handleFocusCluster);
     };
   }, []);
+
+  // Gap Discovery Toast
+  useEffect(() => {
+    if (gaps.length > 0 && graphData && !gapToastDismissed && !isLoading) {
+      const timer = setTimeout(() => setGapToastVisible(true), 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [gaps.length, graphData, gapToastDismissed, isLoading]);
 
   const handleExpandPaper = useCallback(
     async (paper: Paper) => {
@@ -588,13 +599,18 @@ function SeedExploreContent() {
                     localStorage.setItem('seed-left-collapsed', 'false');
                   }}
                   title={tab.label}
-                  className={`w-9 h-9 flex items-center justify-center rounded-lg transition-all ${
+                  className={`w-9 h-9 flex items-center justify-center rounded-lg transition-all relative ${
                     activeTab === tab.id
                       ? 'bg-[#D4AF37]/10 text-[#D4AF37] shadow-[0_0_8px_rgba(212,175,55,0.15)]'
                       : 'text-[#999999]/40 hover:text-[#999999] hover:bg-[#111111]/50'
                   }`}
                 >
                   <tab.icon className="w-4 h-4" />
+                  {tab.id === 'gaps' && gaps.length > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 flex items-center justify-center text-[7px] font-mono font-bold rounded-full bg-[#D4AF37] text-black">
+                      {gaps.length}
+                    </span>
+                  )}
                 </button>
               ))}
               <div className="flex-1" />
@@ -624,6 +640,11 @@ function SeedExploreContent() {
                     >
                       <tab.icon className="w-3 h-3" />
                       {tab.label}
+                      {tab.id === 'gaps' && gaps.length > 0 && (
+                        <span className="ml-1 px-1.5 py-0.5 text-[8px] font-mono font-bold rounded-full bg-[rgba(212,175,55,0.15)] text-[#D4AF37] border border-[rgba(212,175,55,0.3)]">
+                          {gaps.length}
+                        </span>
+                      )}
                     </button>
                   ))}
                   <div className="flex-1" />
@@ -787,6 +808,48 @@ function SeedExploreContent() {
           TOASTS
           ═══════════════════════════════════════════ */}
       <AnimatePresence>
+        {gapToastVisible && !gapToastDismissed && gaps.length > 0 && (
+          <motion.div
+            key="toast-gap-discovery"
+            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-3 bg-[rgba(20,18,10,0.95)] border border-[rgba(212,175,55,0.3)] rounded-xl shadow-[0_0_30px_rgba(212,175,55,0.1)] backdrop-blur-xl max-w-md"
+          >
+            <ScanSearch className="w-5 h-5 text-[#D4AF37] flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px] font-mono text-[#D4AF37] font-medium">
+                {gaps.length} research gap{gaps.length !== 1 ? 's' : ''} discovered
+              </p>
+              <p className="text-[10px] font-mono text-[#999999]/60 mt-0.5">
+                Explore the empty spaces between clusters
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                setActiveTab('gaps');
+                if (leftCollapsed) {
+                  setLeftCollapsed(false);
+                  localStorage.setItem('seed-left-collapsed', 'false');
+                }
+                setGapToastDismissed(true);
+                setGapToastVisible(false);
+              }}
+              className="px-3 py-1.5 text-[10px] font-mono uppercase tracking-wider text-[#D4AF37] border border-[rgba(212,175,55,0.3)] rounded-lg hover:bg-[rgba(212,175,55,0.1)] transition-colors flex-shrink-0"
+            >
+              View Gaps
+            </button>
+            <button
+              onClick={() => {
+                setGapToastDismissed(true);
+                setGapToastVisible(false);
+              }}
+              className="text-[#999999]/30 hover:text-[#999999] transition-colors flex-shrink-0"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </motion.div>
+        )}
         {expandError && (
           <motion.div
             key="toast-error"

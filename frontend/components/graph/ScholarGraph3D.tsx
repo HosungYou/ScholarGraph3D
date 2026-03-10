@@ -5,10 +5,12 @@ import {
   useRef,
   useMemo,
   useEffect,
+  useState,
   forwardRef,
   useImperativeHandle,
+  lazy,
+  Suspense,
 } from 'react';
-import dynamic from 'next/dynamic';
 import * as THREE from 'three';
 import { useGraphStore } from '@/hooks/useGraphStore';
 import type { Paper, CitationIntent } from '@/types';
@@ -16,23 +18,27 @@ import { createStarNode } from './cosmic/starNodeRenderer';
 import { createNebulaCluster } from './cosmic/nebulaClusterRenderer';
 import CosmicAnimationManager from './cosmic/CosmicAnimationManager';
 import { getStarColors } from './cosmic/cosmicConstants';
+import { getGlowTexture } from './cosmic/cosmicTextures';
+import { createGapVoid } from './cosmic/gapVoidRenderer';
 
 // Three.js dispose safety is handled globally via lib/three-safety.ts
 // (imported in providers.tsx before any Three.js component loads)
 
-const ForceGraph3D = dynamic(() => import('react-force-graph-3d'), {
-  ssr: false,
-  loading: () => (
-    <div className="flex items-center justify-center h-full bg-background">
-      <div className="text-center">
-        <div className="w-12 h-12 border-2 border-accent border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-        <p className="text-xs text-text-secondary">
-          Loading 3D visualization...
-        </p>
-      </div>
+// Use React.lazy instead of next/dynamic to properly forward refs
+// next/dynamic's LoadableComponent uses useImperativeHandle({retry}) which
+// swallows the ref and never forwards it to the actual ForceGraph3D component
+const ForceGraph3D = lazy(() => import('react-force-graph-3d'));
+
+const ForceGraph3DLoading = () => (
+  <div className="flex items-center justify-center h-full bg-background">
+    <div className="text-center">
+      <div className="w-12 h-12 border-2 border-accent border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+      <p className="text-xs text-text-secondary">
+        Loading 3D visualization...
+      </p>
     </div>
-  ),
-});
+  </div>
+);
 
 const INTENT_COLOR_MAP: Record<string, string> = {
   methodology: '#9B59B6',
@@ -118,6 +124,25 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const hoveredNodeRef = useRef<string | null>(null);
 
+  // Client-only guard: React.lazy doesn't have ssr:false like next/dynamic
+  const [isClient, setIsClient] = useState(false);
+  useEffect(() => { setIsClient(true); }, []);
+
+  // Track when ForceGraph3D mounts so dependent useEffects re-fire.
+  // React.lazy loads the module async, so fgRef.current is null during
+  // initial useEffect runs. This polls briefly after isClient to detect mount.
+  const [fgMounted, setFgMounted] = useState(false);
+  useEffect(() => {
+    if (!isClient || fgMounted) return;
+    const timer = setInterval(() => {
+      if (fgRef.current) {
+        setFgMounted(true);
+        clearInterval(timer);
+      }
+    }, 100);
+    return () => clearInterval(timer);
+  }, [isClient, fgMounted]);
+
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectedPaperIdRef = useRef<string | null>(null);
   const justClickedNodeRef = useRef(false);
@@ -172,10 +197,10 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
   useEffect(() => {
     if (!graphData) return;
     const CS = 15; // coordinate scale for X/Y: UMAP ~15 units → ~150 units
+    const ZS = 10; // Z-axis scale: temporal [-10,+10] → [-100,+100] for 3D volume
     const map = new Map<string, { x: number; y: number; z: number }>();
     graphData.nodes.forEach((n) => {
-      // Z is already in [-10, 10] (temporal override) — do NOT multiply by CS
-      map.set(n.id, { x: n.x * CS, y: n.y * CS, z: n.z });
+      map.set(n.id, { x: n.x * CS, y: n.y * CS, z: n.z * ZS });
     });
     umapPositionsRef.current = map;
   }, [graphData]);
@@ -287,6 +312,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         const citationPercentile = citationRankMap.get(paper.id) || 0;
 
         const CS = 15; // coordinate scale for X/Y: UMAP ~15 units → ~150 units
+        const ZS = 10; // Z-axis scale: temporal [-10,+10] → [-100,+100] for 3D volume
         return {
           id: paper.id,
           name: `${authorName} ${paper.year || ''}`,
@@ -297,8 +323,8 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
           citationPercentile,
           x: paper.x * CS,
           y: paper.y * CS,
-          z: paper.z,        // Z is already in [-10, 10] (temporal override) — no CS scaling
-          ...(layoutMode === 'semantic' ? { fx: paper.x * CS, fy: paper.y * CS, fz: paper.z } : {}),
+          z: paper.z * ZS,
+          ...(layoutMode === 'semantic' ? { fx: paper.x * CS, fy: paper.y * CS, fz: paper.z * ZS } : {}),
         };
       });
 
@@ -424,8 +450,8 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
           source: pe.source,
           target: pe.target,
           color: '#D4AF37',
-          width: 1.2,
-          edgeType: 'similarity' as const,
+          width: 2.0,
+          edgeType: 'ghost' as const,
           dashed: true,
           intentLabel: 'potential',
           intentContext: `Potential connection (${(pe.similarity * 100).toFixed(0)}%)`,
@@ -1148,6 +1174,10 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
 
   // Gap arc ref
   const gapArcRef = useRef<THREE.Line | null>(null);
+  // Gap arc glow sprite ref
+  const gapArcGlowRef = useRef<THREE.Sprite | null>(null);
+  // Gap void group ref
+  const gapVoidRef = useRef<THREE.Group | null>(null);
 
   // Timeline labels ref
   const timelineOverlayRef = useRef<THREE.Group | null>(null);
@@ -1178,39 +1208,41 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     scene.add(overlayGroup);
 
     const updateHulls = () => {
-      while (overlayGroup.children.length > 0) {
-        const child = overlayGroup.children[0];
-        // Deregister shader materials from CosmicAnimationManager before disposal
-        // Handle THREE.Group (new nebula) and THREE.Points (legacy) cases
-        if (child instanceof THREE.Group) {
-          child.traverse((obj) => {
-            if (obj instanceof THREE.Points && obj.material instanceof THREE.ShaderMaterial) {
-              CosmicAnimationManager.getInstance().deregisterShaderMaterial(obj.material);
+      // Remove all children from scene immediately, defer dispose to next frame
+      // This prevents the render loop from hitting disposed shaders in the same frame
+      const toDispose = [...overlayGroup.children];
+      toDispose.forEach(child => overlayGroup.remove(child));
+      requestAnimationFrame(() => {
+        toDispose.forEach(child => {
+          if (child instanceof THREE.Group) {
+            child.traverse((obj) => {
+              if (obj instanceof THREE.Points && obj.material instanceof THREE.ShaderMaterial) {
+                CosmicAnimationManager.getInstance().deregisterShaderMaterial(obj.material);
+              }
+              if (obj instanceof THREE.Mesh && obj.material instanceof THREE.ShaderMaterial) {
+                CosmicAnimationManager.getInstance().deregisterShaderMaterial(obj.material);
+              }
+              if ((obj as any).geometry) (obj as any).geometry.dispose();
+              if ((obj as any).material) (obj as any).material.dispose();
+            });
+          } else {
+            if (child instanceof THREE.Points && child.material instanceof THREE.ShaderMaterial) {
+              CosmicAnimationManager.getInstance().deregisterShaderMaterial(child.material);
             }
-            if (obj instanceof THREE.Mesh && obj.material instanceof THREE.ShaderMaterial) {
-              CosmicAnimationManager.getInstance().deregisterShaderMaterial(obj.material);
-            }
-            if ((obj as any).geometry) (obj as any).geometry.dispose();
-            if ((obj as any).material) (obj as any).material.dispose();
-          });
-        } else {
-          if (child instanceof THREE.Points && child.material instanceof THREE.ShaderMaterial) {
-            CosmicAnimationManager.getInstance().deregisterShaderMaterial(child.material);
+            if ((child as any).geometry) (child as any).geometry.dispose();
+            if ((child as any).material) (child as any).material.dispose();
           }
-          if ((child as any).geometry) (child as any).geometry.dispose();
-          if ((child as any).material) (child as any).material.dispose();
-        }
-        overlayGroup.remove(child);
-      }
+        });
+      });
 
-      const currentData = fgRef.current?.graphData();
-      if (!currentData?.nodes) return;
+      // Use forceGraphData directly — d3-force mutates node positions in place
+      if (!forceGraphData?.nodes?.length) return;
 
       const nodePositions = new Map<
         string,
         { x: number; y: number; z: number }
       >();
-      (currentData.nodes as ForceGraphNode[]).forEach((n) => {
+      (forceGraphData.nodes as ForceGraphNode[]).forEach((n) => {
         if (n.x !== undefined && n.y !== undefined && n.z !== undefined) {
           nodePositions.set(n.id, { x: n.x, y: n.y, z: n.z });
         }
@@ -1227,8 +1259,11 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
           if (positions.length < 2) return;
 
           // Use backend PageRank-weighted centroid when available; fallback to arithmetic mean
+          // Backend centroids are in raw UMAP space — scale to display coordinates
+          const CS_NEB = 15;
+          const ZS_NEB = 10;
           const centroid = cluster.centroid
-            ? { x: cluster.centroid[0], y: cluster.centroid[1], z: cluster.centroid[2] }
+            ? { x: cluster.centroid[0] * CS_NEB, y: cluster.centroid[1] * CS_NEB, z: cluster.centroid[2] * ZS_NEB }
             : (() => {
                 const avg = { x: 0, y: 0, z: 0 };
                 positions.forEach((p) => { avg.x += p.x; avg.y += p.y; avg.z += p.z; });
@@ -1309,7 +1344,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         clusterOverlayRef.current = null;
       }
     };
-  }, [showClusterHulls, graphData, showCosmicTheme, hiddenClusterIds]);
+  }, [showClusterHulls, graphData, showCosmicTheme, hiddenClusterIds, fgMounted]);
 
   // Gap overlay useEffect
   useEffect(() => {
@@ -1332,18 +1367,21 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     scene.add(overlayGroup);
 
     const updateGapOverlay = () => {
-      while (overlayGroup.children.length > 0) {
-        const child = overlayGroup.children[0] as any;
-        overlayGroup.remove(child);
-        child.geometry?.dispose();
-        child.material?.dispose();
-      }
+      // Remove all from scene immediately, defer dispose to next frame
+      const toDispose = [...overlayGroup.children];
+      toDispose.forEach(child => overlayGroup.remove(child));
+      requestAnimationFrame(() => {
+        toDispose.forEach(child => {
+          (child as any).geometry?.dispose();
+          (child as any).material?.dispose();
+        });
+      });
 
-      const currentData = fgRef.current?.graphData();
-      if (!currentData?.nodes) return;
+      // Use forceGraphData directly — d3-force mutates node positions in place
+      if (!forceGraphData?.nodes?.length) return;
 
       const nodePositions = new Map<string, THREE.Vector3>();
-      (currentData.nodes as ForceGraphNode[]).forEach((n) => {
+      (forceGraphData.nodes as ForceGraphNode[]).forEach((n) => {
         if (n.x !== undefined) nodePositions.set(n.id, new THREE.Vector3(n.x, n.y, n.z));
       });
 
@@ -1486,12 +1524,11 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         gapOverlayRef.current = null;
       }
     };
-  }, [showGapOverlay, graphData]);
+  }, [showGapOverlay, graphData, fgMounted]);
 
   // Gap Arc: QuadraticBezierCurve3 between highlighted cluster centroids
   useEffect(() => {
     if (!fgRef.current) return;
-
     let scene: THREE.Scene;
     try {
       scene = fgRef.current.scene();
@@ -1500,12 +1537,45 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       return;
     }
 
-    // Remove existing arc
+    const manager = CosmicAnimationManager.getInstance();
+
+    // Remove existing arc — remove from scene immediately, defer dispose
     if (gapArcRef.current) {
       scene.getObjectByName('gap-arc')?.removeFromParent();
-      gapArcRef.current.geometry.dispose();
-      (gapArcRef.current.material as THREE.Material).dispose();
+      const arcMat = gapArcRef.current.material as THREE.ShaderMaterial;
+      const arcGeo = gapArcRef.current.geometry;
       gapArcRef.current = null;
+      requestAnimationFrame(() => {
+        manager.deregisterShaderMaterial(arcMat);
+        arcGeo.dispose();
+        arcMat.dispose();
+      });
+    }
+
+    // Remove existing glow — remove from scene immediately, defer dispose
+    if (gapArcGlowRef.current) {
+      scene.remove(gapArcGlowRef.current);
+      const glowMat = gapArcGlowRef.current.material;
+      gapArcGlowRef.current = null;
+      requestAnimationFrame(() => glowMat.dispose());
+    }
+
+    // Remove existing void — remove from scene immediately, defer dispose
+    if (gapVoidRef.current) {
+      scene.remove(gapVoidRef.current);
+      const voidGroup = gapVoidRef.current;
+      gapVoidRef.current = null;
+      requestAnimationFrame(() => {
+        voidGroup.traverse((child) => {
+          if ((child as any).geometry) (child as any).geometry.dispose();
+          if ((child as any).material) {
+            if (child instanceof THREE.Points && child.material instanceof THREE.ShaderMaterial) {
+              manager.deregisterShaderMaterial(child.material);
+            }
+            (child as any).material.dispose();
+          }
+        });
+      });
     }
 
     if (!highlightedClusterPair || !graphData) return;
@@ -1516,15 +1586,16 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     if (!clusterA?.centroid || !clusterB?.centroid) return;
 
     const CS = 15;
+    const ZS = 10;
     const centA = new THREE.Vector3(
       clusterA.centroid[0] * CS,
       clusterA.centroid[1] * CS,
-      clusterA.centroid[2],
+      clusterA.centroid[2] * ZS,
     );
     const centB = new THREE.Vector3(
       clusterB.centroid[0] * CS,
       clusterB.centroid[1] * CS,
-      clusterB.centroid[2],
+      clusterB.centroid[2] * ZS,
     );
 
     const mid = new THREE.Vector3(
@@ -1536,24 +1607,116 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     const curve = new THREE.QuadraticBezierCurve3(centA, mid, centB);
     const points = curve.getPoints(50);
     const geo = new THREE.BufferGeometry().setFromPoints(points);
-    const mat = new THREE.LineBasicMaterial({
-      color: new THREE.Color('#D4AF37'),
+
+    // Create animated dashed line shader
+    const mat = new THREE.ShaderMaterial({
+      vertexShader: `
+        attribute float lineDistance;
+        varying float vLineDistance;
+        void main() {
+          vLineDistance = lineDistance;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 uColor;
+        uniform float uTime;
+        uniform float uDashSize;
+        uniform float uGapSize;
+        varying float vLineDistance;
+        void main() {
+          float totalSize = uDashSize + uGapSize;
+          float modVal = mod(vLineDistance - uTime * 30.0, totalSize);
+          if (modVal > uDashSize) discard;
+          float pulse = 0.6 + 0.4 * sin(uTime * 3.0);
+          gl_FragColor = vec4(uColor, 0.8 * pulse);
+        }
+      `,
+      uniforms: {
+        uColor: { value: new THREE.Color('#D4AF37') },
+        uTime: { value: 0 },
+        uDashSize: { value: 8.0 },
+        uGapSize: { value: 4.0 },
+      },
       transparent: true,
-      opacity: 0.6,
       depthWrite: false,
     });
+
+    // Compute line distances for dash pattern
+    const positions = geo.attributes.position;
+    const lineDistances = new Float32Array(positions.count);
+    let totalDist = 0;
+    for (let i = 1; i < positions.count; i++) {
+      const dx = positions.getX(i) - positions.getX(i - 1);
+      const dy = positions.getY(i) - positions.getY(i - 1);
+      const dz = positions.getZ(i) - positions.getZ(i - 1);
+      totalDist += Math.sqrt(dx * dx + dy * dy + dz * dz);
+      lineDistances[i] = totalDist;
+    }
+    geo.setAttribute('lineDistance', new THREE.BufferAttribute(lineDistances, 1));
+
+    manager.registerShaderMaterial(mat);
+
     const arcLine = new THREE.Line(geo, mat);
     arcLine.name = 'gap-arc';
     scene.add(arcLine);
     gapArcRef.current = arcLine;
-  }, [highlightedClusterPair, graphData]);
+
+    // Glow sprite at arc midpoint
+    const glowSprite = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: getGlowTexture(),
+        color: new THREE.Color('#D4AF37'),
+        transparent: true,
+        opacity: 0.4,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })
+    );
+    glowSprite.position.copy(mid);
+    glowSprite.scale.setScalar(20);
+    glowSprite.name = 'gap-arc-glow';
+    scene.add(glowSprite);
+    gapArcGlowRef.current = glowSprite;
+
+    // Find gap strength for this pair
+    const gap = graphData.gaps?.find(g =>
+      (g.cluster_a.id === cidA && g.cluster_b.id === cidB) ||
+      (g.cluster_a.id === cidB && g.cluster_b.id === cidA)
+    );
+    const gapStrength = gap?.gap_strength ?? 0.5;
+
+    // Create gap void visualization
+    const voidGroup = createGapVoid({
+      centroidA: centA,
+      centroidB: centB,
+      gapStrength,
+    });
+    scene.add(voidGroup);
+    gapVoidRef.current = voidGroup;
+
+    // Camera fly-to: center between the two cluster centroids
+    if (fgRef.current) {
+      const lookAt = new THREE.Vector3(
+        (centA.x + centB.x) / 2,
+        (centA.y + centB.y) / 2,
+        (centA.z + centB.z) / 2,
+      );
+      const dist = Math.max(centA.distanceTo(centB), 150);
+      fgRef.current.cameraPosition(
+        { x: lookAt.x + dist * 0.3, y: lookAt.y - dist * 0.6, z: lookAt.z + dist * 1.8 },
+        { x: lookAt.x, y: lookAt.y, z: lookAt.z },
+        1000
+      );
+    }
+  }, [highlightedClusterPair, graphData, fgMounted]);
 
   // Timeline mode: fix node Y positions by publication year
   useEffect(() => {
     if (!fgRef.current || !graphData) return;
 
-    const currentData = fgRef.current.graphData();
-    if (!currentData?.nodes) return;
+    // Use forceGraphData directly — d3-force mutates node positions in place
+    if (!forceGraphData?.nodes?.length) return;
 
     if (showTimeline) {
       const years = graphData.nodes.map((p) => p.year).filter((y) => y != null && !isNaN(y));
@@ -1562,7 +1725,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       const maxY = Math.max(...years);
       const span = maxY - minY || 1;
 
-      (currentData.nodes as ForceGraphNode[]).forEach((node) => {
+      (forceGraphData.nodes as ForceGraphNode[]).forEach((node) => {
         const paper = node.paper;
         if (paper?.year) {
           node.fy = ((paper.year - minY) / span) * 300 - 150;
@@ -1570,7 +1733,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       });
     } else {
       // Release Y-axis fixation
-      (currentData.nodes as ForceGraphNode[]).forEach((node) => {
+      (forceGraphData.nodes as ForceGraphNode[]).forEach((node) => {
         node.fy = undefined;
       });
     }
@@ -1754,13 +1917,13 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     resetCamera: () => {
       if (fgRef.current) {
         fgRef.current.cameraPosition(
-          { x: 0, y: 0, z: 500 },
+          { x: 200, y: 150, z: 400 },
           { x: 0, y: 0, z: 0 },
           1000
         );
       }
     },
-    zoomToFit: (duration = 400, padding = 80) => {
+    zoomToFit: (duration = 400, padding = 120) => {
       if (fgRef.current) {
         fgRef.current.zoomToFit(duration, padding);
       }
@@ -1787,11 +1950,11 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         }
       }, 3000);
 
-      const graphData = fgRef.current.graphData();
-      if (!graphData?.nodes) return;
+      // Use forceGraphData directly — d3-force mutates node positions in place
+      if (!forceGraphData?.nodes?.length) return;
 
       // Find parent node position
-      const parentNode = (graphData.nodes as ForceGraphNode[]).find(n => n.id === parentNodeId);
+      const parentNode = (forceGraphData.nodes as ForceGraphNode[]).find(n => n.id === parentNodeId);
       const ox = parentNode?.x ?? 0;
       const oy = parentNode?.y ?? 0;
       const oz = parentNode?.z ?? 0;
@@ -1799,7 +1962,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       // Find new nodes in force graph internal data and set initial fixed positions at parent
       const newNodeSet = new Set(newNodeIds);
       const nodesToAnimate: ForceGraphNode[] = [];
-      (graphData.nodes as ForceGraphNode[]).forEach(node => {
+      (forceGraphData.nodes as ForceGraphNode[]).forEach(node => {
         if (newNodeSet.has(node.id)) {
           node.fx = ox;
           node.fy = oy;
@@ -1857,14 +2020,35 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     },
   }));
 
-  // Zoom to fit when graph data changes
+  // Set angled camera to show 3D depth when graph data is ready
   useEffect(() => {
-    if (fgRef.current && graphData?.nodes?.length) {
-      setTimeout(() => {
-        fgRef.current?.zoomToFit(400, 80);
-      }, 800);
-    }
-  }, [graphData?.nodes?.length]);
+    if (!fgRef.current || !graphData?.nodes?.length || !fgMounted) return;
+
+    const setupCamera = () => {
+      if (!fgRef.current) return;
+      const bbox = fgRef.current.getGraphBbox();
+      if (!bbox?.x) return;
+
+      const cx = (bbox.x[0] + bbox.x[1]) / 2;
+      const cy = (bbox.y[0] + bbox.y[1]) / 2;
+      const cz = (bbox.z[0] + bbox.z[1]) / 2;
+      const spanX = bbox.x[1] - bbox.x[0];
+      const spanY = bbox.y[1] - bbox.y[0];
+      const spanZ = bbox.z[1] - bbox.z[0];
+      const maxSpan = Math.max(spanX, spanY, spanZ);
+
+      // Camera at elevated angle for 3D depth
+      const dist = maxSpan * 1.8;
+      fgRef.current.cameraPosition(
+        { x: cx + dist * 0.15, y: cy - dist * 0.35, z: cz + dist * 0.75 },
+        { x: cx, y: cy, z: cz },
+        800 // smooth transition
+      );
+    };
+
+    // Wait for force simulation to settle positions
+    setTimeout(setupCamera, 1200);
+  }, [graphData?.nodes?.length, fgMounted]);
 
   // Cosmic animation manager lifecycle
   useEffect(() => {
@@ -1874,13 +2058,30 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       // Provide scene reference for selection pulse animation
       if (fgRef.current) {
         const scene = fgRef.current.scene?.();
-        if (scene) manager.setScene(scene);
+        if (scene) {
+          manager.setScene(scene);
+          // Exponential fog for depth perception — far nodes fade into darkness
+          scene.fog = new THREE.FogExp2(0x020208, 0.0006);
+        }
+        // Suppress non-fatal WebGL shader info log errors (gl.getShaderInfoLog can return
+        // null on some drivers when queried during rapid material create/dispose cycles)
+        try {
+          const renderer = fgRef.current.renderer();
+          if (renderer) renderer.debug.checkShaderErrors = false;
+        } catch { /* renderer unavailable */ }
       }
     }
     return () => {
+      // Remove fog when cosmic theme is disabled
+      if (fgRef.current) {
+        try {
+          const scene = fgRef.current.scene?.();
+          if (scene) scene.fog = null;
+        } catch { /* scene unavailable */ }
+      }
       CosmicAnimationManager.reset();
     };
-  }, [showCosmicTheme]);
+  }, [showCosmicTheme, fgMounted]);
 
   // Cleanup
   useEffect(() => {
@@ -1900,8 +2101,40 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
           if (scene) scene.remove(gapArcRef.current);
         } catch {}
         gapArcRef.current?.geometry.dispose();
+        CosmicAnimationManager.getInstance().deregisterShaderMaterial(
+          gapArcRef.current?.material as THREE.ShaderMaterial
+        );
         (gapArcRef.current?.material as THREE.Material | undefined)?.dispose();
         gapArcRef.current = null;
+      }
+
+      // Cleanup gap arc glow
+      if (gapArcGlowRef.current) {
+        try {
+          const scene = fgRef.current?.scene();
+          if (scene) scene.remove(gapArcGlowRef.current);
+        } catch {}
+        gapArcGlowRef.current.material.dispose();
+        gapArcGlowRef.current = null;
+      }
+
+      // Cleanup gap void — remove from scene FIRST, then dispose
+      if (gapVoidRef.current) {
+        try {
+          const scene = fgRef.current?.scene();
+          if (scene) scene.remove(gapVoidRef.current);
+        } catch {}
+        const voidGroup = gapVoidRef.current;
+        gapVoidRef.current = null;
+        voidGroup.traverse((child) => {
+          if ((child as any).geometry) (child as any).geometry.dispose();
+          if ((child as any).material) {
+            if (child instanceof THREE.Points && child.material instanceof THREE.ShaderMaterial) {
+              CosmicAnimationManager.getInstance().deregisterShaderMaterial(child.material);
+            }
+            (child as any).material.dispose();
+          }
+        });
       }
 
       // Clear animation manager (releases refs to shader materials & animated objects)
@@ -1952,6 +2185,8 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
           <span className="text-text-secondary/40 text-[10px]">Newer →</span>
         </div>
       </div>
+      {isClient ? (
+      <Suspense fallback={<ForceGraph3DLoading />}>
       <ForceGraph3D
         ref={fgRef}
         graphData={forceGraphData}
@@ -2038,6 +2273,10 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
           node.fz = undefined;
         }}
       />
+      </Suspense>
+      ) : (
+        <ForceGraph3DLoading />
+      )}
     </div>
   );
 });

@@ -131,6 +131,34 @@ export default function GapReportView() {
         </CollapsibleSection>
       )}
 
+      {/* Terminology Barrier */}
+      {report.raw_metrics && (report as any).evidence_detail?.terminology_barrier?.has_barrier && (
+        <CollapsibleSection title="TERMINOLOGY BARRIER">
+          <div className="text-[10px] font-mono text-[#999999]/60 leading-relaxed pl-1 space-y-2">
+            <p className="text-[#E74C3C]/60">
+              These clusters use different terminology despite thematic similarity.
+            </p>
+            <div>
+              <span className="text-[#999999]/40">Shared terms: </span>
+              <span className="text-[#D4AF37]/60">
+                {(report as any).evidence_detail.terminology_barrier.shared_terms?.join(', ') || 'none'}
+              </span>
+            </div>
+          </div>
+        </CollapsibleSection>
+      )}
+
+      {/* Author Silos */}
+      {report.raw_metrics && (report as any).evidence_detail?.shared_author_count === 0 && (
+        <CollapsibleSection title="AUTHOR SILOS">
+          <div className="text-[10px] font-mono text-[#999999]/60 leading-relaxed pl-1">
+            <p className="text-[#E67E22]/60">
+              No shared authors between these clusters — complete research silos.
+            </p>
+          </div>
+        </CollapsibleSection>
+      )}
+
       {/* Significance */}
       {report.significance_statement && (
         <CollapsibleSection title="SIGNIFICANCE">
@@ -242,6 +270,10 @@ function GapScoreDisplay({ metrics }: { metrics: GapScoreBreakdown }) {
     temporal: 'Year distribution overlap — how much publication timelines differ.',
     intent: 'Citation intent — whether cross-citations are background (shallow) vs methodology (deep).',
     directional: 'Citation asymmetry — whether knowledge flows in one direction only.',
+    structural_holes: 'Brokerage opportunity — how many structural holes exist between clusters.',
+    influence: 'Influence asymmetry — whether high-impact papers are concentrated in one cluster.',
+    author_silo: 'Author isolation — degree of author overlap between clusters.',
+    venue_diversity: 'Venue separation — whether clusters publish in distinct venues.',
   };
 
   const dimensions: { key: keyof GapScoreBreakdown; label: string }[] = [
@@ -251,6 +283,10 @@ function GapScoreDisplay({ metrics }: { metrics: GapScoreBreakdown }) {
     { key: 'temporal', label: 'temporal' },
     { key: 'intent', label: 'intent' },
     { key: 'directional', label: 'directional' },
+    { key: 'structural_holes', label: 'str. holes' },
+    { key: 'influence', label: 'influence' },
+    { key: 'author_silo', label: 'author silo' },
+    { key: 'venue_diversity', label: 'venue div.' },
   ];
 
   return (

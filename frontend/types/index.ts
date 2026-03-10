@@ -123,6 +123,9 @@ export interface GapScoreBreakdown {
   intent: number;
   directional: number;
   structural_holes: number;
+  influence: number;
+  author_silo: number;
+  venue_diversity: number;
   composite: number;
 }
 
@@ -136,6 +139,19 @@ export interface EvidenceDetail {
   background_ratio: number;
   citations_a_to_b: number;
   citations_b_to_a: number;
+  // Author silo details
+  shared_author_count?: number;
+  unique_authors_a?: number;
+  unique_authors_b?: number;
+  // Venue diversity details
+  venues_a?: string[];
+  venues_b?: string[];
+  shared_venues?: string[];
+  // Terminology barrier details
+  shared_terms?: string[];
+  unique_terms_a?: string[];
+  unique_terms_b?: string[];
+  terminology_barrier?: boolean;
 }
 
 export interface GapKeyPaper {
@@ -143,6 +159,18 @@ export interface GapKeyPaper {
   title: string;
   tldr?: string;
   citation_count: number;
+}
+
+export interface GapActionability {
+  score: number;
+  breakdown: {
+    bridge_feasibility: number;
+    open_access_ratio: number;
+    recency: number;
+    method_transferability: number;
+    terminology_similarity: number;
+  };
+  recommendation: 'high_opportunity' | 'needs_collaboration' | 'infrastructure_gap' | 'terminology_barrier';
 }
 
 export interface StructuralGap {
@@ -159,6 +187,7 @@ export interface StructuralGap {
   temporal_context?: { year_range_a: [number, number]; year_range_b: [number, number]; overlap_years: number };
   intent_summary?: { background: number; methodology: number; result: number };
   evidence_detail?: EvidenceDetail;
+  actionability?: GapActionability;
 }
 
 export interface GapAnalysis {
