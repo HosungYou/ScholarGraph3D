@@ -53,7 +53,8 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning("  Supabase Auth: NOT configured (running without auth)")
 
-    # Initialize database connection
+    # Initialize database connection (graceful degradation — core graph features
+    # work without DB; only auth/save/watch require persistence)
     try:
         await init_db()
         logger.info("  Database connected successfully")
@@ -64,11 +65,7 @@ async def lifespan(app: FastAPI):
             logger.warning("  pgvector extension: NOT available")
     except Exception as e:
         logger.error(f"  Database connection failed: {e}")
-        if settings.environment in ("production", "staging"):
-            raise RuntimeError(
-                f"Database connection failed in {settings.environment} environment"
-            ) from e
-        logger.warning("  Running in memory-only mode (development only)")
+        logger.warning("  Running in memory-only mode (graph/gap features still available)")
 
     # Initialize shared S2 client (global rate limiter)
     await init_s2_client(
