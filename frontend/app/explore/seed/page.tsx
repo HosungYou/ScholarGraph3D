@@ -118,7 +118,12 @@ function SeedExploreContent() {
   const [expandSuccess, setExpandSuccess] = useState<string | null>(null);
   const [savedIndicator, setSavedIndicator] = useState(false);
   const [gapToastVisible, setGapToastVisible] = useState(false);
-  const [gapToastDismissed, setGapToastDismissed] = useState(false);
+  const [gapToastDismissed, setGapToastDismissed] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('gap-toast-dismissed') === 'true';
+    }
+    return false;
+  });
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoSaveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedGraphIdRef = useRef<string | null>(null);
@@ -834,6 +839,7 @@ function SeedExploreContent() {
                 }
                 setGapToastDismissed(true);
                 setGapToastVisible(false);
+                sessionStorage.setItem('gap-toast-dismissed', 'true');
               }}
               className="px-3 py-1.5 text-[10px] font-mono uppercase tracking-wider text-[#D4AF37] border border-[rgba(212,175,55,0.3)] rounded-lg hover:bg-[rgba(212,175,55,0.1)] transition-colors flex-shrink-0"
             >
@@ -843,6 +849,7 @@ function SeedExploreContent() {
               onClick={() => {
                 setGapToastDismissed(true);
                 setGapToastVisible(false);
+                sessionStorage.setItem('gap-toast-dismissed', 'true');
               }}
               className="text-[#999999]/30 hover:text-[#999999] transition-colors flex-shrink-0"
             >

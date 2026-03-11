@@ -71,8 +71,11 @@ export default function GapSpotterPanel() {
     }
   }, [graphData, gapReportLoading, setActiveGapReport, setGapReportLoading]);
 
-  // Empty state
+  // Empty state — differentiate between "no gaps" and "quality-filtered"
   if (gaps.length === 0) {
+    const sil = graphData?.meta?.cluster_silhouette as number | undefined;
+    const isQualityFiltered = sil !== undefined && sil < 0.25 && graphData && graphData.nodes.length > 10;
+
     return (
       <div className="p-4">
         <div className="flex items-center gap-2 mb-4">
@@ -80,10 +83,25 @@ export default function GapSpotterPanel() {
           <span className="hud-label text-[#D4AF37]/50">GAP SPOTTER</span>
         </div>
         <div className="flex flex-col items-center justify-center py-8 text-center">
-          <Waypoints className="w-8 h-8 text-[rgba(255,255,255,0.04)] mb-3" />
-          <p className="text-[10px] font-mono text-[#999999]/40 leading-relaxed max-w-[200px]">
-            No research gaps detected yet. Build a larger graph to discover connections.
-          </p>
+          {isQualityFiltered ? (
+            <>
+              <AlertTriangle className="w-8 h-8 text-[rgba(231,76,60,0.15)] mb-3" />
+              <p className="text-[10px] font-mono text-[#E74C3C]/60 leading-relaxed max-w-[220px] mb-1">
+                Gaps suppressed due to low cluster quality (silhouette={sil!.toFixed(2)}).
+              </p>
+              <p className="text-[9px] font-mono text-[#999999]/35 leading-relaxed max-w-[220px]">
+                Clusters are not well-separated enough for reliable gap detection.
+                Try a different seed paper or expand the graph.
+              </p>
+            </>
+          ) : (
+            <>
+              <Waypoints className="w-8 h-8 text-[rgba(255,255,255,0.04)] mb-3" />
+              <p className="text-[10px] font-mono text-[#999999]/40 leading-relaxed max-w-[200px]">
+                No research gaps detected. Build a larger graph to discover connections.
+              </p>
+            </>
+          )}
         </div>
       </div>
     );
