@@ -1167,7 +1167,7 @@ class GapDetector:
             "terminology_similarity": round(terminology_sim, 4),
         }
 
-        # Determine recommendation
+        # Determine recommendation — "high_opportunity" must be EARNED, not default
         terminology_barrier = terminology_detail.get("terminology_barrier", False)
         if terminology_barrier:
             recommendation = "terminology_barrier"
@@ -1175,8 +1175,10 @@ class GapDetector:
             recommendation = "infrastructure_gap"
         elif bridge_feasibility < 0.4 and method_transferability < 0.3:
             recommendation = "needs_collaboration"
-        else:
+        elif bridge_feasibility > 0.6 and recency > 0.5 and score > 0.35:
             recommendation = "high_opportunity"
+        else:
+            recommendation = "exploratory"
 
         return GapActionability(
             score=round(score, 4),

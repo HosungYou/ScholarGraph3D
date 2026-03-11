@@ -463,6 +463,8 @@ function GapCard({ gap, graphData, selectPaper, setPanelSelectionId, onGenerateR
             <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[8px] font-mono font-bold uppercase tracking-wider ${
               gap.actionability.recommendation === 'high_opportunity'
                 ? 'bg-[rgba(46,204,113,0.1)] text-[#2ECC71] border border-[rgba(46,204,113,0.2)]'
+                : gap.actionability.recommendation === 'exploratory'
+                ? 'bg-[rgba(52,152,219,0.1)] text-[#3498DB] border border-[rgba(52,152,219,0.2)]'
                 : gap.actionability.recommendation === 'needs_collaboration'
                 ? 'bg-[rgba(230,126,34,0.1)] text-[#E67E22] border border-[rgba(230,126,34,0.2)]'
                 : gap.actionability.recommendation === 'terminology_barrier'
@@ -470,6 +472,7 @@ function GapCard({ gap, graphData, selectPaper, setPanelSelectionId, onGenerateR
                 : 'bg-[rgba(149,165,166,0.1)] text-[#95A5A6] border border-[rgba(149,165,166,0.2)]'
             }`}>
               {gap.actionability.recommendation === 'high_opportunity' ? 'HIGH OPPORTUNITY' :
+               gap.actionability.recommendation === 'exploratory' ? 'EXPLORATORY' :
                gap.actionability.recommendation === 'needs_collaboration' ? 'NEEDS COLLABORATION' :
                gap.actionability.recommendation === 'terminology_barrier' ? 'TERMINOLOGY BARRIER' :
                'INFRASTRUCTURE GAP'}

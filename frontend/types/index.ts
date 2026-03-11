@@ -170,7 +170,7 @@ export interface GapActionability {
     method_transferability: number;
     terminology_similarity: number;
   };
-  recommendation: 'high_opportunity' | 'needs_collaboration' | 'infrastructure_gap' | 'terminology_barrier';
+  recommendation: 'high_opportunity' | 'exploratory' | 'needs_collaboration' | 'infrastructure_gap' | 'terminology_barrier';
 }
 
 export interface StructuralGap {
