@@ -72,6 +72,7 @@ class GapDetector:
         citation_pairs: Optional[set] = None,
         intent_edges: Optional[List[Dict[str, Any]]] = None,
         node_metrics: Optional[Dict[str, Dict[str, float]]] = None,
+        cluster_quality: Optional[float] = None,
     ) -> GapAnalysisResult:
         """
         Detect structural gaps between clusters with multi-dimensional scoring.
@@ -83,10 +84,19 @@ class GapDetector:
             citation_pairs: Set of (citing_id, cited_id) tuples for directional analysis
             intent_edges: List of edge dicts with intent field for intent distribution analysis
             node_metrics: Dict mapping paper_id to {pagerank, betweenness} from SNA computation
+            cluster_quality: Silhouette score (0-1). When < 0.25, gap confidence is dampened.
 
         Returns:
             GapAnalysisResult with gaps, connectivity matrix, and summary
         """
+        # Compute cluster quality constraints
+        # Low silhouette → clusters may be meaningless → cap gap count + raise threshold
+        self._cluster_quality = cluster_quality
+        if cluster_quality is not None and cluster_quality < 0.25:
+            logger.info(
+                f"Low cluster quality (silhouette={cluster_quality:.3f}), "
+                f"applying stricter gap filtering"
+            )
         if not papers or not clusters or len(clusters) < 2:
             return GapAnalysisResult(
                 summary={"total_gaps": 0, "avg_gap_strength": 0.0, "strongest_gap": None}
@@ -184,7 +194,7 @@ class GapDetector:
             venue_diversity_score, venue_detail = self._compute_venue_diversity_score(papers_a, papers_b)
 
             # ── Composite score (rebalanced 9-dimension) ──
-            composite = (
+            raw_composite = (
                 0.20 * structural_score
                 + 0.20 * relatedness_score
                 + 0.10 * temporal_score
@@ -195,6 +205,7 @@ class GapDetector:
                 + 0.06 * author_silo_score
                 + 0.06 * venue_diversity_score
             )
+            composite = raw_composite
 
             gap_score_breakdown = {
                 "structural": round(structural_score, 4),
@@ -306,8 +317,30 @@ class GapDetector:
 
         # Apply adaptive threshold filtering
         threshold = self._adaptive_threshold(gaps)
+
+        # Raise threshold when cluster quality is low
+        if self._cluster_quality is not None and self._cluster_quality < 0.25:
+            # Boost threshold by up to +0.10 for very low quality
+            quality_boost = 0.10 * (1.0 - self._cluster_quality / 0.25)
+            threshold = min(0.85, threshold + quality_boost)
+            logger.info(
+                f"Quality-adjusted threshold: {threshold:.3f} "
+                f"(boost +{quality_boost:.3f})"
+            )
+
         significant_gaps = [g for g in gaps if g.gap_strength >= threshold]
         significant_gaps.sort(key=lambda g: g.gap_strength, reverse=True)
+
+        # Cap gap count for low-quality clusters
+        if self._cluster_quality is not None and self._cluster_quality < 0.25:
+            # silhouette < 0.10 → max 2 gaps, 0.10-0.25 → max 5
+            max_gaps = 2 if self._cluster_quality < 0.10 else 5
+            if len(significant_gaps) > max_gaps:
+                logger.info(
+                    f"Capping gaps from {len(significant_gaps)} to {max_gaps} "
+                    f"due to low cluster quality"
+                )
+                significant_gaps = significant_gaps[:max_gaps]
 
         # Build connectivity matrix for response
         connectivity_matrix = {
@@ -337,6 +370,11 @@ class GapDetector:
                     "strength": strongest.gap_strength,
                 } if strongest else None,
                 "threshold_used": round(threshold, 4),
+                "cluster_quality": round(self._cluster_quality, 4) if self._cluster_quality is not None else None,
+                "quality_limited": (
+                    self._cluster_quality is not None
+                    and self._cluster_quality < 0.25
+                ),
             },
         )
 

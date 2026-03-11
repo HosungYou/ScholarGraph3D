@@ -555,6 +555,7 @@ async def _seed_explore_pipeline(request: SeedExploreRequest, start_time: float)
                     gap_papers, gap_clusters, gap_edges,
                     citation_pairs, gap_edges,
                     sna_metrics if sna_metrics else None,
+                    cluster_quality=cluster_silhouette if cluster_silhouette > 0 else None,
                 )
 
                 for gap in gap_result.gaps[:10]:  # Limit to top 10 gaps
