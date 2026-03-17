@@ -56,6 +56,20 @@ function getInitialSuggestions(graphData: NonNullable<ReturnType<typeof useGraph
   return suggestions;
 }
 
+function getQuickPrompts(graphData: NonNullable<ReturnType<typeof useGraphStore.getState>['graphData']> | null): string[] {
+  if (!graphData) return [];
+
+  const prompts = ['Summarize the main themes in this graph'];
+
+  if (graphData.gaps && graphData.gaps.length > 0) {
+    prompts.push('What is the strongest research gap and why does it matter?');
+  }
+
+  prompts.push('Which papers should I read next and in what order?');
+
+  return prompts.slice(0, 3);
+}
+
 function ActionButtons({ actions, onExecute }: { actions: ChatAction[]; onExecute: (action: ChatAction) => void }) {
   if (!actions || actions.length === 0) return null;
 
@@ -85,6 +99,7 @@ export default function SeedChatPanel() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const initialSuggestions = getInitialSuggestions(graphData);
+  const quickPrompts = getQuickPrompts(graphData);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -195,6 +210,18 @@ export default function SeedChatPanel() {
 
   const isEmpty = messages.length === 0;
 
+  useEffect(() => {
+    const handlePrompt = (event: Event) => {
+      const prompt = (event as CustomEvent<{ prompt?: string }>).detail?.prompt;
+      if (prompt) {
+        void sendMessage(prompt);
+      }
+    };
+
+    window.addEventListener('seedChatPrompt', handlePrompt);
+    return () => window.removeEventListener('seedChatPrompt', handlePrompt);
+  }, [sendMessage]);
+
   return (
     <div className="flex flex-col h-full bg-[rgba(10,10,10,0.5)]">
       {/* Header */}
@@ -208,7 +235,30 @@ export default function SeedChatPanel() {
             {graphData.nodes.length} papers · {graphData.clusters.length} clusters loaded
           </p>
         )}
+        <p className="text-[10px] text-[#999999]/30 font-mono mt-1 leading-relaxed">
+          Best for synthesis, reading order, and gap explanation. Keep prompts specific to this workspace.
+        </p>
       </div>
+
+      {quickPrompts.length > 0 && (
+        <div className="flex-shrink-0 px-3 py-2 border-b border-[rgba(255,255,255,0.04)] bg-[rgba(255,255,255,0.015)]">
+          <div className="mb-1.5 text-[9px] font-mono uppercase tracking-wider text-[#999999]/35">
+            Quick prompts
+          </div>
+          <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+            {quickPrompts.map((prompt) => (
+              <button
+                key={prompt}
+                onClick={() => sendMessage(prompt)}
+                disabled={isLoading}
+                className="flex-shrink-0 rounded-full border border-[rgba(212,175,55,0.16)] bg-[rgba(212,175,55,0.06)] px-2.5 py-1 text-[9px] font-mono text-[#D4AF37]/80 transition-colors hover:bg-[rgba(212,175,55,0.1)] disabled:opacity-30"
+              >
+                {prompt}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Messages */}
       <div
@@ -219,7 +269,7 @@ export default function SeedChatPanel() {
           <div className="flex flex-col items-center justify-center h-full text-center py-8 px-4">
             <MessageCircle className="w-8 h-8 text-[rgba(255,255,255,0.04)] mb-3" />
             <p className="text-[#999999]/40 text-[10px] font-mono mb-4">
-              Ask anything about your paper graph
+              Start with one concrete research question
             </p>
             <div className="w-full space-y-1.5">
               {initialSuggestions.map((s, i) => (

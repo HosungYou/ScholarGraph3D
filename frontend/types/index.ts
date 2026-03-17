@@ -338,6 +338,20 @@ export interface Bookmark {
   paper_id: string;
   tags: string[];
   memo: string;
+  paper_title?: string;
+  paper_authors: string[];
+  paper_year?: number;
+  paper_venue?: string;
+  paper_citation_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RecommendationFeedback {
+  id: string;
+  source_paper_id: string;
+  candidate_paper_id: string;
+  feedback: 'relevant' | 'not_now';
   created_at: string;
   updated_at: string;
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useCallback, useState, useRef, Suspense } from 'react';
+import React, { useEffect, useCallback, useState, useRef, Suspense, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
@@ -17,15 +17,18 @@ import GapSpotterPanel from '@/components/graph/GapSpotterPanel';
 import GapReportView from '@/components/graph/GapReportView';
 import AcademicAnalysisPanel from '@/components/graph/AcademicAnalysisPanel';
 import type { Paper, CitationIntent, GraphData, StructuralGap } from '@/types';
+import { getReviewFixture, loadGeneratedReviewFixture, type ReviewFixture } from '@/lib/review-fixtures';
 
 /* ──────────────────────────────────────────────
    Error Boundary — catches Three.js dispose crashes
    without killing the entire page
    ────────────────────────────────────────────── */
 class Graph3DErrorBoundary extends React.Component<
-  { children: React.ReactNode },
+  { children: React.ReactNode; onRecover?: () => void; recoveryNonce?: number },
   { hasError: boolean }
 > {
+  private recoveryRequested = false;
+
   constructor(props: { children: React.ReactNode }) {
     super(props);
     this.state = { hasError: false };
@@ -35,6 +38,16 @@ class Graph3DErrorBoundary extends React.Component<
   }
   componentDidCatch(error: Error) {
     console.warn('[ScholarGraph3D] Recovered from render error:', error.message);
+    if (this.props.onRecover && !this.recoveryRequested) {
+      this.recoveryRequested = true;
+      setTimeout(() => this.props.onRecover?.(), 120);
+    }
+  }
+  componentDidUpdate(prevProps: Readonly<{ children: React.ReactNode; onRecover?: () => void; recoveryNonce?: number }>) {
+    if (prevProps.recoveryNonce !== this.props.recoveryNonce && this.state.hasError) {
+      this.recoveryRequested = false;
+      this.setState({ hasError: false });
+    }
   }
   render() {
     if (this.state.hasError) {
@@ -51,7 +64,7 @@ class Graph3DErrorBoundary extends React.Component<
               onClick={() => this.setState({ hasError: false })}
               className="px-4 py-2 bg-[#D4AF37]/10 border border-[#D4AF37]/30 rounded text-[#D4AF37] text-sm hover:bg-[#D4AF37]/20 transition-colors"
             >
-              Retry
+              Retry 3D View
             </button>
           </div>
         </div>
@@ -82,12 +95,31 @@ import {
 const SIDEBAR_COLLAPSED = 48;
 const SIDEBAR_DEFAULT = 300;
 const DRAWER_WIDTH = 480;
+const COMPACT_DRAWER_BREAKPOINT = 1380;
+
+type ExpandDiffSummary = {
+  mode: 'expand' | 'second-seed';
+  paperTitle: string;
+  addedCount: number;
+  referencesCount: number;
+  citationsCount: number;
+  newClusters: number;
+  bridgeCandidates: number;
+  partial: boolean;
+  errorDetail?: string;
+};
 
 function SeedExploreContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const paperId = searchParams.get('paper_id') || '';
-  const depth = Number(searchParams.get('depth') || '1');
+  const fixtureId = searchParams.get('fixture');
+  const staticReviewFixture = useMemo(() => getReviewFixture(fixtureId), [fixtureId]);
+  const [reviewFixture, setReviewFixture] = useState<ReviewFixture | null>(staticReviewFixture);
+  const isReviewMode = !!fixtureId;
+  const [viewportWidth, setViewportWidth] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth : 1440
+  );
 
   const {
     graphData,
@@ -110,12 +142,21 @@ function SeedExploreContent() {
     setGapRefreshNeeded,
     gapRefreshNeeded,
     setAddSeedMerging,
+    setNetworkOverview,
+    showCitationEdges,
+    showSimilarityEdges,
+    showClusterHulls,
+    showLabels,
+    nodeSizeMode,
+    layoutMode,
   } = useGraphStore();
 
   const graphRef = useRef<ScholarGraph3DRef>(null);
   const [expandError, setExpandError] = useState<string | null>(null);
   const [isExpanding, setIsExpanding] = useState(false);
   const [expandSuccess, setExpandSuccess] = useState<string | null>(null);
+  const [expandSummary, setExpandSummary] = useState<ExpandDiffSummary | null>(null);
+  const [graphRenderNonce, setGraphRenderNonce] = useState(0);
   const [savedIndicator, setSavedIndicator] = useState(false);
   const [gapToastVisible, setGapToastVisible] = useState(false);
   const [gapToastDismissed, setGapToastDismissed] = useState(() => {
@@ -126,6 +167,7 @@ function SeedExploreContent() {
   });
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoSaveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const expandFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedGraphIdRef = useRef<string | null>(null);
   const [seedMeta, setSeedMeta] = useState<{
     seed_title?: string;
@@ -134,6 +176,32 @@ function SeedExploreContent() {
     citation_edges?: number;
     similarity_edges?: number;
   } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!fixtureId) {
+      setReviewFixture(null);
+      return;
+    }
+
+    if (staticReviewFixture) {
+      setReviewFixture(staticReviewFixture);
+      return;
+    }
+
+    loadGeneratedReviewFixture(fixtureId)
+      .then((loaded) => {
+        if (!cancelled) setReviewFixture(loaded);
+      })
+      .catch(() => {
+        if (!cancelled) setReviewFixture(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fixtureId, staticReviewFixture]);
 
   /* ── Left sidebar collapse ── */
   const [leftCollapsed, setLeftCollapsed] = useState(() => {
@@ -210,6 +278,7 @@ function SeedExploreContent() {
 
   const autoSave = useCallback(async (data: GraphData, seedTitle?: string) => {
     try {
+      if (isReviewMode) return;
       const session = await getSession();
       if (!session?.access_token) return; // Skip auto-save when not authenticated
       const name = seedTitle
@@ -217,9 +286,8 @@ function SeedExploreContent() {
         : `Seed: ${paperId}`;
 
       if (savedGraphIdRef.current) {
-        await api.saveGraph({
+        await api.updateGraph(savedGraphIdRef.current, {
           name,
-          seed_query: paperId,
           graph_data: data,
         });
       } else {
@@ -236,7 +304,7 @@ function SeedExploreContent() {
         console.debug('[AutoSave] Failed:', err);
       }
     }
-  }, [paperId, showSavedIndicator]);
+  }, [isReviewMode, paperId, showSavedIndicator]);
 
   const scheduleDebouncedSave = useCallback((data: GraphData, seedTitle?: string) => {
     if (autoSaveDebounceRef.current) clearTimeout(autoSaveDebounceRef.current);
@@ -245,11 +313,20 @@ function SeedExploreContent() {
     }, 2000);
   }, [autoSave]);
 
+  const scheduleClearExpandFeedback = useCallback((delay = 5000) => {
+    if (expandFeedbackTimerRef.current) clearTimeout(expandFeedbackTimerRef.current);
+    expandFeedbackTimerRef.current = setTimeout(() => {
+      setExpandSuccess(null);
+      setExpandSummary(null);
+    }, delay);
+  }, []);
+
   // Cleanup timers on unmount
   useEffect(() => {
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       if (autoSaveDebounceRef.current) clearTimeout(autoSaveDebounceRef.current);
+      if (expandFeedbackTimerRef.current) clearTimeout(expandFeedbackTimerRef.current);
     };
   }, []);
 
@@ -258,6 +335,37 @@ function SeedExploreContent() {
 
   // Fetch seed graph (or load saved graph)
   useEffect(() => {
+    if (fixtureId && reviewFixture) {
+      setLoading(false);
+      setError(null);
+      setGraphData(reviewFixture.graph);
+      setSeedMeta(reviewFixture.graph.meta as any);
+      setGaps(reviewFixture.graph.gaps || []);
+      setFrontierIds(reviewFixture.graph.frontier_ids || []);
+      setNetworkOverview(reviewFixture.overview);
+      savedGraphIdRef.current = `fixture:${reviewFixture.id}`;
+
+      const intents: CitationIntent[] = reviewFixture.graph.edges
+        .filter((e) => e.type === 'citation' && e.intent)
+        .map((e) => ({
+          citing_id: e.source,
+          cited_id: e.target,
+          basic_intent: e.intent as CitationIntent['basic_intent'],
+          is_influential: false,
+        }));
+
+      if (intents.length > 0) {
+        setCitationIntents(intents);
+      }
+      return;
+    }
+
+    if (fixtureId && !reviewFixture) {
+      setLoading(true);
+      setError(null);
+      return;
+    }
+
     if (!paperId && !graphId) return;
     setLoading(true);
     setError(null);
@@ -299,7 +407,7 @@ function SeedExploreContent() {
         setError(err instanceof Error ? err.message : 'Failed to build seed graph');
       })
       .finally(() => setLoading(false));
-  }, [paperId, graphId, setGraphData, setLoading, setError, setCitationIntents, setGaps, setFrontierIds, autoSave]);
+  }, [paperId, graphId, fixtureId, reviewFixture, setGraphData, setLoading, setError, setCitationIntents, setGaps, setFrontierIds, setNetworkOverview, autoSave]);
 
   // Camera control events
   useEffect(() => {
@@ -338,22 +446,31 @@ function SeedExploreContent() {
       setIsExpanding(true);
       setExpandError(null);
       setExpandSuccess(null);
+      setExpandSummary(null);
 
       try {
         let result;
         const expandId = s2Id || doiId;
 
-        try {
-          result = await api.expandPaperStable(expandId, graphData?.nodes || [], graphData?.edges || []);
-        } catch (err) {
-          if (expandId === s2Id && doiId) {
-            result = await api.expandPaperStable(doiId, graphData?.nodes || [], graphData?.edges || []);
-          } else {
-            throw err;
+        if (fixtureId && reviewFixture) {
+          result = reviewFixture.expansions[paper.id] || reviewFixture.expansions[expandId];
+          if (!result) {
+            throw new Error('No mock expansion is defined for this paper in review mode');
+          }
+        } else {
+          try {
+            result = await api.expandPaperStable(expandId, graphData?.nodes || [], graphData?.edges || []);
+          } catch (err) {
+            if (expandId === s2Id && doiId) {
+              result = await api.expandPaperStable(doiId, graphData?.nodes || [], graphData?.edges || []);
+            } else {
+              throw err;
+            }
           }
         }
 
         const count = result.nodes.length;
+        const existingClusterIds = new Set((graphData?.clusters || []).map((cluster) => cluster.id));
 
         if (count > 0) {
           const store = useGraphStore.getState();
@@ -392,11 +509,28 @@ function SeedExploreContent() {
           }, 50);
 
           const meta = result.meta;
+          const summary: ExpandDiffSummary = {
+            mode: 'expand',
+            paperTitle: paper.title,
+            addedCount: count,
+            referencesCount: meta?.refs_count ?? result.nodes.filter((node) => node.direction === 'reference').length,
+            citationsCount: meta?.cites_count ?? result.nodes.filter((node) => node.direction === 'citation').length,
+            newClusters: new Set(
+              result.nodes
+                .map((node) => node.cluster_id)
+                .filter((clusterId) => clusterId !== -1 && !existingClusterIds.has(clusterId))
+            ).size,
+            bridgeCandidates: result.nodes.filter((node) => node.is_bridge).length,
+            partial: Boolean(meta && (!meta.references_ok || !meta.citations_ok)),
+            errorDetail: meta?.error_detail,
+          };
+          setExpandSummary(summary);
+
           if (meta && (!meta.references_ok || !meta.citations_ok)) {
             const detail = meta.error_detail ? ` — ${meta.error_detail}` : '';
             setExpandSuccess(`${count} papers added (partial${detail})`);
           } else {
-            setExpandSuccess(`${count} papers added`);
+            setExpandSuccess(`Expanded "${paper.title.length > 44 ? `${paper.title.slice(0, 44)}...` : paper.title}"`);
           }
 
           const currentGraphData = useGraphStore.getState().graphData;
@@ -406,16 +540,17 @@ function SeedExploreContent() {
         } else {
           setExpandSuccess('No new papers found');
         }
-        setTimeout(() => setExpandSuccess(null), 3000);
+        scheduleClearExpandFeedback();
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Failed to expand';
+        setExpandSummary(null);
         setExpandError(msg);
         setTimeout(() => setExpandError(null), 5000);
       } finally {
         setIsExpanding(false);
       }
     },
-    [graphData, scheduleDebouncedSave, seedMeta]
+    [graphData, fixtureId, reviewFixture, scheduleClearExpandFeedback, scheduleDebouncedSave, seedMeta]
   );
 
   const handleAddAsSeed = useCallback(
@@ -429,10 +564,19 @@ function SeedExploreContent() {
       }
       setAddSeedMerging(true);
       setExpandError(null);
+      setExpandSummary(null);
       try {
         const expandId = s2Id || doiId;
-        const result = await api.addPaperAsSeed(expandId, graphData?.nodes || [], graphData?.edges || []);
+        const result = fixtureId && reviewFixture
+          ? reviewFixture.expansions[paper.id] || reviewFixture.expansions[expandId]
+          : await api.addPaperAsSeed(expandId, graphData?.nodes || [], graphData?.edges || []);
+
+        if (!result) {
+          throw new Error('No mock merge is defined for this paper in review mode');
+        }
+
         const count = result.nodes.length;
+        const existingClusterIds = new Set((graphData?.clusters || []).map((cluster) => cluster.id));
         if (count > 0) {
           const store = useGraphStore.getState();
           const newMap = new Map(store.expandedFromMap);
@@ -461,6 +605,22 @@ function SeedExploreContent() {
             );
           }, 50);
           setGapRefreshNeeded(true);
+          const meta = result.meta;
+          setExpandSummary({
+            mode: 'second-seed',
+            paperTitle: paper.title,
+            addedCount: count,
+            referencesCount: meta?.refs_count ?? result.nodes.filter((node) => node.direction === 'reference').length,
+            citationsCount: meta?.cites_count ?? result.nodes.filter((node) => node.direction === 'citation').length,
+            newClusters: new Set(
+              result.nodes
+                .map((node) => node.cluster_id)
+                .filter((clusterId) => clusterId !== -1 && !existingClusterIds.has(clusterId))
+            ).size,
+            bridgeCandidates: result.nodes.filter((node) => node.is_bridge).length,
+            partial: Boolean(meta && (!meta.references_ok || !meta.citations_ok)),
+            errorDetail: meta?.error_detail,
+          });
           setExpandSuccess(`Added ${count} papers from "${paper.title.substring(0, 40)}${paper.title.length > 40 ? '...' : ''}"`);
           const currentGraphData = useGraphStore.getState().graphData;
           if (currentGraphData) {
@@ -469,16 +629,17 @@ function SeedExploreContent() {
         } else {
           setExpandSuccess('No new papers found for this seed');
         }
-        setTimeout(() => setExpandSuccess(null), 4000);
+        scheduleClearExpandFeedback();
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Failed to add seed';
+        setExpandSummary(null);
         setExpandError(msg);
         setTimeout(() => setExpandError(null), 5000);
       } finally {
         setAddSeedMerging(false);
       }
     },
-    [graphData, scheduleDebouncedSave, seedMeta, setAddSeedMerging, addSecondSeedId, setGapRefreshNeeded]
+    [graphData, fixtureId, reviewFixture, scheduleClearExpandFeedback, scheduleDebouncedSave, seedMeta, setAddSeedMerging, addSecondSeedId, setGapRefreshNeeded]
   );
 
   // Double-click expand
@@ -496,6 +657,21 @@ function SeedExploreContent() {
   }, [selectPaper]);
 
   const showPaperDetail = !!selectedPaper;
+  const isCompactDrawer = viewportWidth < COMPACT_DRAWER_BREAKPOINT;
+  const activeDrawerWidth = isCompactDrawer
+    ? Math.min(420, Math.max(320, viewportWidth - 24))
+    : DRAWER_WIDTH;
+
+  const handleRestoreDefaultView = useCallback(() => {
+    const store = useGraphStore.getState();
+    if (store.layoutMode !== 'semantic') store.setLayoutMode('semantic');
+    if (store.nodeSizeMode !== 'citations') store.setNodeSizeMode('citations');
+    if (!store.showCitationEdges) store.toggleCitationEdges();
+    if (!store.showSimilarityEdges) store.toggleSimilarityEdges();
+    if (!store.showClusterHulls) store.toggleClusterHulls();
+    if (!store.showLabels) store.toggleLabels();
+    graphRef.current?.resetCamera();
+  }, []);
 
   /* ── Responsive auto-collapse: narrow viewports ── */
   useEffect(() => {
@@ -504,13 +680,50 @@ function SeedExploreContent() {
     }
   }, [showPaperDetail]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleResize = () => setViewportWidth(window.innerWidth);
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   /* ── Tab metadata for sidebar ── */
   const tabs = [
-    { id: 'clusters' as const, icon: Layers, label: 'CLUSTERS' },
+    { id: 'clusters' as const, icon: Layers, label: 'DISCOVER' },
     { id: 'gaps' as const, icon: ScanSearch, label: 'GAPS' },
-    { id: 'chat' as const, icon: MessageCircle, label: 'CHAT' },
-    { id: 'academic' as const, icon: BarChart3, label: 'ACADEMIC' },
+    { id: 'chat' as const, icon: MessageCircle, label: 'ASK' },
+    { id: 'academic' as const, icon: BarChart3, label: 'WRITE' },
   ];
+
+  const seedPaper = useMemo(() => {
+    if (!graphData) return null;
+    const seedId = graphData.meta?.seed_paper_id;
+    return seedId ? graphData.nodes.find((node) => node.id === seedId) || null : null;
+  }, [graphData]);
+
+  const openSidebarTab = useCallback((tabId: typeof tabs[number]['id']) => {
+    setActiveTab(tabId);
+    if (leftCollapsed) {
+      setLeftCollapsed(false);
+      localStorage.setItem('seed-left-collapsed', 'false');
+    }
+  }, [leftCollapsed, setActiveTab]);
+
+  const promptReadingList = useCallback(() => {
+    openSidebarTab('chat');
+    window.dispatchEvent(new CustomEvent('seedChatPrompt', {
+      detail: { prompt: 'Which papers should I read next and in what order?' },
+    }));
+  }, [openSidebarTab]);
+
+  const openReportIntent = useCallback((goal: 'brief' | 'related' | 'gap') => {
+    openSidebarTab('academic');
+    window.dispatchEvent(new CustomEvent('reportIntent', {
+      detail: { goal },
+    }));
+  }, [openSidebarTab]);
 
   return (
     <div className="h-screen flex flex-col bg-black">
@@ -535,7 +748,7 @@ function SeedExploreContent() {
               <Network className="w-3.5 h-3.5 text-[#D4AF37]" />
               <div className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-[#D4AF37] animate-pulse" />
             </div>
-            <span className="hud-label text-[#D4AF37]">ORIGIN POINT</span>
+            <span className="hud-label text-[#D4AF37]">SEED WORKSPACE</span>
           </div>
 
           {/* Seed title */}
@@ -569,7 +782,7 @@ function SeedExploreContent() {
               className="hud-button-ghost flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[10px] uppercase tracking-wider"
             >
               <Search className="w-3 h-3" />
-              Graphs
+              Library
             </button>
             <button
               onClick={() => router.push('/')}
@@ -580,6 +793,107 @@ function SeedExploreContent() {
             </button>
           </div>
         </div>
+
+        {(gapRefreshNeeded || expandError || expandSuccess || expandSummary || (gapToastVisible && !gapToastDismissed && gaps.length > 0)) && (
+          <div className="flex flex-wrap items-center gap-2 border-t border-[rgba(255,255,255,0.04)] px-4 py-2">
+            {gapRefreshNeeded && (
+              <div className="inline-flex items-center gap-2 rounded-full border border-[rgba(0,229,255,0.22)] bg-[rgba(0,229,255,0.08)] px-3 py-1 text-[10px] font-mono text-[#00E5FF]/85">
+                <span>Gap analysis may be outdated after merging a new seed.</span>
+                <button
+                  onClick={() => setGapRefreshNeeded(false)}
+                  className="text-[#00E5FF]/60 transition-colors hover:text-[#00E5FF]"
+                  title="Dismiss"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            )}
+            {expandSummary && (
+              <div
+                data-testid="expand-summary"
+                className="inline-flex flex-wrap items-center gap-2 rounded-full border border-green-700/30 bg-green-900/15 px-3 py-1 text-[10px] font-mono text-green-200"
+              >
+                <CheckCircle className="w-3 h-3 text-green-300" />
+                <span className="text-green-100">
+                  {expandSummary.mode === 'second-seed' ? 'Second seed merged' : 'Expand complete'}
+                </span>
+                <span className="rounded-full border border-green-700/20 bg-black/20 px-2 py-0.5">
+                  +{expandSummary.addedCount} papers
+                </span>
+                <span className="rounded-full border border-green-700/20 bg-black/20 px-2 py-0.5">
+                  {expandSummary.referencesCount} refs
+                </span>
+                <span className="rounded-full border border-green-700/20 bg-black/20 px-2 py-0.5">
+                  {expandSummary.citationsCount} citing
+                </span>
+                {expandSummary.newClusters > 0 && (
+                  <span className="rounded-full border border-green-700/20 bg-black/20 px-2 py-0.5">
+                    {expandSummary.newClusters} new cluster{expandSummary.newClusters > 1 ? 's' : ''}
+                  </span>
+                )}
+                {expandSummary.bridgeCandidates > 0 && (
+                  <span className="rounded-full border border-green-700/20 bg-black/20 px-2 py-0.5">
+                    {expandSummary.bridgeCandidates} bridge candidate{expandSummary.bridgeCandidates > 1 ? 's' : ''}
+                  </span>
+                )}
+                {expandSummary.partial && (
+                  <span className="rounded-full border border-amber-500/20 bg-amber-900/15 px-2 py-0.5 text-amber-200">
+                    Partial fetch
+                  </span>
+                )}
+                {expandSummary.errorDetail && (
+                  <span className="text-green-100/65">
+                    {expandSummary.errorDetail}
+                  </span>
+                )}
+              </div>
+            )}
+            {expandSuccess && !expandSummary && (
+              <div className="inline-flex items-center gap-2 rounded-full border border-green-700/30 bg-green-900/15 px-3 py-1 text-[10px] font-mono text-green-300">
+                <CheckCircle className="w-3 h-3" />
+                <span>{expandSuccess}</span>
+              </div>
+            )}
+            {expandError && (
+              <div className="inline-flex items-center gap-2 rounded-full border border-red-700/30 bg-red-900/15 px-3 py-1 text-[10px] font-mono text-red-200">
+                <X className="w-3 h-3" />
+                <span>{expandError}</span>
+              </div>
+            )}
+            {gapToastVisible && !gapToastDismissed && gaps.length > 0 && (
+              <div className="inline-flex items-center gap-2 rounded-full border border-[rgba(212,175,55,0.28)] bg-[rgba(212,175,55,0.08)] px-3 py-1 text-[10px] font-mono text-[#D4AF37]">
+                <ScanSearch className="w-3 h-3" />
+                <span>{gaps.length} research gap{gaps.length !== 1 ? 's' : ''} discovered</span>
+                <button
+                  onClick={() => {
+                    setActiveTab('gaps');
+                    if (leftCollapsed) {
+                      setLeftCollapsed(false);
+                      localStorage.setItem('seed-left-collapsed', 'false');
+                    }
+                    setGapToastDismissed(true);
+                    setGapToastVisible(false);
+                    sessionStorage.setItem('gap-toast-dismissed', 'true');
+                  }}
+                  className="rounded-full border border-[rgba(212,175,55,0.24)] px-2 py-0.5 text-[9px] uppercase tracking-wide text-[#D4AF37] transition-colors hover:bg-[rgba(212,175,55,0.12)]"
+                >
+                  View Gaps
+                </button>
+                <button
+                  onClick={() => {
+                    setGapToastDismissed(true);
+                    setGapToastVisible(false);
+                    sessionStorage.setItem('gap-toast-dismissed', 'true');
+                  }}
+                  className="text-[#D4AF37]/60 transition-colors hover:text-[#D4AF37]"
+                  title="Dismiss gap notice"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ═══════════════════════════════════════════
@@ -703,84 +1017,199 @@ function SeedExploreContent() {
             </div>
           )}
 
-          {!paperId && (
+          {!paperId && !fixtureId && (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="text-center max-w-md px-4">
                 <Network className="w-12 h-12 text-[#D4AF37] mx-auto mb-4 opacity-60" />
-                <div className="hud-label text-[#D4AF37]/30 mb-2">[ AWAITING ORIGIN POINT ]</div>
+                <div className="hud-label text-[#D4AF37]/30 mb-2">[ WAITING FOR A SEED PAPER ]</div>
                 <h2 className="text-xl font-semibold text-text-primary mb-2 font-mono">
-                  ORIGIN POINT EXPLORATION
+                  START A RESEARCH WORKSPACE
                 </h2>
                 <p className="text-[#999999]/60 text-sm mb-6 font-mono">
-                  Start from a single paper and explore its citation network
+                  Start from one paper, then branch into discovery, reading, or report generation
                 </p>
                 <p className="text-[#999999]/40 text-xs font-mono">
-                  Enter a DOI or Semantic Scholar ID on the home page to begin
+                  Use topic search first, or paste a DOI if you already know the paper
                 </p>
               </div>
             </div>
           )}
 
+          {graphData && !showPaperDetail && !isLoading && (
+            <div className="absolute top-4 left-1/2 z-30 w-[min(720px,calc(100%-32px))] -translate-x-1/2 rounded-2xl border border-[rgba(212,175,55,0.18)] bg-[rgba(8,8,8,0.92)] p-3 shadow-[0_14px_40px_rgba(0,0,0,0.35)] backdrop-blur-xl">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="text-[9px] font-mono uppercase tracking-[0.18em] text-[#D4AF37]/70">
+                    Choose Your Next Move
+                  </div>
+                  <div className="mt-1 text-[11px] font-mono text-[#E5E5E5]">
+                    {seedPaper?.title || seedMeta?.seed_title || 'Start from the seed paper and branch into one concrete task.'}
+                  </div>
+                  <div className="mt-1 text-[10px] font-mono text-[#999999]/40">
+                    Use the graph as a workspace: review the seed, build a reading list, or write a quick output.
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {seedPaper && (
+                    <button
+                      onClick={() => handlePaperSelect(seedPaper)}
+                      className="rounded-full border border-[rgba(255,255,255,0.06)] px-3 py-1.5 text-[10px] font-mono uppercase tracking-wide text-[#E5E5E5] transition-colors hover:border-[rgba(212,175,55,0.2)] hover:text-[#D4AF37]"
+                    >
+                      Review Seed
+                    </button>
+                  )}
+                  <button
+                    onClick={promptReadingList}
+                    className="rounded-full border border-[rgba(255,255,255,0.06)] px-3 py-1.5 text-[10px] font-mono uppercase tracking-wide text-[#E5E5E5] transition-colors hover:border-[rgba(212,175,55,0.2)] hover:text-[#D4AF37]"
+                  >
+                    Build Reading List
+                  </button>
+                  <button
+                    onClick={() => openReportIntent('brief')}
+                    className="rounded-full border border-[rgba(212,175,55,0.2)] bg-[rgba(212,175,55,0.08)] px-3 py-1.5 text-[10px] font-mono uppercase tracking-wide text-[#D4AF37] transition-colors hover:bg-[rgba(212,175,55,0.14)]"
+                  >
+                    Generate Topic Brief
+                  </button>
+                  <button
+                    onClick={() => openSidebarTab('gaps')}
+                    className="rounded-full border border-[rgba(255,255,255,0.06)] px-3 py-1.5 text-[10px] font-mono uppercase tracking-wide text-[#E5E5E5] transition-colors hover:border-[rgba(212,175,55,0.2)] hover:text-[#D4AF37]"
+                  >
+                    Review Gaps
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {graphData && (
-            <Graph3DErrorBoundary>
-              <ScholarGraph3D ref={graphRef} />
+            <Graph3DErrorBoundary
+              recoveryNonce={graphRenderNonce}
+              onRecover={() => setGraphRenderNonce((current) => current + 1)}
+            >
+              <ScholarGraph3D key={`graph-${graphRenderNonce}`} ref={graphRef} />
             </Graph3DErrorBoundary>
+          )}
+
+          {fixtureId && reviewFixture && graphData && (
+            <div
+              data-testid="review-dock"
+              className="absolute top-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 rounded-xl border border-[rgba(212,175,55,0.22)] bg-[rgba(8,8,8,0.92)] px-3 py-2 backdrop-blur-xl shadow-[0_8px_30px_rgba(0,0,0,0.35)]"
+            >
+              <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-[#D4AF37]/70">
+                Review Fixture
+              </span>
+              <span className="text-[10px] font-mono text-[#999999]/70">
+                {reviewFixture.label}
+              </span>
+              <button
+                data-testid="review-open-seed"
+                onClick={() => {
+                  const seed = reviewFixture.graph.nodes.find((node) => node.id === reviewFixture.graph.meta.seed_paper_id);
+                  if (seed) handlePaperSelect(seed);
+                }}
+                className="rounded-md border border-[rgba(255,255,255,0.08)] px-2 py-1 text-[10px] font-mono text-[#E5E5E5] hover:border-[rgba(212,175,55,0.28)] hover:text-[#D4AF37] transition-colors"
+              >
+                Seed Detail
+              </button>
+              <button
+                data-testid="review-expand-seed"
+                onClick={() => {
+                  const seed = reviewFixture.graph.nodes.find((node) => node.id === reviewFixture.graph.meta.seed_paper_id);
+                  if (seed) void handleExpandPaper(seed);
+                }}
+                className="rounded-md border border-[rgba(255,255,255,0.08)] px-2 py-1 text-[10px] font-mono text-[#E5E5E5] hover:border-[rgba(212,175,55,0.28)] hover:text-[#D4AF37] transition-colors"
+              >
+                Expand Seed
+              </button>
+              <button
+                data-testid="review-open-gaps"
+                onClick={() => {
+                  setActiveTab('gaps');
+                  if (leftCollapsed) setLeftCollapsed(false);
+                }}
+                className="rounded-md border border-[rgba(255,255,255,0.08)] px-2 py-1 text-[10px] font-mono text-[#E5E5E5] hover:border-[rgba(212,175,55,0.28)] hover:text-[#D4AF37] transition-colors"
+              >
+                Gaps
+              </button>
+              <button
+                data-testid="review-open-academic"
+                onClick={() => {
+                  setActiveTab('academic');
+                  if (leftCollapsed) setLeftCollapsed(false);
+                }}
+                className="rounded-md border border-[rgba(255,255,255,0.08)] px-2 py-1 text-[10px] font-mono text-[#E5E5E5] hover:border-[rgba(212,175,55,0.28)] hover:text-[#D4AF37] transition-colors"
+              >
+                Academic
+              </button>
+            </div>
           )}
           <GraphControls />
           <GraphLegend />
 
           {/* ─── Bottom Status Bar ─── */}
           {graphData && seedMeta && (
-            <div className="absolute bottom-4 left-4 right-4 z-10 pointer-events-none">
-              <div className="inline-flex items-center gap-3 px-3 py-2 hud-panel-clean rounded-lg text-[10px] font-mono text-[#999999] pointer-events-auto">
-                <div className="flex items-center gap-1.5">
+            <div data-testid="graph-status-strip" className="absolute bottom-4 left-4 right-4 z-10 pointer-events-none">
+              <div className="pointer-events-auto inline-flex max-w-full flex-wrap items-center gap-2 rounded-xl border border-[rgba(255,255,255,0.06)] bg-[rgba(8,8,8,0.9)] px-3 py-2 shadow-[0_12px_32px_rgba(0,0,0,0.28)] backdrop-blur-xl">
+                <div className="flex items-center gap-1.5 text-[10px] font-mono text-[#999999]">
                   <Network className="w-3 h-3 text-[#D4AF37]" />
                   <span className="text-text-primary font-medium">{graphData.nodes.length}</span>
                   <span className="text-[#999999]/50">papers</span>
                 </div>
-                <div className="w-px h-3 bg-[rgba(255,255,255,0.06)]" />
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 text-[10px] font-mono text-[#999999]">
                   <GitBranch className="w-3 h-3" />
                   <span className="text-text-primary font-medium">
                     {graphData.edges.filter(e => e.type === 'citation').length}
                   </span>
                   <span className="text-[#999999]/50">citations</span>
                 </div>
-                <div className="w-px h-3 bg-[rgba(255,255,255,0.06)]" />
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 text-[10px] font-mono text-[#999999]">
                   <Share2 className="w-3 h-3 text-[#D4AF37]/60" />
                   <span className="text-text-primary font-medium">
                     {graphData.edges.filter(e => e.type === 'similarity').length}
                   </span>
                   <span className="text-[#999999]/50">similar</span>
                 </div>
-                <div className="w-px h-3 bg-[rgba(255,255,255,0.06)]" />
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 text-[10px] font-mono text-[#999999]">
                   <Layers className="w-3 h-3" />
                   <span className="text-text-primary font-medium">{graphData.clusters.length}</span>
                   <span className="text-[#999999]/50">clusters</span>
                 </div>
-                <div className="w-px h-3 bg-[rgba(255,255,255,0.06)]" />
-                <span className="text-[#999999]/30 italic">dbl-click to expand</span>
+
+                <div className="mx-1 h-4 w-px bg-[rgba(255,255,255,0.06)]" />
+
+                <span className={`rounded-full border px-2 py-1 text-[10px] font-mono ${
+                  layoutMode === 'network'
+                    ? 'border-[rgba(0,229,255,0.25)] bg-[rgba(0,229,255,0.1)] text-[#00E5FF]'
+                    : 'border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] text-[#E5E5E5]'
+                }`}>
+                  Layout: {layoutMode}
+                </span>
+                <span className="rounded-full border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] px-2 py-1 text-[10px] font-mono text-[#E5E5E5]">
+                  Size: {nodeSizeMode}
+                </span>
+                <span className="rounded-full border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] px-2 py-1 text-[10px] font-mono text-[#999999]/75">
+                  View {[
+                    showCitationEdges ? 'citations' : null,
+                    showSimilarityEdges ? 'similarity' : null,
+                    showClusterHulls ? 'hulls' : null,
+                    showLabels ? 'labels' : null,
+                  ].filter(Boolean).join(' · ')}
+                </span>
+
+                <button
+                  onClick={handleRestoreDefaultView}
+                  className="rounded-full border border-[rgba(212,175,55,0.2)] bg-[rgba(212,175,55,0.08)] px-2.5 py-1 text-[10px] font-mono uppercase tracking-wide text-[#D4AF37] transition-colors hover:bg-[rgba(212,175,55,0.14)]"
+                >
+                  Default View
+                </button>
+
+                <span className="text-[10px] font-mono italic text-[#999999]/35">
+                  Double-click a paper or use the drawer to expand.
+                </span>
               </div>
             </div>
           )}
 
-          {/* Gap refresh needed banner */}
-          {gapRefreshNeeded && (
-            <div className="absolute bottom-16 left-4 right-4 z-10 pointer-events-none">
-              <div className="inline-flex items-center gap-3 px-3 py-2 bg-[rgba(0,229,255,0.08)] border border-[rgba(0,229,255,0.2)] rounded-lg text-[10px] font-mono text-[#00E5FF]/80 pointer-events-auto">
-                <span>⟳ Gap analysis may have changed after merging new seed network.</span>
-                <button
-                  onClick={() => setGapRefreshNeeded(false)}
-                  className="ml-auto text-[#00E5FF]/60 hover:text-[#00E5FF] transition-colors"
-                  title="Dismiss"
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* ─── Right Panel — Push Layout ─── */}
@@ -788,13 +1217,17 @@ function SeedExploreContent() {
           {showPaperDetail && (
             <motion.div
               key="paper-drawer"
-              initial={{ width: 0 }}
-              animate={{ width: DRAWER_WIDTH }}
+              initial={{ width: 0, opacity: isCompactDrawer ? 0 : 1, x: isCompactDrawer ? 24 : 0 }}
+              animate={{ width: activeDrawerWidth, opacity: 1, x: 0 }}
               exit={{ width: 0 }}
               transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-              className="flex-shrink-0 border-l border-[rgba(255,255,255,0.06)] bg-[rgba(10,10,10,0.95)] backdrop-blur-xl overflow-hidden"
+              className={`overflow-hidden border-l border-[rgba(255,255,255,0.06)] bg-[rgba(10,10,10,0.95)] backdrop-blur-xl ${
+                isCompactDrawer
+                  ? 'absolute right-0 top-0 bottom-0 z-30 shadow-[-18px_0_40px_rgba(0,0,0,0.35)]'
+                  : 'flex-shrink-0'
+              }`}
             >
-              <div style={{ width: DRAWER_WIDTH }} className="h-full overflow-y-auto">
+              <div style={{ width: activeDrawerWidth }} className="h-full overflow-y-auto">
                 <PaperDetailPanel
                   paper={selectedPaper}
                   onClose={() => handlePaperSelect(null)}
@@ -808,78 +1241,6 @@ function SeedExploreContent() {
           )}
         </AnimatePresence>
       </div>
-
-      {/* ═══════════════════════════════════════════
-          TOASTS
-          ═══════════════════════════════════════════ */}
-      <AnimatePresence>
-        {gapToastVisible && !gapToastDismissed && gaps.length > 0 && (
-          <motion.div
-            key="toast-gap-discovery"
-            initial={{ opacity: 0, y: 20, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 20, scale: 0.95 }}
-            className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-3 bg-[rgba(20,18,10,0.95)] border border-[rgba(212,175,55,0.3)] rounded-xl shadow-[0_0_30px_rgba(212,175,55,0.1)] backdrop-blur-xl max-w-md"
-          >
-            <ScanSearch className="w-5 h-5 text-[#D4AF37] flex-shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-[11px] font-mono text-[#D4AF37] font-medium">
-                {gaps.length} research gap{gaps.length !== 1 ? 's' : ''} discovered
-              </p>
-              <p className="text-[10px] font-mono text-[#999999]/60 mt-0.5">
-                Explore the empty spaces between clusters
-              </p>
-            </div>
-            <button
-              onClick={() => {
-                setActiveTab('gaps');
-                if (leftCollapsed) {
-                  setLeftCollapsed(false);
-                  localStorage.setItem('seed-left-collapsed', 'false');
-                }
-                setGapToastDismissed(true);
-                setGapToastVisible(false);
-                sessionStorage.setItem('gap-toast-dismissed', 'true');
-              }}
-              className="px-3 py-1.5 text-[10px] font-mono uppercase tracking-wider text-[#D4AF37] border border-[rgba(212,175,55,0.3)] rounded-lg hover:bg-[rgba(212,175,55,0.1)] transition-colors flex-shrink-0"
-            >
-              View Gaps
-            </button>
-            <button
-              onClick={() => {
-                setGapToastDismissed(true);
-                setGapToastVisible(false);
-                sessionStorage.setItem('gap-toast-dismissed', 'true');
-              }}
-              className="text-[#999999]/30 hover:text-[#999999] transition-colors flex-shrink-0"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </motion.div>
-        )}
-        {expandError && (
-          <motion.div
-            key="toast-error"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            className="fixed bottom-4 right-4 z-50 bg-red-900/90 border border-red-700/40 text-red-200 px-4 py-3 rounded-lg text-sm max-w-sm shadow-xl font-mono"
-          >
-            {expandError}
-          </motion.div>
-        )}
-        {expandSuccess && (
-          <motion.div
-            key="toast-success"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            className="fixed bottom-4 right-4 z-50 bg-green-900/90 border border-green-700/40 text-green-200 px-4 py-3 rounded-lg text-sm max-w-sm shadow-xl font-mono"
-          >
-            {expandSuccess}
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

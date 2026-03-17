@@ -13,7 +13,7 @@ import time
 from typing import Any, Dict, List, Optional, Set
 
 import numpy as np
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from graph.clusterer import PaperClusterer
@@ -24,6 +24,7 @@ from graph.gap_detector import GapDetector
 from graph.network_metrics import compute_node_lightweight
 from integrations.semantic_scholar import get_s2_client, SemanticScholarRateLimitError
 from services.citation_intent import CitationIntentService
+from middleware.rate_limiter import check_rate_limit
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -137,7 +138,7 @@ def _s2_paper_to_node(paper, node_id: str, is_seed: bool = False) -> SeedGraphNo
 
 
 @router.post("/api/seed-explore", response_model=SeedGraphResponse)
-async def seed_explore(request: SeedExploreRequest):
+async def seed_explore(request: SeedExploreRequest, http_request: Request):
     """
     Build a citation network from a seed paper.
 
@@ -150,6 +151,11 @@ async def seed_explore(request: SeedExploreRequest):
     6. Citation intents + Gap detection (parallel)
     7. Return graph
     """
+    await check_rate_limit(
+        http_request,
+        endpoint_type="search",
+        is_authenticated=bool(getattr(http_request.state, "user_id", None)),
+    )
     start_time = time.time()
 
     try:

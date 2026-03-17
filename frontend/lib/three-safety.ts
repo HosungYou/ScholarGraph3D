@@ -18,7 +18,6 @@ export function applyThreeJsSafetyPatch(): void {
   patched = true;
 
   // Dynamic import to ensure this only runs client-side
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const THREE = require('three');
 
   const patchDispose = (proto: any, name: string) => {

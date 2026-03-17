@@ -3,11 +3,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowRight, Search } from 'lucide-react';
+import { ArrowRight, BookOpen, Check, Clock3, GitCompareArrows, Plus, Search, Sparkles, X } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api';
 import dynamic from 'next/dynamic';
 import type { StarfieldBackgroundRef } from '@/components/cosmic/StarfieldBackground';
+import type { PaperSearchResult } from '@/types';
 
 const StarfieldBackground = dynamic(
   () => import('@/components/cosmic/StarfieldBackground'),
@@ -85,13 +86,45 @@ function pickRandom<T>(arr: T[], n: number): T[] {
   return shuffled.slice(0, n);
 }
 
+function formatAuthors(paper: PaperSearchResult): string {
+  const names = paper.authors?.slice(0, 3).map((author) => author.name).filter(Boolean) || [];
+  if (names.length === 0) return 'Author metadata unavailable';
+  const suffix = paper.authors.length > 3 ? ' et al.' : '';
+  return `${names.join(', ')}${suffix}`;
+}
+
+function getSearchReasons(paper: PaperSearchResult, query: string, index: number): string[] {
+  const reasons: string[] = [];
+  const loweredQuery = query.toLowerCase();
+
+  if (index === 0) reasons.push('top match');
+  if ((paper.citation_count || 0) > 1000) reasons.push('highly cited anchor');
+  if (paper.year >= 2022) reasons.push('recent paper');
+  if (paper.abstract_snippet) reasons.push('abstract available');
+  if (paper.venue) reasons.push(`from ${paper.venue}`);
+  if (paper.fields.some((field) => loweredQuery.includes(field.toLowerCase()))) {
+    reasons.push('field match');
+  }
+
+  return reasons.slice(0, 3);
+}
+
+function getSeedFitLabel(paper: PaperSearchResult, index: number): string {
+  if ((paper.citation_count || 0) > 1000) return 'Strong overview seed';
+  if (paper.year >= 2023) return 'Good frontier seed';
+  if (index === 0) return 'Best first seed';
+  return 'Viable seed paper';
+}
+
 export default function LandingPage() {
-  const [activeMode, setActiveMode] = useState<InputMode>('doi');
+  const [activeMode, setActiveMode] = useState<InputMode>('natural');
   const [inputValue, setInputValue] = useState('');
   const [isLoadingDoi, setIsLoadingDoi] = useState(false);
   const [doiError, setDoiError] = useState<string | null>(null);
   const [isLoadingNatural, setIsLoadingNatural] = useState(false);
-  const [naturalResults, setNaturalResults] = useState<any[] | null>(null);
+  const [naturalResults, setNaturalResults] = useState<PaperSearchResult[] | null>(null);
+  const [refinedQuery, setRefinedQuery] = useState<string | null>(null);
+  const [shortlistedPaperIds, setShortlistedPaperIds] = useState<string[]>([]);
   const router = useRouter();
 
   const starfieldRef = useRef<StarfieldBackgroundRef>(null);
@@ -101,6 +134,20 @@ export default function LandingPage() {
   const [displayedQueries, setDisplayedQueries] = useState(EXAMPLE_QUERIES.slice(0, 4));
 
   const { user } = useAuth();
+
+  const shortlistedPapers = (naturalResults || []).filter((paper) =>
+    shortlistedPaperIds.includes(paper.paper_id)
+  );
+
+  const mostCitedShortlist = shortlistedPapers.reduce<PaperSearchResult | null>((best, paper) => {
+    if (!best || paper.citation_count > best.citation_count) return paper;
+    return best;
+  }, null);
+
+  const mostRecentShortlist = shortlistedPapers.reduce<PaperSearchResult | null>((best, paper) => {
+    if (!best || (paper.year || 0) > (best.year || 0)) return paper;
+    return best;
+  }, null);
 
   useEffect(() => {
     if (user && window.location.hash.includes('access_token')) {
@@ -151,14 +198,18 @@ export default function LandingPage() {
     }
     setIsLoadingNatural(true);
     setNaturalResults(null);
+    setRefinedQuery(null);
+    setShortlistedPaperIds([]);
     try {
       const data = await api.searchPapers(query.trim());
       setNaturalResults(data.papers || []);
+      setRefinedQuery(data.refined_query || null);
       saveSearchHistory({ query: query.trim(), type: 'search' });
       setSearchHistory(getSearchHistory());
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setDoiError(`Search failed: ${msg}`);
+      setRefinedQuery(null);
     } finally {
       setIsLoadingNatural(false);
     }
@@ -176,7 +227,35 @@ export default function LandingPage() {
     setActiveMode(mode);
     setInputValue('');
     setNaturalResults(null);
+    setRefinedQuery(null);
+    setShortlistedPaperIds([]);
     setDoiError(null);
+  };
+
+  const startSeedWorkspace = (paperId: string) => {
+    setIsWarping(true);
+    starfieldRef.current?.triggerWarp();
+    setTimeout(() => {
+      router.push(`/explore/seed?paper_id=${encodeURIComponent(paperId)}`);
+    }, 600);
+  };
+
+  const toggleShortlist = (paperId: string) => {
+    setShortlistedPaperIds((current) => {
+      if (current.includes(paperId)) {
+        return current.filter((id) => id !== paperId);
+      }
+      if (current.length >= 3) {
+        return [...current.slice(1), paperId];
+      }
+      return [...current, paperId];
+    });
+  };
+
+  const getShortlistRole = (paper: PaperSearchResult): string => {
+    if (mostCitedShortlist?.paper_id === paper.paper_id) return 'Best overview';
+    if (mostRecentShortlist?.paper_id === paper.paper_id) return 'Best frontier';
+    return 'Balanced candidate';
   };
 
   return (
@@ -227,9 +306,8 @@ export default function LandingPage() {
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.6, delay: 0.4 }}
               >
-                Academic papers visualized in 3D space.
-                Citation topology, semantic clusters, temporal depth
-                — all in one interactive graph.
+                Start from a topic, choose one promising paper, then expand,
+                compare, and turn the workspace into a reading plan or research brief.
               </motion.p>
 
               {/* Stats row */}
@@ -240,9 +318,9 @@ export default function LandingPage() {
                 transition={{ duration: 0.6, delay: 0.6 }}
               >
                 {[
-                  { number: '16M+', label: 'citations indexed' },
-                  { number: '200+', label: 'papers per graph' },
-                  { number: '3D', label: 'visualization' },
+                  { number: 'Topic', label: 'search first' },
+                  { number: 'Seed', label: 'pick one paper' },
+                  { number: 'Brief', label: 'turn results into output' },
                 ].map((stat) => (
                   <div key={stat.label}>
                     <div className="font-serif text-3xl md:text-4xl text-white">{stat.number}</div>
@@ -274,8 +352,8 @@ export default function LandingPage() {
           {/* Mode switch */}
           <div className="flex items-center gap-1 mb-4">
             {([
-              { mode: 'doi' as InputMode, label: 'Seed Paper' },
-              { mode: 'natural' as InputMode, label: 'Search' },
+              { mode: 'natural' as InputMode, label: 'Topic Search' },
+              { mode: 'doi' as InputMode, label: 'Known Paper' },
             ]).map(({ mode, label }) => (
               <button
                 key={mode}
@@ -308,7 +386,7 @@ export default function LandingPage() {
                       type="text"
                       value={inputValue}
                       onChange={(e) => { setInputValue(e.target.value); setDoiError(null); }}
-                      placeholder="Enter a DOI, URL, or arXiv link..."
+                      placeholder="Paste a DOI, paper URL, or arXiv link..."
                       className="flex-1 bg-transparent px-5 py-4 text-sm text-white placeholder:text-neutral-700 outline-none font-mono"
                       autoFocus
                     />
@@ -329,7 +407,7 @@ export default function LandingPage() {
                 {doiError && (
                   <p className="text-xs text-red-400/80 font-mono mt-2">{doiError}</p>
                 )}
-                <p className="text-[10px] text-neutral-800 mt-2 font-mono tracking-wider">Press Enter to explore</p>
+                <p className="text-[10px] text-neutral-800 mt-2 font-mono tracking-wider">Use this when you already know the exact paper to seed from</p>
 
                 {/* Recent searches */}
                 {searchHistory.length > 0 && (
@@ -390,7 +468,7 @@ export default function LandingPage() {
                       type="text"
                       value={inputValue}
                       onChange={(e) => { setInputValue(e.target.value); setNaturalResults(null); setDoiError(null); }}
-                      placeholder="Describe your research topic..."
+                      placeholder="Describe a research topic, method, or question..."
                       className="flex-1 bg-transparent px-5 py-4 text-sm text-white placeholder:text-neutral-700 outline-none font-mono"
                       autoFocus
                     />
@@ -411,7 +489,14 @@ export default function LandingPage() {
                 {doiError && (
                   <p className="text-xs text-red-400/80 font-mono mt-2">{doiError}</p>
                 )}
-                <p className="text-[10px] text-neutral-800 mt-2 font-mono tracking-wider">Press Enter to search</p>
+                <p className="text-[10px] text-neutral-800 mt-2 font-mono tracking-wider">Start broad, then choose one paper to anchor the workspace</p>
+
+                {refinedQuery && refinedQuery !== inputValue.trim() && (
+                  <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-[rgba(212,175,55,0.16)] bg-[rgba(212,175,55,0.06)] px-3 py-1 text-[10px] font-mono text-[#D4AF37]/80">
+                    <Sparkles className="w-3 h-3" />
+                    Interpreted as: {refinedQuery}
+                  </div>
+                )}
 
                 {/* Recent searches */}
                 {searchHistory.length > 0 && !naturalResults && (
@@ -476,32 +561,172 @@ export default function LandingPage() {
                       exit={{ opacity: 0, y: -10 }}
                       className="mt-4 flex flex-col gap-1.5 max-h-[400px] overflow-y-auto"
                     >
-                      <p className="text-[10px] text-neutral-600 px-1 font-mono uppercase tracking-wider mb-1">
-                        {naturalResults.length} papers found:
-                      </p>
-                      {naturalResults.map((paper: any) => (
-                        <button
-                          key={paper.paper_id}
-                          onClick={() => {
-                            setIsWarping(true);
-                            starfieldRef.current?.triggerWarp();
-                            setTimeout(() => {
-                              router.push(`/explore/seed?paper_id=${encodeURIComponent(paper.paper_id)}`);
-                            }, 600);
-                          }}
-                          className="text-left rounded-lg p-4 bg-neutral-950 border border-neutral-800 hover:border-neutral-600 transition-all group"
-                        >
-                          <h3 className="text-sm font-medium text-white group-hover:text-[#D4AF37] transition-colors leading-snug">
-                            {paper.title}
-                          </h3>
-                          <div className="flex items-center gap-3 mt-1.5 text-[11px] text-neutral-600 font-mono">
-                            {paper.authors?.slice(0, 3).map((a: any) => a.name || a).join(', ')}
-                            {paper.authors?.length > 3 && ' et al.'}
-                            {paper.year && <span>&middot; {paper.year}</span>}
-                            {paper.citation_count > 0 && <span>&middot; {paper.citation_count} cit.</span>}
+                      <div className="mb-2 px-1">
+                        <p className="text-[10px] text-neutral-600 font-mono uppercase tracking-wider">
+                          {naturalResults.length} candidate seed papers
+                        </p>
+                        <p className="mt-1 text-[11px] text-neutral-500 font-mono">
+                          Shortlist up to three papers, compare them, then commit one as the workspace seed.
+                        </p>
+                      </div>
+                      {shortlistedPapers.length > 0 && (
+                        <div className="mb-3 rounded-2xl border border-[rgba(212,175,55,0.18)] bg-[rgba(212,175,55,0.05)] p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <div className="inline-flex items-center gap-2 text-[10px] font-mono uppercase tracking-[0.18em] text-[#D4AF37]/80">
+                                <GitCompareArrows className="w-3.5 h-3.5" />
+                                Shortlist Compare
+                              </div>
+                              <p className="mt-2 text-sm text-neutral-300">
+                                Compare candidate seeds before you lock in the workspace.
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => setShortlistedPaperIds([])}
+                              className="text-[10px] font-mono uppercase tracking-wider text-neutral-500 transition-colors hover:text-white"
+                            >
+                              Clear
+                            </button>
                           </div>
-                        </button>
-                      ))}
+
+                          <div className="mt-4 grid gap-3 md:grid-cols-3">
+                            {shortlistedPapers.map((paper) => (
+                              <div
+                                key={`shortlist-${paper.paper_id}`}
+                                className="rounded-xl border border-[rgba(255,255,255,0.08)] bg-black/30 p-3"
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <span className="rounded-full border border-[rgba(212,175,55,0.16)] bg-[rgba(212,175,55,0.06)] px-2 py-0.5 text-[9px] font-mono uppercase tracking-wider text-[#D4AF37]/75">
+                                    {getShortlistRole(paper)}
+                                  </span>
+                                  <button
+                                    onClick={() => toggleShortlist(paper.paper_id)}
+                                    className="text-neutral-600 transition-colors hover:text-white"
+                                    title="Remove from shortlist"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                                <h3 className="mt-2 text-sm font-medium leading-snug text-white">
+                                  {paper.title}
+                                </h3>
+                                <div className="mt-2 flex flex-wrap gap-3 text-[10px] font-mono text-neutral-500">
+                                  {paper.year ? <span>{paper.year}</span> : null}
+                                  {paper.venue ? <span>{paper.venue}</span> : null}
+                                  {paper.citation_count ? <span>{paper.citation_count} cit.</span> : null}
+                                </div>
+                                <p className="mt-2 text-[11px] leading-relaxed text-neutral-500">
+                                  {formatAuthors(paper)}
+                                </p>
+                                <button
+                                  onClick={() => startSeedWorkspace(paper.paper_id)}
+                                  className="mt-3 inline-flex items-center gap-2 rounded-full border border-[rgba(212,175,55,0.22)] px-3 py-1.5 text-[10px] font-mono uppercase tracking-wider text-[#D4AF37] transition-colors hover:bg-[rgba(212,175,55,0.08)]"
+                                >
+                                  <ArrowRight className="w-3 h-3" />
+                                  Use as seed
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+
+                          {shortlistedPapers.length >= 2 && (
+                            <div className="mt-4 flex flex-wrap gap-2 text-[10px] font-mono text-neutral-500">
+                              {mostCitedShortlist ? (
+                                <span className="rounded-full border border-[rgba(255,255,255,0.08)] px-2.5 py-1">
+                                  Most cited: {mostCitedShortlist.title}
+                                </span>
+                              ) : null}
+                              {mostRecentShortlist ? (
+                                <span className="rounded-full border border-[rgba(255,255,255,0.08)] px-2.5 py-1">
+                                  Most recent: {mostRecentShortlist.title}
+                                </span>
+                              ) : null}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {naturalResults.map((paper, index) => {
+                        const reasons = getSearchReasons(paper, inputValue, index);
+                        const isShortlisted = shortlistedPaperIds.includes(paper.paper_id);
+                        return (
+                          <div
+                            key={paper.paper_id}
+                            className="text-left rounded-xl p-4 bg-neutral-950 border border-neutral-800 hover:border-[#D4AF37]/40 transition-all group"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <div className="inline-flex items-center gap-1.5 rounded-full border border-[rgba(212,175,55,0.18)] bg-[rgba(212,175,55,0.05)] px-2 py-0.5 text-[9px] font-mono uppercase tracking-wider text-[#D4AF37]/75">
+                                  <Sparkles className="w-3 h-3" />
+                                  {getSeedFitLabel(paper, index)}
+                                </div>
+                                <h3 className="mt-2 text-sm font-medium text-white group-hover:text-[#D4AF37] transition-colors leading-snug">
+                                  {paper.title}
+                                </h3>
+                              </div>
+                              <div className="text-right text-[10px] font-mono text-neutral-500">
+                                {paper.year || 'n.d.'}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-3 mt-1.5 text-[11px] text-neutral-600 font-mono">
+                              <span>{formatAuthors(paper)}</span>
+                              {paper.citation_count > 0 && <span>&middot; {paper.citation_count} cit.</span>}
+                            </div>
+                            {paper.venue && (
+                              <div className="mt-1 flex items-center gap-1.5 text-[10px] font-mono text-neutral-500">
+                                <BookOpen className="w-3 h-3" />
+                                {paper.venue}
+                              </div>
+                            )}
+                            {paper.abstract_snippet && (
+                              <p className="mt-2 line-clamp-3 text-[12px] leading-relaxed text-neutral-400">
+                                {paper.abstract_snippet}
+                              </p>
+                            )}
+                            <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                              {paper.fields.slice(0, 2).map((field) => (
+                                <span
+                                  key={`${paper.paper_id}-${field}`}
+                                  className="rounded-full border border-[rgba(255,255,255,0.08)] px-2 py-0.5 text-[9px] font-mono text-neutral-400"
+                                >
+                                  {field}
+                                </span>
+                              ))}
+                              {reasons.map((reason) => (
+                                <span
+                                  key={`${paper.paper_id}-${reason}`}
+                                  className="rounded-full border border-[rgba(212,175,55,0.16)] bg-[rgba(212,175,55,0.05)] px-2 py-0.5 text-[9px] font-mono text-[#D4AF37]/75"
+                                >
+                                  {reason}
+                                </span>
+                              ))}
+                            </div>
+                            <div className="mt-3 flex items-center gap-2 text-[10px] font-mono uppercase tracking-wider text-[#D4AF37]/75">
+                              <Clock3 className="w-3 h-3" />
+                              Pick, compare, then seed the workspace
+                            </div>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <button
+                                onClick={() => toggleShortlist(paper.paper_id)}
+                                className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[10px] font-mono uppercase tracking-wider transition-colors ${
+                                  isShortlisted
+                                    ? 'border border-[rgba(212,175,55,0.2)] bg-[rgba(212,175,55,0.08)] text-[#D4AF37]'
+                                    : 'border border-[rgba(255,255,255,0.08)] text-neutral-400 hover:border-neutral-600 hover:text-white'
+                                }`}
+                              >
+                                {isShortlisted ? <Check className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
+                                {isShortlisted ? 'Shortlisted' : 'Add to shortlist'}
+                              </button>
+                              <button
+                                onClick={() => startSeedWorkspace(paper.paper_id)}
+                                className="inline-flex items-center gap-2 rounded-full border border-[rgba(212,175,55,0.22)] px-3 py-1.5 text-[10px] font-mono uppercase tracking-wider text-[#D4AF37] transition-colors hover:bg-[rgba(212,175,55,0.08)]"
+                              >
+                                <ArrowRight className="w-3 h-3" />
+                                Use as seed
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </motion.div>
                   )}
                   {naturalResults && naturalResults.length === 0 && (

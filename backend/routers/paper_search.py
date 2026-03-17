@@ -9,10 +9,11 @@ POST /api/paper-search
 import logging
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from integrations.semantic_scholar import get_s2_client, SemanticScholarRateLimitError
+from middleware.rate_limiter import check_rate_limit
 
 logger = logging.getLogger(__name__)
 
@@ -46,8 +47,13 @@ class PaperSearchResponse(BaseModel):
 
 
 @router.post("/paper-search", response_model=PaperSearchResponse)
-async def search_papers(req: PaperSearchRequest):
+async def search_papers(req: PaperSearchRequest, request: Request):
     """Search for papers by natural language query via Semantic Scholar."""
+    await check_rate_limit(
+        request,
+        endpoint_type="search",
+        is_authenticated=bool(getattr(request.state, "user_id", None)),
+    )
     s2 = get_s2_client()
 
     try:

@@ -27,6 +27,30 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import type { AcademicReport, AcademicReportTable, NodeCentrality, NetworkOverview } from '@/types';
 
+const OUTPUT_OPTIONS = [
+  {
+    id: 'brief' as const,
+    label: 'Topic Brief',
+    description: 'Best for a quick shareable summary of the area.',
+    defaultTab: 'methods' as const,
+    cta: 'Generate Topic Brief',
+  },
+  {
+    id: 'related' as const,
+    label: 'Related Work',
+    description: 'Best for synthesis plus citations you can reuse in writing.',
+    defaultTab: 'references' as const,
+    cta: 'Generate Related Work Draft',
+  },
+  {
+    id: 'gap' as const,
+    label: 'Gap Memo',
+    description: 'Best for open questions, bridge opportunities, and next studies.',
+    defaultTab: 'tables' as const,
+    cta: 'Generate Gap Memo',
+  },
+];
+
 // ─── Collapsible Section (local, same pattern as GapReportView) ──────────────
 
 function CollapsibleSection({
@@ -214,6 +238,7 @@ export default function AcademicAnalysisPanel() {
     setNetworkOverview,
   } = useGraphStore();
 
+  const [outputGoal, setOutputGoal] = useState<'brief' | 'related' | 'gap'>('brief');
   const [reportTab, setReportTab] = useState<'methods' | 'tables' | 'figures' | 'references'>('methods');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [capturedImages, setCapturedImages] = useState<{ fig1?: string; fig2?: string }>({});
@@ -368,12 +393,27 @@ export default function AcademicAnalysisPanel() {
     { id: 'references' as const, icon: BookOpen, label: 'Refs' },
   ];
 
+  const selectedOutput = OUTPUT_OPTIONS.find((option) => option.id === outputGoal) || OUTPUT_OPTIONS[0];
+
+  useEffect(() => {
+      const handleIntent = (event: Event) => {
+        const goal = (event as CustomEvent<{ goal?: 'brief' | 'related' | 'gap' }>).detail?.goal;
+        const selected = OUTPUT_OPTIONS.find((option) => option.id === goal);
+        if (!selected) return;
+        setOutputGoal(selected.id);
+        setReportTab(selected.defaultTab);
+      };
+
+      window.addEventListener('reportIntent', handleIntent);
+      return () => window.removeEventListener('reportIntent', handleIntent);
+  }, []);
+
   return (
     <div className="p-4">
       {/* Header */}
       <div className="flex items-center gap-2 mb-4">
         <BarChart3 className="w-4 h-4 text-[#D4AF37]" />
-        <span className="hud-label text-[#D4AF37]/60">ACADEMIC ANALYSIS</span>
+        <span className="hud-label text-[#D4AF37]/60">RESEARCH REPORT</span>
         <div className="flex-1 h-px bg-gradient-to-r from-[rgba(255,255,255,0.06)] to-transparent" />
       </div>
 
@@ -441,6 +481,75 @@ export default function AcademicAnalysisPanel() {
         </div>
       )}
 
+      {graphData && (
+        <div className="mb-4 rounded-lg border border-[rgba(255,255,255,0.05)] bg-[rgba(255,255,255,0.02)] p-3">
+          <div className="mb-3">
+            <div className="mb-2 text-[9px] font-mono uppercase tracking-wider text-[#999999]/35">
+              Output type
+            </div>
+            <div className="grid grid-cols-1 gap-2">
+              {OUTPUT_OPTIONS.map((option) => (
+                <button
+                  key={option.id}
+                  onClick={() => {
+                    setOutputGoal(option.id);
+                    setReportTab(option.defaultTab);
+                  }}
+                  className={`rounded-lg border px-3 py-2 text-left transition-colors ${
+                    outputGoal === option.id
+                      ? 'border-[rgba(212,175,55,0.22)] bg-[rgba(212,175,55,0.08)]'
+                      : 'border-[rgba(255,255,255,0.05)] bg-[rgba(255,255,255,0.01)] hover:border-[rgba(255,255,255,0.08)]'
+                  }`}
+                >
+                  <div className="text-[10px] font-mono uppercase tracking-wider text-[#D4AF37]/75">
+                    {option.label}
+                  </div>
+                  <div className="mt-1 text-[10px] font-mono text-[#999999]/45 leading-relaxed">
+                    {option.description}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-[9px] font-mono uppercase tracking-wider text-[#999999]/35">
+                Best next step
+              </div>
+              <div className="mt-1 text-[11px] font-mono text-[#999999]/75 leading-relaxed">
+                {selectedOutput.description}
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div>
+                <div className="text-[9px] font-mono text-[#999999]/35">Papers</div>
+                <div className="text-[11px] font-mono text-[#D4AF37]/80">{graphData.nodes.length}</div>
+              </div>
+              <div>
+                <div className="text-[9px] font-mono text-[#999999]/35">Gaps</div>
+                <div className="text-[11px] font-mono text-[#D4AF37]/80">{gaps.length}</div>
+              </div>
+              <div>
+                <div className="text-[9px] font-mono text-[#999999]/35">Status</div>
+                <div className="text-[11px] font-mono text-[#D4AF37]/80">{academicReport ? 'ready' : 'draft'}</div>
+              </div>
+            </div>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            <span className="rounded-full border border-[rgba(255,255,255,0.05)] px-2 py-0.5 text-[9px] font-mono text-[#999999]/45">
+              methods summary
+            </span>
+            <span className="rounded-full border border-[rgba(255,255,255,0.05)] px-2 py-0.5 text-[9px] font-mono text-[#999999]/45">
+              results tables
+            </span>
+            <span className="rounded-full border border-[rgba(255,255,255,0.05)] px-2 py-0.5 text-[9px] font-mono text-[#999999]/45">
+              references export
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* ── Generate Button ── */}
       <button
         onClick={handleGenerate}
@@ -457,7 +566,7 @@ export default function AcademicAnalysisPanel() {
           </>
         ) : (
           <>
-            <BarChart3 className="w-4 h-4" /> Generate Academic Report
+            <BarChart3 className="w-4 h-4" /> {selectedOutput.cta}
           </>
         )}
       </button>

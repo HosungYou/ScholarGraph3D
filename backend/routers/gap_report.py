@@ -9,7 +9,7 @@ evidence-only report if LLM is unavailable.
 import logging
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from services.gap_report_service import (
@@ -18,6 +18,7 @@ from services.gap_report_service import (
     compute_gap_report_cache_key,
     generate_narrative,
 )
+from middleware.rate_limiter import check_rate_limit
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -51,7 +52,7 @@ class GapReportResponse(BaseModel):
 
 
 @router.post("/api/gaps/report", response_model=GapReportResponse)
-async def generate_gap_report(request: GapReportRequest):
+async def generate_gap_report(request: GapReportRequest, http_request: Request):
     """
     Generate a structured gap analysis report.
 
@@ -63,6 +64,11 @@ async def generate_gap_report(request: GapReportRequest):
 
     Returns evidence-only report if LLM fails.
     """
+    await check_rate_limit(
+        http_request,
+        endpoint_type="ai_search",
+        is_authenticated=bool(getattr(http_request.state, "user_id", None)),
+    )
     gap = request.gap
     graph_context = request.graph_context
 

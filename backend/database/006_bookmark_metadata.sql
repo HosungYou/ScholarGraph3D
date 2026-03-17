@@ -1,0 +1,6 @@
+ALTER TABLE paper_bookmarks
+ADD COLUMN IF NOT EXISTS paper_title TEXT,
+ADD COLUMN IF NOT EXISTS paper_authors TEXT[] DEFAULT '{}',
+ADD COLUMN IF NOT EXISTS paper_year INT,
+ADD COLUMN IF NOT EXISTS paper_venue TEXT,
+ADD COLUMN IF NOT EXISTS paper_citation_count INT DEFAULT 0;

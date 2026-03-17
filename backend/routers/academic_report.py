@@ -12,11 +12,12 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from graph.network_metrics import NetworkMetricsComputer
 from services.academic_report_service import generate_academic_report
+from middleware.rate_limiter import check_rate_limit
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -71,7 +72,7 @@ class NetworkOverviewResponse(BaseModel):
 
 
 @router.post("/api/academic-report", response_model=AcademicReportResponse)
-async def create_academic_report(request: AcademicReportRequest):
+async def create_academic_report(request: AcademicReportRequest, http_request: Request):
     """
     Generate an APA 7th formatted SNA academic report.
 
@@ -85,6 +86,11 @@ async def create_academic_report(request: AcademicReportRequest):
     Returns template-based report with methods section, tables,
     figure captions, and reference list.
     """
+    await check_rate_limit(
+        http_request,
+        endpoint_type="ai_search",
+        is_authenticated=bool(getattr(http_request.state, "user_id", None)),
+    )
     graph_context = request.graph_context
     papers = graph_context.get("papers", [])
     edges = graph_context.get("edges", [])
@@ -151,13 +157,18 @@ async def create_academic_report(request: AcademicReportRequest):
 
 
 @router.post("/api/network-overview", response_model=NetworkOverviewResponse)
-async def get_network_overview(request: NetworkOverviewRequest):
+async def get_network_overview(request: NetworkOverviewRequest, http_request: Request):
     """
     Lightweight network overview for display before full report generation.
 
     Returns basic network stats: node_count, edge_count, density,
     cluster_count, and modularity.
     """
+    await check_rate_limit(
+        http_request,
+        endpoint_type="ai_search",
+        is_authenticated=bool(getattr(http_request.state, "user_id", None)),
+    )
     graph_context = request.graph_context
     papers = graph_context.get("papers", [])
     edges = graph_context.get("edges", [])

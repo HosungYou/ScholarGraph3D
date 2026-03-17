@@ -49,3 +49,4 @@ backend/.omc/
 # Build artifacts
 frontend/tsconfig.tsbuildinfo
 frontend/next-env.d.ts
+output/

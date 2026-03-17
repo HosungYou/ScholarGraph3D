@@ -1,14 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { useGraphStore } from '@/hooks/useGraphStore';
 import { STAR_COLOR_MAP } from './cosmic/cosmicConstants';
 
 export default function GraphLegend() {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
   const [guideCollapsed, setGuideCollapsed] = useState(true);
-  const { edgeVisMode, setEdgeVisMode } = useGraphStore();
+  const { edgeVisMode, setEdgeVisMode, selectedPaper } = useGraphStore();
 
   const LEGEND_FIELDS = [
     'Computer Science',
@@ -26,13 +26,21 @@ export default function GraphLegend() {
     .filter(f => STAR_COLOR_MAP[f])
     .map(f => [f, STAR_COLOR_MAP[f].core] as [string, string]);
 
+  useEffect(() => {
+    if (selectedPaper) {
+      setCollapsed(true);
+    }
+  }, [selectedPaper]);
+
   if (collapsed) {
     return (
       <button
         onClick={() => setCollapsed(false)}
-        className="absolute bottom-16 left-4 hud-panel rounded-lg px-2 py-1 text-[10px] font-mono text-[#999999] hover:text-text-primary transition-colors z-10 flex items-center gap-1"
+        className="absolute bottom-16 left-4 z-10 flex items-center gap-2 rounded-xl border border-[rgba(255,255,255,0.06)] bg-[rgba(8,8,8,0.88)] px-3 py-2 text-left font-mono text-[10px] text-[#999999] shadow-[0_10px_24px_rgba(0,0,0,0.28)] backdrop-blur-xl transition-colors hover:text-text-primary"
       >
-        <ChevronUp className="w-3 h-3" /> STAR CHART
+        <ChevronUp className="w-3 h-3 text-[#D4AF37]/70" />
+        <span className="uppercase tracking-[0.16em] text-[#D4AF37]/70">Visual Key</span>
+        <span className="text-[#999999]/45">colors + connections</span>
       </button>
     );
   }
@@ -40,7 +48,7 @@ export default function GraphLegend() {
   return (
     <div className="absolute bottom-16 left-4 hud-panel rounded-lg px-3 py-2.5 text-[10px] font-mono text-[#999999] z-10 max-w-[220px] border border-[#1A1A1A] bg-black/80 backdrop-blur-sm">
       <div className="flex items-center justify-between mb-2">
-        <span className="font-mono uppercase tracking-widest text-[10px] text-[#D4AF37]/60">STAR CHART</span>
+        <span className="font-mono uppercase tracking-widest text-[10px] text-[#D4AF37]/60">VISUAL KEY</span>
         <button
           onClick={() => setCollapsed(true)}
           className="hover:text-text-primary transition-colors"
@@ -97,13 +105,13 @@ export default function GraphLegend() {
       {/* Edge Mode Selector */}
       <div className="mb-1.5 pt-1.5 border-t border-[#1A1A1A]/70">
         <div className="text-[10px] font-mono uppercase tracking-widest text-[#D4AF37]/60 mb-1.5">
-          Edge Mode
+          Connection Coloring
         </div>
         <div className="flex flex-col gap-1">
           {([
-            { mode: 'similarity' as const, label: 'Similarity', desc: 'Intent colors' },
-            { mode: 'temporal' as const, label: 'Temporal', desc: 'Year distance' },
-            { mode: 'crossCluster' as const, label: 'Cross-Cluster', desc: 'Inter-cluster' },
+            { mode: 'similarity' as const, label: 'Context', desc: 'Citation meaning' },
+            { mode: 'temporal' as const, label: 'Time distance', desc: 'Year gap' },
+            { mode: 'crossCluster' as const, label: 'Cross-topic', desc: 'Between clusters' },
           ]).map(({ mode, label, desc }) => (
             <button
               key={mode}
@@ -208,7 +216,7 @@ export default function GraphLegend() {
 
       {/* Cluster */}
       <div className="text-[#999999]/60">
-        Nebula cloud = topic cluster
+        Shaded region = topic area
       </div>
 
       {/* Direction legend */}
@@ -217,11 +225,11 @@ export default function GraphLegend() {
         <div className="flex flex-col gap-0.5">
           <div className="flex items-center gap-2">
             <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#4488FF', opacity: 0.7 }} />
-            <span className="text-[9px]">Reference (선행연구)</span>
+            <span className="text-[9px]">Reference</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#FF8844', opacity: 0.7 }} />
-            <span className="text-[9px]">Citation (후속연구)</span>
+            <span className="text-[9px]">Citation</span>
           </div>
         </div>
       </div>

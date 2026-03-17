@@ -25,6 +25,7 @@ from routers.paper_search import router as paper_search_router
 from routers.seed_chat import router as seed_chat_router
 from routers.gap_report import router as gap_report_router
 from routers.academic_report import router as academic_report_router
+from routers.recommendation_feedback import router as recommendation_feedback_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -120,7 +121,10 @@ if settings.environment == "development":
     _cors_origins = list(set(_cors_origins + [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "http://localhost:3100",
+        "http://127.0.0.1:3100",
         "http://localhost:8000",
+        "http://127.0.0.1:8000",
     ]))
 
 # Allow all Vercel preview/production URLs via regex
@@ -143,6 +147,7 @@ app.include_router(seed_explore_router, tags=["Seed Explore"])
 app.include_router(paper_search_router, tags=["Paper Search"])
 app.include_router(seed_chat_router, tags=["Seed Chat"])
 app.include_router(bookmarks.router, tags=["Bookmarks"])
+app.include_router(recommendation_feedback_router, tags=["Recommendation Feedback"])
 app.include_router(gap_report_router, tags=["Gap Report"])
 app.include_router(academic_report_router, tags=["Academic Report"])
 
@@ -186,19 +191,18 @@ async def health_check():
     except Exception as e:
         logger.error(f"Health check failed: {e}")
 
-    is_healthy = db_status == "connected"
+    persistence_available = db_status == "connected"
+    is_healthy = True
 
     response_data = {
-        "status": "healthy" if is_healthy else "unhealthy",
+        "status": "healthy" if persistence_available else "degraded",
         "database": db_status,
         "pgvector": pgvector_status,
+        "persistence": "available" if persistence_available else "memory-only",
         "auth": "configured" if supabase_client.is_configured() else "not configured",
         "environment": settings.environment,
         "s2_api": "authenticated" if settings.s2_api_key else "unauthenticated",
     }
-
-    if not is_healthy:
-        raise HTTPException(status_code=503, detail=response_data)
 
     return response_data
 

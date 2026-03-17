@@ -460,7 +460,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     }
 
     return { nodes, links };
-  }, [graphData, yearRange, showCitationEdges, showSimilarityEdges, citationIntents, hiddenClusterIds, showGhostEdges, edgeVisMode, hoveredGapEdges, nodeSizeMode, layoutMode]);
+  }, [graphData, yearRange, showCitationEdges, showSimilarityEdges, citationIntents, hiddenClusterIds, showGhostEdges, hoveredGapEdges, nodeSizeMode, layoutMode]);
 
   // Camera auto-focus when paper selected from panel
   useEffect(() => {
@@ -923,7 +923,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
 
       return group;
     },
-    [highlightSet, showLabels, showBloom, bridgeNodeIds, showOARings, showCitationAura, highlightedPaperIds, showCosmicTheme, yearRange, highlightedClusterPair, secondSeedIds]
+    [highlightSet, showLabels, showBloom, showOARings, showCitationAura, highlightedPaperIds, showCosmicTheme, yearRange, highlightedClusterPair, secondSeedIds]
   );
 
   // Link width
@@ -1183,6 +1183,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
   const timelineOverlayRef = useRef<THREE.Group | null>(null);
 
   useEffect(() => {
+    const fgInstance = fgRef.current;
     if (!fgRef.current || !showClusterHulls || !graphData?.clusters.length) {
       if (clusterOverlayRef.current && fgRef.current) {
         try {
@@ -1330,24 +1331,27 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       }
     };
 
-    const interval = setInterval(updateHulls, 1000);
     updateHulls();
+    const interval = layoutMode === 'network'
+      ? setInterval(updateHulls, 1000)
+      : null;
 
     return () => {
-      clearInterval(interval);
-      if (clusterOverlayRef.current && fgRef.current?.scene()) {
+      if (interval) clearInterval(interval);
+      if (clusterOverlayRef.current && fgInstance?.scene()) {
         try {
-          fgRef.current.scene().remove(clusterOverlayRef.current);
+          fgInstance.scene().remove(clusterOverlayRef.current);
         } catch {
           /* scene unavailable */
         }
         clusterOverlayRef.current = null;
       }
     };
-  }, [showClusterHulls, graphData, showCosmicTheme, hiddenClusterIds, fgMounted]);
+  }, [showClusterHulls, graphData, showCosmicTheme, hiddenClusterIds, fgMounted, forceGraphData.nodes, layoutMode]);
 
   // Gap overlay useEffect
   useEffect(() => {
+    const fgInstance = fgRef.current;
     if (!fgRef.current || !showGapOverlay || !graphData?.clusters.length) {
       if (gapOverlayRef.current && fgRef.current) {
         try { fgRef.current.scene().remove(gapOverlayRef.current); } catch {}
@@ -1495,8 +1499,10 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       });
     };
 
-    const interval = setInterval(updateGapOverlay, 1500);
     updateGapOverlay();
+    const interval = layoutMode === 'network'
+      ? setInterval(updateGapOverlay, 1500)
+      : null;
 
     // Animate hotspots
     let animFrame: number;
@@ -1517,14 +1523,14 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     animate();
 
     return () => {
-      clearInterval(interval);
+      if (interval) clearInterval(interval);
       cancelAnimationFrame(animFrame);
-      if (gapOverlayRef.current && fgRef.current?.scene()) {
-        try { fgRef.current.scene().remove(gapOverlayRef.current); } catch {}
+      if (gapOverlayRef.current && fgInstance?.scene()) {
+        try { fgInstance.scene().remove(gapOverlayRef.current); } catch {}
         gapOverlayRef.current = null;
       }
     };
-  }, [showGapOverlay, graphData, fgMounted]);
+  }, [showGapOverlay, graphData, fgMounted, forceGraphData.nodes, layoutMode]);
 
   // Gap Arc: QuadraticBezierCurve3 between highlighted cluster centroids
   useEffect(() => {
@@ -1740,10 +1746,11 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
 
     // Reheat simulation slightly to settle into new positions
     fgRef.current.d3ReheatSimulation?.();
-  }, [showTimeline, graphData]);
+  }, [showTimeline, graphData, forceGraphData.nodes]);
 
   // Timeline mode: year labels and grid lines
   useEffect(() => {
+    const fgInstance = fgRef.current;
     if (!fgRef.current || !graphData) {
       if (timelineOverlayRef.current && fgRef.current) {
         try { fgRef.current.scene().remove(timelineOverlayRef.current); } catch {}
@@ -1848,8 +1855,8 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     createDirectionLabel('Later \u2192', 170);
 
     return () => {
-      if (timelineOverlayRef.current && fgRef.current?.scene()) {
-        try { fgRef.current.scene().remove(timelineOverlayRef.current); } catch {}
+      if (timelineOverlayRef.current && fgInstance?.scene()) {
+        try { fgInstance.scene().remove(timelineOverlayRef.current); } catch {}
         timelineOverlayRef.current = null;
       }
     };
@@ -1857,17 +1864,18 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
 
   // Double-click visual feedback: pulse new nodes for 1.5s after expand
   useEffect(() => {
+    const fgInstance = fgRef.current;
     if (!graphData) return;
     // When node count increases (expand happened), mark new nodes temporarily
     // New nodes will pulse for 1.5s
     if (newNodeTimerRef.current) clearTimeout(newNodeTimerRef.current);
     newNodeTimerRef.current = setTimeout(() => {
       newNodeIdsRef.current = new Set();
-      if (fgRef.current) {
-        try { fgRef.current.refresh(); } catch {}
+      if (fgInstance) {
+        try { fgInstance.refresh(); } catch {}
       }
     }, 1500);
-  }, [graphData?.nodes.length]);
+  }, [graphData, graphData?.nodes.length]);
 
   // Expose ref methods
   useImperativeHandle(ref, () => ({
@@ -2052,6 +2060,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
 
   // Cosmic animation manager lifecycle
   useEffect(() => {
+    const fgInstance = fgRef.current;
     if (showCosmicTheme) {
       const manager = CosmicAnimationManager.getInstance();
       manager.start();
@@ -2073,9 +2082,9 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     }
     return () => {
       // Remove fog when cosmic theme is disabled
-      if (fgRef.current) {
+      if (fgInstance) {
         try {
-          const scene = fgRef.current.scene?.();
+          const scene = fgInstance.scene?.();
           if (scene) scene.fog = null;
         } catch { /* scene unavailable */ }
       }
@@ -2085,8 +2094,10 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
 
   // Cleanup
   useEffect(() => {
+    const hoverTimeout = hoverTimeoutRef.current;
+    const fgInstance = fgRef.current;
     return () => {
-      if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+      if (hoverTimeout) clearTimeout(hoverTimeout);
       if (expandedEdgeTimerRef.current) clearTimeout(expandedEdgeTimerRef.current);
       if (newNodeTimerRef.current) clearTimeout(newNodeTimerRef.current);
 
@@ -2097,7 +2108,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       // Cleanup gap arc
       if (gapArcRef.current) {
         try {
-          const scene = fgRef.current?.scene();
+          const scene = fgInstance?.scene();
           if (scene) scene.remove(gapArcRef.current);
         } catch {}
         gapArcRef.current?.geometry.dispose();
@@ -2111,7 +2122,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       // Cleanup gap arc glow
       if (gapArcGlowRef.current) {
         try {
-          const scene = fgRef.current?.scene();
+          const scene = fgInstance?.scene();
           if (scene) scene.remove(gapArcGlowRef.current);
         } catch {}
         gapArcGlowRef.current.material.dispose();
@@ -2121,7 +2132,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       // Cleanup gap void — remove from scene FIRST, then dispose
       if (gapVoidRef.current) {
         try {
-          const scene = fgRef.current?.scene();
+          const scene = fgInstance?.scene();
           if (scene) scene.remove(gapVoidRef.current);
         } catch {}
         const voidGroup = gapVoidRef.current;
@@ -2141,9 +2152,9 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       CosmicAnimationManager.reset();
 
       // Dispose the WebGL renderer only — this is safe and prevents GPU memory leaks
-      if (fgRef.current) {
+      if (fgInstance) {
         try {
-          const renderer = fgRef.current.renderer();
+          const renderer = fgInstance.renderer();
           if (renderer) {
             renderer.dispose();
             renderer.forceContextLoss();

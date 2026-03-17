@@ -21,6 +21,7 @@ export default function GapSpotterPanel() {
     setGapReportLoading,
     gapReportLoading,
   } = useGraphStore();
+  const [showAllGaps, setShowAllGaps] = useState(false);
 
   const frontierPapers = useMemo(() => {
     if (!graphData) return [];
@@ -28,6 +29,22 @@ export default function GapSpotterPanel() {
       .map((id) => graphData.nodes.find((n) => n.id === id))
       .filter((p): p is NonNullable<typeof p> => p != null);
   }, [frontierIds, graphData]);
+
+  const groupedGaps = useMemo(() => {
+    const critical = gaps.filter(g => g.gap_strength > 0.75);
+    const notable = gaps.filter(g => g.gap_strength > 0.50 && g.gap_strength <= 0.75);
+    const minor = gaps.filter(g => g.gap_strength <= 0.50);
+
+    if (showAllGaps) {
+      return { critical, notable, minor };
+    }
+
+    return {
+      critical: critical.slice(0, 2),
+      notable: notable.slice(0, 2),
+      minor: minor.slice(0, 1),
+    };
+  }, [gaps, showAllGaps]);
 
   const handleGenerateReport = useCallback(async (gap: StructuralGap) => {
     if (!graphData || gapReportLoading) return;
@@ -146,6 +163,50 @@ export default function GapSpotterPanel() {
         )}
       </div>
 
+      {(gaps[0] || frontierPapers[0]) && (
+        <div className="mb-4 grid gap-2">
+          {gaps[0] && (
+            <button
+              onClick={() => {
+                const strongest = gaps[0];
+                setHighlightedClusterPair([strongest.cluster_a.id, strongest.cluster_b.id]);
+                setHoveredGapEdges(strongest.potential_edges);
+              }}
+              className="w-full rounded-lg border border-[rgba(212,175,55,0.14)] bg-[rgba(212,175,55,0.05)] px-3 py-2 text-left transition-colors hover:bg-[rgba(212,175,55,0.08)]"
+            >
+              <div className="text-[9px] font-mono uppercase tracking-wider text-[#D4AF37]/55">
+                Start Here
+              </div>
+              <div className="mt-1 text-[11px] font-mono text-[#D4AF37]/85 leading-snug">
+                Review the strongest gap between {gaps[0].cluster_a.label} and {gaps[0].cluster_b.label}
+              </div>
+              <div className="mt-1 text-[9px] font-mono text-[#999999]/35">
+                {Math.round(gaps[0].gap_strength * 100)}% gap strength · {gaps[0].bridge_papers.length} bridge candidates
+              </div>
+            </button>
+          )}
+          {frontierPapers[0] && (
+            <button
+              onClick={() => {
+                selectPaper(frontierPapers[0]);
+                setPanelSelectionId(frontierPapers[0].id);
+              }}
+              className="w-full rounded-lg border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] px-3 py-2 text-left transition-colors hover:bg-[rgba(255,255,255,0.03)]"
+            >
+              <div className="text-[9px] font-mono uppercase tracking-wider text-[#999999]/40">
+                Or Explore
+              </div>
+              <div className="mt-1 text-[11px] font-mono text-[#999999]/75 leading-snug line-clamp-2">
+                {frontierPapers[0].title}
+              </div>
+              <div className="mt-1 text-[9px] font-mono text-[#999999]/35">
+                Frontier {Math.round((frontierPapers[0].frontier_score || 0) * 100)}% · likely to expand the graph
+              </div>
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Cluster quality warning */}
       {(() => {
         const sil = graphData?.meta?.cluster_silhouette as number | undefined;
@@ -193,20 +254,21 @@ export default function GapSpotterPanel() {
 
       {/* Gap cards grouped by severity */}
       {(() => {
-        const critical = gaps.filter(g => g.gap_strength > 0.75);
-        const notable = gaps.filter(g => g.gap_strength > 0.50 && g.gap_strength <= 0.75);
-        const minor = gaps.filter(g => g.gap_strength <= 0.50);
+        const compactVisibleCount = Math.min(gaps.filter(g => g.gap_strength > 0.75).length, 2)
+          + Math.min(gaps.filter(g => g.gap_strength > 0.50 && g.gap_strength <= 0.75).length, 2)
+          + Math.min(gaps.filter(g => g.gap_strength <= 0.50).length, 1);
+        const hiddenCount = Math.max(0, gaps.length - compactVisibleCount);
 
         return (
           <div className="space-y-3 mb-4">
-            {critical.length > 0 && (
+            {groupedGaps.critical.length > 0 && (
               <div>
                 <div className="flex items-center gap-1.5 mb-1.5">
                   <span className="text-[9px] font-mono font-bold text-[#D4AF37] uppercase tracking-wider">Critical</span>
-                  <span className="text-[8px] font-mono text-[#D4AF37]/40">{critical.length}</span>
+                  <span className="text-[8px] font-mono text-[#D4AF37]/40">{gaps.filter(g => g.gap_strength > 0.75).length}</span>
                 </div>
                 <div className="space-y-2">
-                  {critical.map((gap) => (
+                  {groupedGaps.critical.map((gap) => (
                     <GapCard
                       key={gap.gap_id}
                       gap={gap}
@@ -232,14 +294,14 @@ export default function GapSpotterPanel() {
                 </div>
               </div>
             )}
-            {notable.length > 0 && (
+            {groupedGaps.notable.length > 0 && (
               <div>
                 <div className="flex items-center gap-1.5 mb-1.5">
                   <span className="text-[9px] font-mono font-bold text-[#999999]/60 uppercase tracking-wider">Notable</span>
-                  <span className="text-[8px] font-mono text-[#999999]/30">{notable.length}</span>
+                  <span className="text-[8px] font-mono text-[#999999]/30">{gaps.filter(g => g.gap_strength > 0.50 && g.gap_strength <= 0.75).length}</span>
                 </div>
                 <div className="space-y-2">
-                  {notable.map((gap) => (
+                  {groupedGaps.notable.map((gap) => (
                     <GapCard
                       key={gap.gap_id}
                       gap={gap}
@@ -265,14 +327,14 @@ export default function GapSpotterPanel() {
                 </div>
               </div>
             )}
-            {minor.length > 0 && (
+            {groupedGaps.minor.length > 0 && (
               <div>
                 <div className="flex items-center gap-1.5 mb-1.5">
                   <span className="text-[9px] font-mono font-bold text-[#999999]/30 uppercase tracking-wider">Minor</span>
-                  <span className="text-[8px] font-mono text-[#999999]/20">{minor.length}</span>
+                  <span className="text-[8px] font-mono text-[#999999]/20">{gaps.filter(g => g.gap_strength <= 0.50).length}</span>
                 </div>
                 <div className="space-y-2">
-                  {minor.map((gap) => (
+                  {groupedGaps.minor.map((gap) => (
                     <GapCard
                       key={gap.gap_id}
                       gap={gap}
@@ -297,6 +359,14 @@ export default function GapSpotterPanel() {
                   ))}
                 </div>
               </div>
+            )}
+            {(hiddenCount > 0 || showAllGaps) && (
+              <button
+                onClick={() => setShowAllGaps((current) => !current)}
+                className="w-full rounded-lg border border-[rgba(255,255,255,0.05)] px-3 py-2 text-[10px] font-mono uppercase tracking-wider text-[#999999]/55 transition-colors hover:border-[rgba(212,175,55,0.18)] hover:text-[#D4AF37]"
+              >
+                {showAllGaps ? 'Show Fewer Gaps' : `Show ${hiddenCount} More Gaps`}
+              </button>
             )}
           </div>
         );

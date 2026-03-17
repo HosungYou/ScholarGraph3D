@@ -6,7 +6,13 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint --no-cache",
+    "review:ui": "playwright test -c playwright.config.ts",
+    "review:ui:update": "playwright test -c playwright.config.ts --update-snapshots",
+    "smoke:live": "playwright test -c playwright.config.ts e2e/live-smoke.spec.ts",
+    "review:fixture": "node ./scripts/generate-live-review-fixture.mjs",
+    "review:fixture:direct": "../backend/venv/bin/python ../backend/scripts/generate_review_fixture.py",
+    "review:loop": "bash ./scripts/run-review-loop.sh"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.90.1",
@@ -30,6 +36,7 @@
     "@testing-library/user-event": "^14.6.1",
     "@types/d3": "^7.4.0",
     "@types/jest": "^30.0.0",
+    "@playwright/test": "^1.54.2",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@types/three": "0.152.1",

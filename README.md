@@ -80,3 +80,9 @@ MIT
 ## Documentation
 
 See `docs/` for detailed documentation: PRD, SPEC, ARCHITECTURE, DESIGN_THEME, SDD/TDD Plan, and release notes.
+
+Additional working docs:
+
+- `docs/OPEN_SOURCE_DATA_STRATEGY.md` — provider mix and product direction for an open-source-friendly stack
+- `docs/REVIEW_AUTOMATION_LOOP.md` — deterministic fixture review flow and CLI automation
+- `docs/DEPLOYMENT.md` — deployment topology, required environment variables, and smoke checks

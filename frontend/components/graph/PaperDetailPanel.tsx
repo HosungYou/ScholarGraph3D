@@ -20,6 +20,11 @@ import {
   Tag,
   StickyNote,
   Plus,
+  Sparkles,
+  Link2,
+  ScanSearch,
+  ThumbsDown,
+  ThumbsUp,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import type { Paper } from '@/types';
@@ -49,6 +54,7 @@ export default function PaperDetailPanel({
   isAddingAsSeed = false,
 }: PaperDetailPanelProps) {
   const [showFullAbstract, setShowFullAbstract] = useState(false);
+  const [recommendationFeedback, setRecommendationFeedback] = useState<Record<string, 'relevant' | 'not_now'>>({});
   const {
     graphData,
     expandedFromMap,
@@ -58,7 +64,31 @@ export default function PaperDetailPanel({
     setPathStart,
     setPathEnd,
     setActivePath,
+    selectPaper,
   } = useGraphStore();
+
+  const recommendationStorageKey = 'seed-paper-recommendation-feedback';
+
+  const loadLocalRecommendationFeedback = React.useCallback(() => {
+    try {
+      const raw = localStorage.getItem(recommendationStorageKey);
+      if (!raw) return {};
+      return JSON.parse(raw) as Record<string, 'relevant' | 'not_now'>;
+    } catch {
+      return {};
+    }
+  }, [recommendationStorageKey]);
+
+  const persistLocalRecommendationFeedback = React.useCallback(
+    (nextState: Record<string, 'relevant' | 'not_now'>) => {
+      try {
+        localStorage.setItem(recommendationStorageKey, JSON.stringify(nextState));
+      } catch {
+        // Best-effort browser-side preference storage.
+      }
+    },
+    [recommendationStorageKey]
+  );
 
   const relationshipSummary = React.useMemo(() => {
     if (!graphData || !paper) return null;
@@ -82,6 +112,29 @@ export default function PaperDetailPanel({
     return graphData.nodes.find(n => n.id === parentId) || null;
   }, [expandedFromMap, paper, graphData]);
 
+  const provenanceTrail = useMemo(() => {
+    if (!graphData || !paper) return [];
+
+    const trail: string[] = [];
+    const seedPaperId = graphData.meta?.seed_paper_id;
+    const seedPaper = seedPaperId
+      ? graphData.nodes.find((node) => node.id === seedPaperId)
+      : null;
+
+    if (seedPaper && seedPaper.id !== paper.id) {
+      trail.push(seedPaper.title);
+    } else if (!seedPaper && paper.cluster_label) {
+      trail.push(paper.cluster_label);
+    }
+
+    if (parentPaper && parentPaper.id !== paper.id && parentPaper.id !== seedPaper?.id) {
+      trail.push(parentPaper.title);
+    }
+
+    trail.push(paper.title);
+    return trail;
+  }, [graphData, paper, parentPaper]);
+
   const citationPercentile = useMemo(() => {
     if (!graphData || !paper) return 0;
     const sorted = [...graphData.nodes].sort((a, b) => b.citation_count - a.citation_count);
@@ -104,9 +157,155 @@ export default function PaperDetailPanel({
   const [tagInput, setTagInput] = useState('');
   const [memoText, setMemoText] = useState('');
 
+  const inGraphCounts = useMemo(() => {
+    if (!graphData) return { references: 0, citedBy: 0 };
+
+    return {
+      references: graphData.edges.filter(
+        (e) => e.type === 'citation' && e.source === paper.id
+      ).length,
+      citedBy: graphData.edges.filter(
+        (e) => e.type === 'citation' && e.target === paper.id
+      ).length,
+    };
+  }, [graphData, paper.id]);
+
+  const actionPreview = useMemo(() => {
+    const cues: string[] = [];
+
+    if (paper.frontier_score && paper.frontier_score >= 0.65) {
+      cues.push('high frontier score');
+    }
+    if (paper.is_bridge) {
+      cues.push('bridge across clusters');
+    }
+    if (inGraphCounts.references > 0 || inGraphCounts.citedBy > 0) {
+      cues.push(`${inGraphCounts.references + inGraphCounts.citedBy} linked papers already in this workspace`);
+    }
+
+    return cues.slice(0, 2);
+  }, [inGraphCounts.citedBy, inGraphCounts.references, paper.frontier_score, paper.is_bridge]);
+
+  const recommendedPapers = useMemo(() => {
+    if (!graphData) return [];
+
+    return graphData.nodes
+      .filter((candidate) => candidate.id !== paper.id)
+      .map((candidate) => {
+        const hasCitationLink = graphData.edges.some(
+          (edge) =>
+            edge.type === 'citation' &&
+            ((edge.source === paper.id && edge.target === candidate.id) ||
+              (edge.target === paper.id && edge.source === candidate.id))
+        );
+        const hasSimilarityLink = graphData.edges.some(
+          (edge) =>
+            edge.type === 'similarity' &&
+            ((edge.source === paper.id && edge.target === candidate.id) ||
+              (edge.target === paper.id && edge.source === candidate.id))
+        );
+
+        let score = 0;
+        const reasons: string[] = [];
+
+        if (candidate.cluster_id === paper.cluster_id) {
+          score += 3;
+          reasons.push('same cluster');
+        }
+        if (candidate.is_bridge) {
+          score += 2.5;
+          reasons.push('bridge');
+        }
+        if ((candidate.frontier_score || 0) >= 0.55) {
+          score += 2;
+          reasons.push('high frontier');
+        }
+        if (hasCitationLink) {
+          score += 2;
+          reasons.push('citation-linked');
+        }
+        if (hasSimilarityLink) {
+          score += 1.5;
+          reasons.push('semantically close');
+        }
+        score += Math.min(2, Math.log10((candidate.citation_count || 0) + 1) / 2);
+
+        const feedback = recommendationFeedback[`${paper.id}:${candidate.id}`];
+        if (feedback === 'relevant') {
+          score += 1;
+          reasons.unshift('you marked relevant');
+        } else if (feedback === 'not_now') {
+          score -= 2;
+          reasons.unshift('hidden by your feedback');
+        }
+
+        return { paper: candidate, score, reasons: reasons.slice(0, 2) };
+      })
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 4);
+  }, [graphData, paper.cluster_id, paper.id, recommendationFeedback]);
+
+  React.useEffect(() => {
+    if (!paper?.id) {
+      setRecommendationFeedback({});
+      return;
+    }
+
+    let cancelled = false;
+
+    if (!user) {
+      setRecommendationFeedback(loadLocalRecommendationFeedback());
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const localState = loadLocalRecommendationFeedback();
+    const localEntriesForPaper = Object.entries(localState).filter(([key]) =>
+      key.startsWith(`${paper.id}:`)
+    );
+
+    api.getRecommendationFeedback(paper.id)
+      .then((items) => {
+        if (cancelled) return;
+
+        const serverState = items.reduce<Record<string, 'relevant' | 'not_now'>>((acc, item) => {
+          acc[`${item.source_paper_id}:${item.candidate_paper_id}`] = item.feedback;
+          return acc;
+        }, {});
+
+        const mergedState = { ...serverState };
+
+        for (const [key, value] of localEntriesForPaper) {
+          if (!mergedState[key]) {
+            mergedState[key] = value;
+            const candidateId = key.split(':').slice(1).join(':');
+            void api.upsertRecommendationFeedback({
+              source_paper_id: paper.id,
+              candidate_paper_id: candidateId,
+              feedback: value,
+            }).catch(() => {
+              // Keep local fallback if sync fails.
+            });
+          }
+        }
+
+        setRecommendationFeedback(mergedState);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setRecommendationFeedback(localState);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loadLocalRecommendationFeedback, paper?.id, user]);
+
   // Fetch bookmark when paper changes
   React.useEffect(() => {
-    if (!user || !paper) {
+    if (!user || !paper?.id) {
       setBookmark(null);
       return;
     }
@@ -133,7 +332,14 @@ export default function PaperDetailPanel({
         setShowBookmarkEditor(false);
         setMemoText('');
       } else {
-        const bm = await api.createBookmark({ paper_id: paper.id });
+        const bm = await api.createBookmark({
+          paper_id: paper.id,
+          paper_title: paper.title,
+          paper_authors: paper.authors.map((author) => author.name).filter(Boolean),
+          paper_year: paper.year,
+          paper_venue: paper.venue,
+          paper_citation_count: paper.citation_count,
+        });
         setBookmark(bm);
         setMemoText('');
         setShowBookmarkEditor(true);
@@ -142,6 +348,41 @@ export default function PaperDetailPanel({
       console.error('Bookmark toggle failed:', err);
     } finally {
       setBookmarkLoading(false);
+    }
+  };
+
+  const recordRecommendationFeedback = async (candidateId: string, value: 'relevant' | 'not_now') => {
+    const key = `${paper.id}:${candidateId}`;
+    const nextValue = recommendationFeedback[key] === value ? undefined : value;
+    const nextState = { ...recommendationFeedback };
+
+    if (nextValue) {
+      nextState[key] = nextValue;
+    } else {
+      delete nextState[key];
+    }
+
+    setRecommendationFeedback(nextState);
+
+    if (!user) {
+      persistLocalRecommendationFeedback(nextState);
+      return;
+    }
+
+    try {
+      if (nextValue) {
+        await api.upsertRecommendationFeedback({
+          source_paper_id: paper.id,
+          candidate_paper_id: candidateId,
+          feedback: nextValue,
+        });
+      } else {
+        await api.deleteRecommendationFeedback(paper.id, candidateId);
+      }
+      persistLocalRecommendationFeedback(nextState);
+    } catch (err) {
+      setRecommendationFeedback(recommendationFeedback);
+      console.error('Recommendation feedback sync failed:', err);
     }
   };
 
@@ -188,12 +429,30 @@ export default function PaperDetailPanel({
       <div className="flex items-start justify-between mb-1">
         <div className="flex-1 mr-3">
           <div className="flex items-center gap-2 mb-1.5">
-            <span className="hud-label text-[#D4AF37]/50">OBJECT SCAN</span>
+            <span className="hud-label text-[#D4AF37]/50">SELECTED PAPER</span>
             <div className="flex-1 h-px bg-gradient-to-r from-[rgba(255,255,255,0.1)] to-transparent" />
           </div>
           <h2 className="text-base font-semibold leading-snug text-text-primary">
             {paper.title}
           </h2>
+          {provenanceTrail.length > 1 && (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              {provenanceTrail.map((step, index) => (
+                <React.Fragment key={`${step}-${index}`}>
+                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-mono ${
+                    index === provenanceTrail.length - 1
+                      ? 'border-[rgba(212,175,55,0.22)] bg-[rgba(212,175,55,0.08)] text-[#D4AF37]'
+                      : 'border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] text-[#999999]/70'
+                  }`}>
+                    {step.length > 38 ? `${step.slice(0, 38)}...` : step}
+                  </span>
+                  {index < provenanceTrail.length - 1 && (
+                    <span className="text-[10px] font-mono text-[#999999]/25">→</span>
+                  )}
+                </React.Fragment>
+              ))}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
           <button
@@ -243,6 +502,121 @@ export default function PaperDetailPanel({
       )}
 
       <div className="hud-divider my-4" />
+
+      <div className="mb-4 rounded-xl border border-[rgba(212,175,55,0.14)] bg-[linear-gradient(180deg,rgba(212,175,55,0.08),rgba(255,255,255,0.02))] p-3">
+        <div className="flex items-center gap-2 mb-2">
+          <Sparkles className="w-3.5 h-3.5 text-[#D4AF37]" />
+          <span className="hud-label text-[#D4AF37]/80">Recommended Next Step</span>
+        </div>
+        <p className="text-xs text-text-primary leading-relaxed">
+          Grow this area if you want to pull in the closest references and citing papers around the current workspace.
+        </p>
+        {actionPreview.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {actionPreview.map((cue) => (
+              <span
+                key={cue}
+                className="rounded-full border border-[rgba(212,175,55,0.18)] bg-[rgba(212,175,55,0.07)] px-2 py-0.5 text-[10px] font-mono text-[#D4AF37]/85"
+              >
+                {cue}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div
+        data-testid="expand-preview"
+        className="mb-4 rounded-xl border border-[rgba(255,255,255,0.05)] bg-[rgba(255,255,255,0.02)] p-3"
+      >
+        <div className="flex items-center gap-2 mb-2">
+          <Network className="w-3.5 h-3.5 text-[#00E5FF]/80" />
+          <span className="hud-label text-[#00E5FF]/75">Expand Preview</span>
+        </div>
+        <p className="text-[11px] leading-relaxed text-[#999999]/72">
+          Expanding searches both directions around this paper, merges only unseen papers into the workspace, and preserves your current layout context.
+        </p>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <div className="rounded-lg border border-[rgba(255,255,255,0.04)] bg-[rgba(255,255,255,0.015)] px-2.5 py-2">
+            <div className="hud-label mb-1">Already Linked</div>
+            <div className="text-sm text-text-primary">{inGraphCounts.references + inGraphCounts.citedBy}</div>
+          </div>
+          <div className="rounded-lg border border-[rgba(255,255,255,0.04)] bg-[rgba(255,255,255,0.015)] px-2.5 py-2">
+            <div className="hud-label mb-1">Similarity Neighbors</div>
+            <div className="text-sm text-text-primary">{relationshipSummary?.similarEdges || 0}</div>
+          </div>
+        </div>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          <span className="rounded-full border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] px-2 py-0.5 text-[10px] font-mono text-[#E5E5E5]">
+            {inGraphCounts.references} references already here
+          </span>
+          <span className="rounded-full border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] px-2 py-0.5 text-[10px] font-mono text-[#E5E5E5]">
+            {inGraphCounts.citedBy} citing papers already here
+          </span>
+          {paper.is_bridge && (
+            <span className="rounded-full border border-[rgba(212,175,55,0.18)] bg-[rgba(212,175,55,0.07)] px-2 py-0.5 text-[10px] font-mono text-[#D4AF37]/85">
+              likely bridge candidate
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="mb-4 flex flex-col gap-2">
+        <div className="rounded-xl border border-[rgba(255,255,255,0.05)] bg-[rgba(255,255,255,0.02)] p-3">
+          <div className="flex items-center gap-2 mb-1.5">
+            <ScanSearch className="w-3.5 h-3.5 text-[#D4AF37]/80" />
+            <span className="hud-label text-[#D4AF37]/70">Primary Research Actions</span>
+          </div>
+          <p className="text-[11px] leading-relaxed text-[#999999]/70">
+            Grow the local literature neighborhood first, then promote this paper into a co-anchor only if it deserves to reshape the whole workspace.
+          </p>
+        </div>
+        <button
+          onClick={onExpand}
+          disabled={isExpanding}
+          className="hud-button flex items-center justify-center gap-2 w-full py-2.5 rounded-lg uppercase text-xs tracking-wider disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {isExpanding ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              EXPANDING...
+            </>
+          ) : (
+            <>
+              <Network className="w-4 h-4" />
+              GROW THIS AREA
+            </>
+          )}
+        </button>
+        <div className="px-1 text-[10px] font-mono text-[#999999]/45">
+          Adds references and citing papers around this paper.
+        </div>
+
+        {onAddAsSeed && (
+          <>
+            <button
+              onClick={onAddAsSeed}
+              disabled={isAddingAsSeed || isExpanding}
+              className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg uppercase text-xs tracking-wider transition-all border border-[rgba(0,229,255,0.15)] bg-[rgba(0,229,255,0.05)] hover:bg-[rgba(0,229,255,0.12)] text-[#00E5FF]/70 hover:text-[#00E5FF] disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {isAddingAsSeed ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  MERGING NETWORK...
+                </>
+              ) : (
+                <>
+                  <Link2 className="w-4 h-4" />
+                  COMPARE AS SECOND ANCHOR
+                </>
+              )}
+            </button>
+            <div className="px-1 text-[10px] font-mono text-[#999999]/45">
+              Merge a second anchor if this paper deserves to reshape the workspace.
+            </div>
+          </>
+        )}
+      </div>
 
       {/* ── Bookmark Editor ── */}
       {user && bookmark && showBookmarkEditor && (
@@ -459,7 +833,7 @@ export default function PaperDetailPanel({
           <div className="hud-divider my-4" />
           <div>
             <div className="flex items-center gap-2 mb-3">
-              <span className="hud-label text-[#D4AF37]/50">Graph Relationships</span>
+              <span className="hud-label text-[#D4AF37]/50">In This Workspace</span>
               <div className="flex-1 h-px bg-gradient-to-r from-[rgba(255,255,255,0.08)] to-transparent" />
             </div>
             <div className="grid grid-cols-2 gap-2 text-xs font-mono">
@@ -498,6 +872,80 @@ export default function PaperDetailPanel({
         <InGraphConnections paper={paper} graphData={graphData} />
       )}
 
+      {recommendedPapers.length > 0 && (
+        <>
+          <div className="hud-divider my-4" />
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="hud-label text-[#D4AF37]/50">Suggested Next Papers</span>
+              <div className="flex-1 h-px bg-gradient-to-r from-[rgba(255,255,255,0.08)] to-transparent" />
+            </div>
+            <p className="mb-2 text-[10px] font-mono text-[#999999]/35 leading-relaxed">
+              Ranked from the current workspace. Mark strong fits to bias the next suggestions in this browser.
+            </p>
+            <div className="space-y-2">
+              {recommendedPapers.map(({ paper: candidate, reasons }) => (
+                <div
+                  key={candidate.id}
+                  className="rounded-xl border border-[rgba(255,255,255,0.05)] bg-[rgba(255,255,255,0.02)] p-3 transition-all hover:border-[rgba(212,175,55,0.18)] hover:bg-[rgba(212,175,55,0.05)]"
+                >
+                  <button
+                    onClick={() => {
+                      selectPaper(candidate);
+                      window.dispatchEvent(new CustomEvent('focusPaper', { detail: { paperId: candidate.id } }));
+                    }}
+                    className="w-full text-left"
+                  >
+                    <div className="line-clamp-2 text-sm text-text-primary">
+                      {candidate.title}
+                    </div>
+                    <div className="mt-1 text-[10px] font-mono text-[#999999]/45">
+                      {candidate.year} · {(candidate.citation_count || 0).toLocaleString()} citations
+                    </div>
+                  </button>
+                  {reasons.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {reasons.map((reason) => (
+                        <span
+                          key={`${candidate.id}-${reason}`}
+                          className="rounded-full border border-[rgba(212,175,55,0.16)] bg-[rgba(212,175,55,0.07)] px-2 py-0.5 text-[10px] font-mono text-[#D4AF37]/85"
+                        >
+                          {reason}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      onClick={() => recordRecommendationFeedback(candidate.id, 'relevant')}
+                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[9px] font-mono transition-colors ${
+                        recommendationFeedback[`${paper.id}:${candidate.id}`] === 'relevant'
+                          ? 'border border-[#2ECC71]/35 bg-[#2ECC71]/10 text-[#2ECC71]'
+                          : 'border border-[rgba(255,255,255,0.05)] text-[#999999]/55 hover:border-[#2ECC71]/25 hover:text-[#2ECC71]'
+                      }`}
+                    >
+                      <ThumbsUp className="w-3 h-3" />
+                      Relevant
+                    </button>
+                    <button
+                      onClick={() => recordRecommendationFeedback(candidate.id, 'not_now')}
+                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[9px] font-mono transition-colors ${
+                        recommendationFeedback[`${paper.id}:${candidate.id}`] === 'not_now'
+                          ? 'border border-[#999999]/20 bg-[rgba(255,255,255,0.05)] text-[#999999]'
+                          : 'border border-[rgba(255,255,255,0.05)] text-[#999999]/55 hover:border-[rgba(255,255,255,0.12)] hover:text-[#999999]'
+                      }`}
+                    >
+                      <ThumbsDown className="w-3 h-3" />
+                      Not now
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
       {/* ── Expanded From ── */}
       {parentPaper && (
         <>
@@ -521,184 +969,9 @@ export default function PaperDetailPanel({
         </>
       )}
 
-      {/* ── Actions ── */}
+      {/* ── External Actions ── */}
       <div className="hud-divider my-4" />
       <div className="flex flex-col gap-2">
-        <button
-          onClick={onExpand}
-          disabled={isExpanding}
-          className="hud-button flex items-center justify-center gap-2 w-full py-2.5 rounded-lg uppercase text-xs tracking-wider disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          {isExpanding ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin" />
-              EXPANDING...
-            </>
-          ) : (
-            <>
-              <Network className="w-4 h-4" />
-              EXPAND NETWORK
-            </>
-          )}
-        </button>
-
-        {onAddAsSeed && (
-          <button
-            onClick={onAddAsSeed}
-            disabled={isAddingAsSeed || isExpanding}
-            className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg uppercase text-xs tracking-wider transition-all border border-[rgba(0,229,255,0.15)] bg-[rgba(0,229,255,0.05)] hover:bg-[rgba(0,229,255,0.12)] text-[#00E5FF]/70 hover:text-[#00E5FF] disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {isAddingAsSeed ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                MERGING NETWORK...
-              </>
-            ) : (
-              <>
-                <Network className="w-4 h-4" />
-                ADD AS SECOND SEED
-              </>
-            )}
-          </button>
-        )}
-
-        {/* Citation Path Finder */}
-        <div className="hud-panel-clean rounded-lg p-3">
-          <div className="flex items-center gap-1.5 mb-1">
-            <RouteIcon className="w-3 h-3 text-[#999999]/50" />
-            <span className="hud-label">Citation Path Finder</span>
-          </div>
-          <p className="text-[9px] font-mono text-[#999999]/35 mb-2 leading-relaxed">
-            Trace the intellectual lineage between two papers
-          </p>
-          <div className="flex flex-col gap-1.5">
-            <button
-              onClick={() => {
-                if (pathStart === paper.id) {
-                  setPathStart(null);
-                } else {
-                  setPathStart(paper.id);
-                  setActivePath(null);
-                }
-              }}
-              className={`flex items-center justify-center gap-2 w-full px-3 py-2 rounded-lg text-[10px] font-mono uppercase tracking-wider transition-all border ${
-                pathStart === paper.id
-                  ? 'bg-[#D4AF37]/15 text-[#D4AF37] border-[#D4AF37]/30 shadow-[0_0_8px_rgba(212,175,55,0.12)]'
-                  : 'bg-[rgba(255,255,255,0.02)] hover:bg-[rgba(255,255,255,0.03)] text-[#999999] border-[rgba(255,255,255,0.04)] hover:border-[rgba(255,255,255,0.08)]'
-              }`}
-            >
-              {pathStart === paper.id ? 'PATH START SET' : 'SET AS PATH START'}
-            </button>
-            <button
-              onClick={() => {
-                if (pathEnd === paper.id) {
-                  setPathEnd(null);
-                } else {
-                  setPathEnd(paper.id);
-                  setActivePath(null);
-                }
-              }}
-              className={`flex items-center justify-center gap-2 w-full px-3 py-2 rounded-lg text-[10px] font-mono uppercase tracking-wider transition-all border ${
-                pathEnd === paper.id
-                  ? 'bg-[#D4AF37]/15 text-[#D4AF37] border-[#D4AF37]/30 shadow-[0_0_8px_rgba(212,175,55,0.1)]'
-                  : 'bg-[rgba(255,255,255,0.02)] hover:bg-[rgba(255,255,255,0.03)] text-[#999999] border-[rgba(255,255,255,0.04)] hover:border-[rgba(255,255,255,0.08)]'
-              }`}
-            >
-              {pathEnd === paper.id ? 'PATH END SET' : 'SET AS PATH END'}
-            </button>
-            {pathStart && pathEnd && pathStart !== paper.id && pathEnd !== paper.id && (
-              <div className="text-[10px] text-[#999999]/40 text-center font-mono py-1">
-                Start + End selected — open either paper to find path
-              </div>
-            )}
-            {pathStart && pathEnd && (pathStart === paper.id || pathEnd === paper.id) && pathStart !== pathEnd && (
-              <button
-                onClick={() => {
-                  if (!graphData) return;
-                  const path = findCitationPath(pathStart!, pathEnd!, graphData.edges);
-                  setActivePath(path);
-                }}
-                className="flex items-center justify-center gap-2 w-full px-3 py-2 bg-[#D4AF37]/10 hover:bg-[#D4AF37]/18 text-[#D4AF37] rounded-lg text-[10px] font-mono uppercase tracking-wider transition-all border border-[#D4AF37]/20 hover:shadow-[0_0_12px_rgba(212,175,55,0.08)]"
-              >
-                <RouteIcon className="w-3 h-3" />
-                FIND PATH
-              </button>
-            )}
-            {activePath && (
-              <div className="mt-1">
-                {activePath.length > 0 ? (
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-[10px] font-mono text-[#D4AF37]">
-                        Path: {activePath.length} nodes
-                      </span>
-                      <button
-                        onClick={() => { setActivePath(null); setPathStart(null); setPathEnd(null); }}
-                        className="text-[9px] font-mono text-[#999999]/40 hover:text-[#999999] transition-colors"
-                      >
-                        clear
-                      </button>
-                    </div>
-                    <div className="space-y-0.5">
-                      {activePath.map((nodeId, idx) => {
-                        const pathPaper = graphData?.nodes.find(n => n.id === nodeId);
-                        const nextPaper = idx < activePath.length - 1
-                          ? graphData?.nodes.find(n => n.id === activePath[idx + 1])
-                          : null;
-                        const yearGap = pathPaper?.year && nextPaper?.year
-                          ? Math.abs(nextPaper.year - pathPaper.year)
-                          : null;
-                        return (
-                          <div key={nodeId}>
-                            <button
-                              onClick={() => {
-                                if (pathPaper) {
-                                  const store = useGraphStore.getState();
-                                  store.selectPaper(pathPaper);
-                                }
-                              }}
-                              className="w-full text-left px-2 py-1 rounded hover:bg-[rgba(212,175,55,0.06)] transition-colors group"
-                            >
-                              <div className="flex items-center gap-1.5">
-                                <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                                  idx === 0 ? 'bg-[#2ECC71]' : idx === activePath.length - 1 ? 'bg-[#E74C3C]' : 'bg-[#D4AF37]'
-                                }`} />
-                                <span className="text-[10px] font-mono text-[#999999]/70 line-clamp-1 group-hover:text-[#D4AF37] transition-colors">
-                                  {pathPaper?.title || nodeId}
-                                </span>
-                              </div>
-                              {pathPaper && (
-                                <div className="text-[9px] font-mono text-[#999999]/30 ml-3 mt-0.5">
-                                  {pathPaper.year} · {(pathPaper.citation_count || 0).toLocaleString()} cit.
-                                </div>
-                              )}
-                            </button>
-                            {yearGap != null && idx < activePath.length - 1 && (
-                              <div className="text-[8px] font-mono text-[#999999]/20 text-center py-0.5">
-                                ↓ {yearGap} yr gap
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-[10px] font-mono text-center py-1">
-                    <span className="text-red-400">No path found</span>
-                    <button
-                      onClick={() => { setActivePath(null); setPathStart(null); setPathEnd(null); }}
-                      className="ml-2 text-[#999999]/40 hover:text-[#999999] transition-colors"
-                    >
-                      clear
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-
         {/* External links */}
         {paper.oa_url && (
           <a
@@ -724,22 +997,169 @@ export default function PaperDetailPanel({
         )}
 
         {/* Export buttons */}
-        <div className="flex gap-2">
-          <button
-            onClick={() => downloadFile(toBibtex(paper), `${paper.id}.bib`, 'text/plain')}
-            className="flex items-center justify-center gap-1.5 flex-1 px-3 py-2 rounded-lg text-[10px] font-mono uppercase tracking-wider text-[#999999] transition-all border border-[rgba(255,255,255,0.04)] hover:border-[rgba(255,255,255,0.08)] hover:bg-[rgba(255,255,255,0.02)]"
-          >
-            <Download className="w-3 h-3" />
-            BibTeX
-          </button>
-          <button
-            onClick={() => downloadFile(toRIS(paper), `${paper.id}.ris`, 'text/plain')}
-            className="flex items-center justify-center gap-1.5 flex-1 px-3 py-2 rounded-lg text-[10px] font-mono uppercase tracking-wider text-[#999999] transition-all border border-[rgba(255,255,255,0.04)] hover:border-[rgba(255,255,255,0.08)] hover:bg-[rgba(255,255,255,0.02)]"
-          >
-            <Download className="w-3 h-3" />
-            RIS
-          </button>
-        </div>
+        <details className="group rounded-xl border border-[rgba(255,255,255,0.05)] bg-[rgba(255,255,255,0.015)] p-3">
+          <summary className="flex cursor-pointer list-none items-center gap-2">
+            <RouteIcon className="w-3.5 h-3.5 text-[#999999]/60" />
+            <span className="hud-label text-[#999999]/75">Advanced Tools</span>
+            <div className="flex-1" />
+            <ChevronDown className="w-3.5 h-3.5 text-[#999999]/40 transition-transform group-open:rotate-180" />
+          </summary>
+
+          <div className="mt-3 flex flex-col gap-2">
+            <div className="hud-panel-clean rounded-lg p-3">
+              <div className="flex items-center gap-1.5 mb-1">
+                <RouteIcon className="w-3 h-3 text-[#999999]/50" />
+                <span className="hud-label">Citation Path Finder</span>
+              </div>
+              <p className="text-[9px] font-mono text-[#999999]/35 mb-2 leading-relaxed">
+                Trace the citation path between two selected papers.
+              </p>
+              <div className="flex flex-col gap-1.5">
+                <button
+                  onClick={() => {
+                    if (pathStart === paper.id) {
+                      setPathStart(null);
+                    } else {
+                      setPathStart(paper.id);
+                      setActivePath(null);
+                    }
+                  }}
+                  className={`flex items-center justify-center gap-2 w-full px-3 py-2 rounded-lg text-[10px] font-mono uppercase tracking-wider transition-all border ${
+                    pathStart === paper.id
+                      ? 'bg-[#D4AF37]/15 text-[#D4AF37] border-[#D4AF37]/30 shadow-[0_0_8px_rgba(212,175,55,0.12)]'
+                      : 'bg-[rgba(255,255,255,0.02)] hover:bg-[rgba(255,255,255,0.03)] text-[#999999] border-[rgba(255,255,255,0.04)] hover:border-[rgba(255,255,255,0.08)]'
+                  }`}
+                >
+                  {pathStart === paper.id ? 'PATH START SET' : 'SET AS PATH START'}
+                </button>
+                <button
+                  onClick={() => {
+                    if (pathEnd === paper.id) {
+                      setPathEnd(null);
+                    } else {
+                      setPathEnd(paper.id);
+                      setActivePath(null);
+                    }
+                  }}
+                  className={`flex items-center justify-center gap-2 w-full px-3 py-2 rounded-lg text-[10px] font-mono uppercase tracking-wider transition-all border ${
+                    pathEnd === paper.id
+                      ? 'bg-[#D4AF37]/15 text-[#D4AF37] border-[#D4AF37]/30 shadow-[0_0_8px_rgba(212,175,55,0.1)]'
+                      : 'bg-[rgba(255,255,255,0.02)] hover:bg-[rgba(255,255,255,0.03)] text-[#999999] border-[rgba(255,255,255,0.04)] hover:border-[rgba(255,255,255,0.08)]'
+                  }`}
+                >
+                  {pathEnd === paper.id ? 'PATH END SET' : 'SET AS PATH END'}
+                </button>
+                {pathStart && pathEnd && pathStart !== paper.id && pathEnd !== paper.id && (
+                  <div className="text-[10px] text-[#999999]/40 text-center font-mono py-1">
+                    Start + End selected. Open either paper to find the path.
+                  </div>
+                )}
+                {pathStart && pathEnd && (pathStart === paper.id || pathEnd === paper.id) && pathStart !== pathEnd && (
+                  <button
+                    onClick={() => {
+                      if (!graphData) return;
+                      const path = findCitationPath(pathStart!, pathEnd!, graphData.edges);
+                      setActivePath(path);
+                    }}
+                    className="flex items-center justify-center gap-2 w-full px-3 py-2 bg-[#D4AF37]/10 hover:bg-[#D4AF37]/18 text-[#D4AF37] rounded-lg text-[10px] font-mono uppercase tracking-wider transition-all border border-[#D4AF37]/20 hover:shadow-[0_0_12px_rgba(212,175,55,0.08)]"
+                  >
+                    <RouteIcon className="w-3 h-3" />
+                    FIND PATH
+                  </button>
+                )}
+                {activePath && (
+                  <div className="mt-1">
+                    {activePath.length > 0 ? (
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-[10px] font-mono text-[#D4AF37]">
+                            Path: {activePath.length} nodes
+                          </span>
+                          <button
+                            onClick={() => { setActivePath(null); setPathStart(null); setPathEnd(null); }}
+                            className="text-[9px] font-mono text-[#999999]/40 hover:text-[#999999] transition-colors"
+                          >
+                            clear
+                          </button>
+                        </div>
+                        <div className="space-y-0.5">
+                          {activePath.map((nodeId, idx) => {
+                            const pathPaper = graphData?.nodes.find(n => n.id === nodeId);
+                            const nextPaper = idx < activePath.length - 1
+                              ? graphData?.nodes.find(n => n.id === activePath[idx + 1])
+                              : null;
+                            const yearGap = pathPaper?.year && nextPaper?.year
+                              ? Math.abs(nextPaper.year - pathPaper.year)
+                              : null;
+                            return (
+                              <div key={nodeId}>
+                                <button
+                                  onClick={() => {
+                                    if (pathPaper) {
+                                      const store = useGraphStore.getState();
+                                      store.selectPaper(pathPaper);
+                                    }
+                                  }}
+                                  className="w-full text-left px-2 py-1 rounded hover:bg-[rgba(212,175,55,0.06)] transition-colors group"
+                                >
+                                  <div className="flex items-center gap-1.5">
+                                    <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                                      idx === 0 ? 'bg-[#2ECC71]' : idx === activePath.length - 1 ? 'bg-[#E74C3C]' : 'bg-[#D4AF37]'
+                                    }`} />
+                                    <span className="text-[10px] font-mono text-[#999999]/70 line-clamp-1 group-hover:text-[#D4AF37] transition-colors">
+                                      {pathPaper?.title || nodeId}
+                                    </span>
+                                  </div>
+                                  {pathPaper && (
+                                    <div className="text-[9px] font-mono text-[#999999]/30 ml-3 mt-0.5">
+                                      {pathPaper.year} · {(pathPaper.citation_count || 0).toLocaleString()} cit.
+                                    </div>
+                                  )}
+                                </button>
+                                {yearGap != null && idx < activePath.length - 1 && (
+                                  <div className="text-[8px] font-mono text-[#999999]/20 text-center py-0.5">
+                                    ↓ {yearGap} yr gap
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-[10px] font-mono text-center py-1">
+                        <span className="text-red-400">No path found</span>
+                        <button
+                          onClick={() => { setActivePath(null); setPathStart(null); setPathEnd(null); }}
+                          className="ml-2 text-[#999999]/40 hover:text-[#999999] transition-colors"
+                        >
+                          clear
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => downloadFile(toBibtex(paper), `${paper.id}.bib`, 'text/plain')}
+                className="flex items-center justify-center gap-1.5 flex-1 px-3 py-2 rounded-lg text-[10px] font-mono uppercase tracking-wider text-[#999999] transition-all border border-[rgba(255,255,255,0.04)] hover:border-[rgba(255,255,255,0.08)] hover:bg-[rgba(255,255,255,0.02)]"
+              >
+                <Download className="w-3 h-3" />
+                BibTeX
+              </button>
+              <button
+                onClick={() => downloadFile(toRIS(paper), `${paper.id}.ris`, 'text/plain')}
+                className="flex items-center justify-center gap-1.5 flex-1 px-3 py-2 rounded-lg text-[10px] font-mono uppercase tracking-wider text-[#999999] transition-all border border-[rgba(255,255,255,0.04)] hover:border-[rgba(255,255,255,0.08)] hover:bg-[rgba(255,255,255,0.02)]"
+              >
+                <Download className="w-3 h-3" />
+                RIS
+              </button>
+            </div>
+          </div>
+        </details>
       </div>
     </div>
   );

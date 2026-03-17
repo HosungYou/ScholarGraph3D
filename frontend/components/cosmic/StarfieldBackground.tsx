@@ -19,12 +19,14 @@ const StarfieldBackground = forwardRef<StarfieldBackgroundRef>((_, ref) => {
   const warpFrameRef = useRef<number>(0);
   const disposedRef = useRef(false);
 
-  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
-  const starCount = isMobile ? 2000 : 4000;
-  const dpr = typeof window !== 'undefined' ? (isMobile ? Math.min(window.devicePixelRatio, 1.5) : Math.min(window.devicePixelRatio, 2)) : 1;
-
   useEffect(() => {
-    if (!containerRef.current) return;
+    const containerEl = containerRef.current;
+    if (!containerEl) return;
+    const isMobile = window.innerWidth < 768;
+    const starCount = isMobile ? 2000 : 4000;
+    const dpr = isMobile
+      ? Math.min(window.devicePixelRatio, 1.5)
+      : Math.min(window.devicePixelRatio, 2);
 
     const scene = new THREE.Scene();
     sceneRef.current = scene;
@@ -37,7 +39,7 @@ const StarfieldBackground = forwardRef<StarfieldBackgroundRef>((_, ref) => {
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(dpr);
     renderer.setClearColor(0x000000, 1);
-    containerRef.current.appendChild(renderer.domElement);
+    containerEl.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
     // --- Stars with power-law brightness distribution ---
@@ -160,8 +162,8 @@ const StarfieldBackground = forwardRef<StarfieldBackgroundRef>((_, ref) => {
       scene.clear();
       renderer.dispose();
 
-      if (containerRef.current && renderer.domElement.parentNode) {
-        containerRef.current.removeChild(renderer.domElement);
+      if (renderer.domElement.parentNode === containerEl) {
+        containerEl.removeChild(renderer.domElement);
       }
 
       rendererRef.current = null;

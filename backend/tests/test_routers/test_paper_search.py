@@ -14,6 +14,7 @@ Run: pytest tests/test_routers/test_paper_search.py -v
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+from fastapi import HTTPException
 
 from integrations.semantic_scholar import SemanticScholarRateLimitError
 
@@ -142,6 +143,22 @@ async def test_search_papers_rate_limit(test_client):
     assert response.status_code == 429
     assert "Retry-After" in response.headers
     assert response.headers["Retry-After"] == "30"
+
+
+@pytest.mark.asyncio
+async def test_search_papers_app_rate_limit(test_client):
+    """App-level rate limiter can block paper search before hitting the provider."""
+    with patch(
+        "routers.paper_search.check_rate_limit",
+        AsyncMock(side_effect=HTTPException(status_code=429, detail="Rate limit exceeded")),
+    ):
+        response = await test_client.post(
+            "/api/paper-search",
+            json={"query": "machine learning", "limit": 5},
+        )
+
+    assert response.status_code == 429
+    assert "rate limit" in response.json()["detail"].lower()
 
 
 @pytest.mark.asyncio

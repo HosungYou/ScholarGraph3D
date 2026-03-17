@@ -9,11 +9,12 @@ import logging
 import re
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from config import settings
 from llm.groq_provider import GroqProvider
+from middleware.rate_limiter import check_rate_limit
 
 logger = logging.getLogger(__name__)
 
@@ -236,13 +237,18 @@ def _parse_actions(reply: str) -> tuple[str, list[ChatAction]]:
 # ─── Endpoint ─────────────────────────────────────────────────────────────────
 
 @router.post("/api/seed-chat", response_model=SeedChatResponse)
-async def seed_chat(request: SeedChatRequest):
+async def seed_chat(request: SeedChatRequest, http_request: Request):
     """
     Chat endpoint for seed paper graph exploration.
 
     Uses Groq llama-3.3-70b with server-side API key.
     Returns a reply and 3 suggested follow-up questions.
     """
+    await check_rate_limit(
+        http_request,
+        endpoint_type="ai_search",
+        is_authenticated=bool(getattr(http_request.state, "user_id", None)),
+    )
     if not settings.groq_api_key:
         raise HTTPException(
             status_code=400,

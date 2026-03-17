@@ -3,6 +3,8 @@ import type {
   SavedGraph,
   CitationIntent,
   Bookmark,
+  RecommendationFeedback,
+  Paper,
   ChatAction,
   GapReport,
   StructuralGap,
@@ -212,6 +214,20 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
+  updateGraph: async (
+    id: string,
+    data: {
+      name?: string;
+      graph_data?: GraphData;
+      paper_ids?: string[];
+      layout_state?: Record<string, unknown>;
+    }
+  ): Promise<SavedGraph> =>
+    request<SavedGraph>(`${API_BASE}/api/graphs/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
   loadGraph: async (id: string): Promise<GraphData> => {
     const detail = await request<{ graph_data?: GraphData }>(`${API_BASE}/api/graphs/${id}`);
     if (detail.graph_data) return detail.graph_data;
@@ -261,6 +277,31 @@ export const api = {
   }> =>
     request(`${API_BASE}/api/papers/by-doi?doi=${encodeURIComponent(doi)}`),
 
+  getPaperDetails: (paperId: string): Promise<Paper> =>
+    request<any>(`${API_BASE}/api/papers/${encodeURIComponent(paperId)}`).then((paper) => ({
+      id: paper.id || paper.s2_paper_id || paper.paper_id || paperId,
+      s2_paper_id: paper.s2_paper_id || paper.paper_id || undefined,
+      doi: paper.doi || undefined,
+      title: paper.title || '',
+      authors: paper.authors || [],
+      year: paper.year || 0,
+      venue: paper.venue || undefined,
+      citation_count: paper.citation_count || 0,
+      abstract: paper.abstract || undefined,
+      tldr: paper.tldr || undefined,
+      fields: paper.fields || paper.fields_of_study || [],
+      topics: paper.topics || [],
+      x: 0,
+      y: 0,
+      z: 0,
+      cluster_id: -1,
+      cluster_label: 'Saved Paper',
+      is_open_access: paper.is_open_access || false,
+      oa_url: paper.oa_url || undefined,
+      is_bridge: false,
+      frontier_score: 0,
+    })),
+
   // ─── Seed Chat ───────────────────────────────────────────────────
   sendSeedChat: (
     message: string,
@@ -294,6 +335,11 @@ export const api = {
     paper_id: string;
     tags?: string[];
     memo?: string;
+    paper_title?: string;
+    paper_authors?: string[];
+    paper_year?: number;
+    paper_venue?: string;
+    paper_citation_count?: number;
   }): Promise<Bookmark> =>
     request<Bookmark>(`${API_BASE}/api/bookmarks`, {
       method: 'POST',
@@ -302,7 +348,15 @@ export const api = {
 
   updateBookmark: async (
     id: string,
-    data: { tags?: string[]; memo?: string }
+    data: {
+      tags?: string[];
+      memo?: string;
+      paper_title?: string;
+      paper_authors?: string[];
+      paper_year?: number;
+      paper_venue?: string;
+      paper_citation_count?: number;
+    }
   ): Promise<Bookmark> =>
     request<Bookmark>(`${API_BASE}/api/bookmarks/${id}`, {
       method: 'PUT',
@@ -317,6 +371,37 @@ export const api = {
     });
     if (!response.ok) {
       throw new Error(`Failed to delete bookmark: ${response.status}`);
+    }
+  },
+
+  // ─── Recommendation Feedback ─────────────────────────────────────
+  getRecommendationFeedback: async (sourcePaperId: string): Promise<RecommendationFeedback[]> => {
+    const params = new URLSearchParams({ source_paper_id: sourcePaperId });
+    return request<RecommendationFeedback[]>(`${API_BASE}/api/recommendation-feedback?${params.toString()}`);
+  },
+
+  upsertRecommendationFeedback: async (data: {
+    source_paper_id: string;
+    candidate_paper_id: string;
+    feedback: 'relevant' | 'not_now';
+  }): Promise<RecommendationFeedback> =>
+    request<RecommendationFeedback>(`${API_BASE}/api/recommendation-feedback`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  deleteRecommendationFeedback: async (sourcePaperId: string, candidatePaperId: string): Promise<void> => {
+    const authHeaders = await getAuthHeaders();
+    const params = new URLSearchParams({
+      source_paper_id: sourcePaperId,
+      candidate_paper_id: candidatePaperId,
+    });
+    const response = await fetch(`${API_BASE}/api/recommendation-feedback?${params.toString()}`, {
+      method: 'DELETE',
+      headers: { ...authHeaders },
+    });
+    if (!response.ok && response.status !== 404) {
+      throw new Error(`Failed to delete recommendation feedback: ${response.status}`);
     }
   },
 
