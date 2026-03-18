@@ -1,8 +1,8 @@
 'use client';
 
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo, useState } from 'react';
 import { useGraphStore } from '@/hooks/useGraphStore';
-import { Radar, Waypoints, Sparkles, ChevronDown, ChevronRight, FileText, Loader2, Copy, AlertTriangle } from 'lucide-react';
+import { Radar, Waypoints, Sparkles, ChevronDown, ChevronRight, Copy, AlertTriangle } from 'lucide-react';
 import type { StructuralGap, Paper, GapScoreBreakdown } from '@/types';
 
 export default function GapSpotterPanel() {
@@ -17,7 +17,6 @@ export default function GapSpotterPanel() {
     setHighlightedClusterPair,
     setHoveredGapEdges,
   } = useGraphStore();
-  const [gapReportLoading, setGapReportLoading] = useState(false);
   const [showAllGaps, setShowAllGaps] = useState(false);
 
   const frontierPapers = useMemo(() => {
@@ -42,11 +41,6 @@ export default function GapSpotterPanel() {
       minor: minor.slice(0, 1),
     };
   }, [gaps, showAllGaps]);
-
-  // Gap report generation removed in MVP cleanup
-  const handleGenerateReport = useCallback((_gap: StructuralGap) => {
-    return;
-  }, []);
 
   // Empty state — differentiate between "no gaps" and "quality-filtered"
   if (gaps.length === 0) {
@@ -235,8 +229,6 @@ export default function GapSpotterPanel() {
                       graphData={graphData!}
                       selectPaper={selectPaper}
                       setPanelSelectionId={setPanelSelectionId}
-                      onGenerateReport={() => handleGenerateReport(gap)}
-                      isGenerating={gapReportLoading}
                       severity="critical"
                       onMouseEnter={() => {
                         const ids = new Set(gap.bridge_papers.map((bp) => bp.paper_id));
@@ -268,8 +260,6 @@ export default function GapSpotterPanel() {
                       graphData={graphData!}
                       selectPaper={selectPaper}
                       setPanelSelectionId={setPanelSelectionId}
-                      onGenerateReport={() => handleGenerateReport(gap)}
-                      isGenerating={gapReportLoading}
                       severity="notable"
                       onMouseEnter={() => {
                         const ids = new Set(gap.bridge_papers.map((bp) => bp.paper_id));
@@ -301,8 +291,6 @@ export default function GapSpotterPanel() {
                       graphData={graphData!}
                       selectPaper={selectPaper}
                       setPanelSelectionId={setPanelSelectionId}
-                      onGenerateReport={() => handleGenerateReport(gap)}
-                      isGenerating={gapReportLoading}
                       severity="minor"
                       onMouseEnter={() => {
                         const ids = new Set(gap.bridge_papers.map((bp) => bp.paper_id));
@@ -392,14 +380,12 @@ interface GapCardProps {
   graphData: NonNullable<ReturnType<typeof useGraphStore.getState>['graphData']>;
   selectPaper: (paper: Paper) => void;
   setPanelSelectionId: (id: string | null) => void;
-  onGenerateReport: () => void;
-  isGenerating: boolean;
   severity: 'critical' | 'notable' | 'minor';
   onMouseEnter: () => void;
   onMouseLeave: () => void;
 }
 
-function GapCard({ gap, graphData, selectPaper, setPanelSelectionId, onGenerateReport, isGenerating, severity, onMouseEnter, onMouseLeave }: GapCardProps) {
+function GapCard({ gap, graphData, selectPaper, setPanelSelectionId, severity, onMouseEnter, onMouseLeave }: GapCardProps) {
   const [collapsed, setCollapsed] = useState(severity !== 'critical');
   const strengthPct = Math.round(gap.gap_strength * 100);
 
@@ -561,28 +547,6 @@ function GapCard({ gap, graphData, selectPaper, setPanelSelectionId, onGenerateR
             )}
           </div>
         )}
-
-        {/* Generate Report button */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onGenerateReport();
-          }}
-          disabled={isGenerating}
-          className="w-full mt-2 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg border border-[rgba(212,175,55,0.2)] bg-[rgba(212,175,55,0.05)] hover:border-[rgba(212,175,55,0.4)] hover:bg-[rgba(212,175,55,0.1)] disabled:opacity-40 disabled:cursor-not-allowed transition-all text-[9px] font-mono uppercase tracking-widest text-[#D4AF37]/70 hover:text-[#D4AF37]"
-        >
-          {isGenerating ? (
-            <>
-              <Loader2 className="w-3 h-3 animate-spin" />
-              GENERATING...
-            </>
-          ) : (
-            <>
-              <FileText className="w-3 h-3" />
-              GENERATE REPORT
-            </>
-          )}
-        </button>
 
         </>)}
       </div>

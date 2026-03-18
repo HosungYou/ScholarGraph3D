@@ -17,8 +17,6 @@ import {
   Download,
   Sparkles,
   ScanSearch,
-  ThumbsDown,
-  ThumbsUp,
 } from 'lucide-react';
 import type { Paper } from '@/types';
 import { FIELD_COLORS } from '@/types';
@@ -40,7 +38,6 @@ export default function PaperDetailPanel({
   isExpanding = false,
 }: PaperDetailPanelProps) {
   const [showFullAbstract, setShowFullAbstract] = useState(false);
-  const [recommendationFeedback, setRecommendationFeedback] = useState<Record<string, 'relevant' | 'not_now'>>({});
   const {
     graphData,
     expandedFromMap,
@@ -52,29 +49,6 @@ export default function PaperDetailPanel({
     setActivePath,
     selectPaper,
   } = useGraphStore();
-
-  const recommendationStorageKey = 'seed-paper-recommendation-feedback';
-
-  const loadLocalRecommendationFeedback = React.useCallback(() => {
-    try {
-      const raw = localStorage.getItem(recommendationStorageKey);
-      if (!raw) return {};
-      return JSON.parse(raw) as Record<string, 'relevant' | 'not_now'>;
-    } catch {
-      return {};
-    }
-  }, [recommendationStorageKey]);
-
-  const persistLocalRecommendationFeedback = React.useCallback(
-    (nextState: Record<string, 'relevant' | 'not_now'>) => {
-      try {
-        localStorage.setItem(recommendationStorageKey, JSON.stringify(nextState));
-      } catch {
-        // Best-effort browser-side preference storage.
-      }
-    },
-    [recommendationStorageKey]
-  );
 
   const relationshipSummary = React.useMemo(() => {
     if (!graphData || !paper) return null;
@@ -208,43 +182,11 @@ export default function PaperDetailPanel({
         }
         score += Math.min(2, Math.log10((candidate.citation_count || 0) + 1) / 2);
 
-        const feedback = recommendationFeedback[`${paper.id}:${candidate.id}`];
-        if (feedback === 'relevant') {
-          score += 1;
-          reasons.unshift('you marked relevant');
-        } else if (feedback === 'not_now') {
-          score -= 2;
-          reasons.unshift('hidden by your feedback');
-        }
-
         return { paper: candidate, score, reasons: reasons.slice(0, 2) };
       })
       .sort((a, b) => b.score - a.score)
       .slice(0, 4);
-  }, [graphData, paper.cluster_id, paper.id, recommendationFeedback]);
-
-  React.useEffect(() => {
-    if (!paper?.id) {
-      setRecommendationFeedback({});
-      return;
-    }
-    setRecommendationFeedback(loadLocalRecommendationFeedback());
-  }, [loadLocalRecommendationFeedback, paper?.id]);
-
-  const recordRecommendationFeedback = (candidateId: string, value: 'relevant' | 'not_now') => {
-    const key = `${paper.id}:${candidateId}`;
-    const nextValue = recommendationFeedback[key] === value ? undefined : value;
-    const nextState = { ...recommendationFeedback };
-
-    if (nextValue) {
-      nextState[key] = nextValue;
-    } else {
-      delete nextState[key];
-    }
-
-    setRecommendationFeedback(nextState);
-    persistLocalRecommendationFeedback(nextState);
-  };
+  }, [graphData, paper.cluster_id, paper.id]);
 
   return (
     <div className="p-5">
@@ -587,7 +529,7 @@ export default function PaperDetailPanel({
               <div className="flex-1 h-px bg-gradient-to-r from-[rgba(255,255,255,0.08)] to-transparent" />
             </div>
             <p className="mb-2 text-[10px] font-mono text-[#999999]/35 leading-relaxed">
-              Ranked from the current workspace. Mark strong fits to bias the next suggestions in this browser.
+              Ranked from the current workspace.
             </p>
             <div className="space-y-2">
               {recommendedPapers.map(({ paper: candidate, reasons }) => (
@@ -621,30 +563,6 @@ export default function PaperDetailPanel({
                       ))}
                     </div>
                   )}
-                  <div className="mt-2 flex gap-2">
-                    <button
-                      onClick={() => recordRecommendationFeedback(candidate.id, 'relevant')}
-                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[9px] font-mono transition-colors ${
-                        recommendationFeedback[`${paper.id}:${candidate.id}`] === 'relevant'
-                          ? 'border border-[#2ECC71]/35 bg-[#2ECC71]/10 text-[#2ECC71]'
-                          : 'border border-[rgba(255,255,255,0.05)] text-[#999999]/55 hover:border-[#2ECC71]/25 hover:text-[#2ECC71]'
-                      }`}
-                    >
-                      <ThumbsUp className="w-3 h-3" />
-                      Relevant
-                    </button>
-                    <button
-                      onClick={() => recordRecommendationFeedback(candidate.id, 'not_now')}
-                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[9px] font-mono transition-colors ${
-                        recommendationFeedback[`${paper.id}:${candidate.id}`] === 'not_now'
-                          ? 'border border-[#999999]/20 bg-[rgba(255,255,255,0.05)] text-[#999999]'
-                          : 'border border-[rgba(255,255,255,0.05)] text-[#999999]/55 hover:border-[rgba(255,255,255,0.12)] hover:text-[#999999]'
-                      }`}
-                    >
-                      <ThumbsDown className="w-3 h-3" />
-                      Not now
-                    </button>
-                  </div>
                 </div>
               ))}
             </div>
