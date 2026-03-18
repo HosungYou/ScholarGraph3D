@@ -45,6 +45,13 @@ const EXAMPLE_QUERIES = [
 
 const HISTORY_KEY = 'sg3d-search-history';
 const MAX_HISTORY = 10;
+const LAST_SEARCH_KEY = 'sg3d-last-search';
+
+interface LastSearch {
+  query: string;
+  results: PaperSearchResult[];
+  refinedQuery: string | null;
+}
 
 interface SearchHistoryEntry {
   query: string;
@@ -74,6 +81,19 @@ function saveSearchHistory(entry: Omit<SearchHistoryEntry, 'timestamp'>) {
 function clearSearchHistory() {
   if (typeof window === 'undefined') return;
   localStorage.removeItem(HISTORY_KEY);
+}
+
+function saveLastSearch(data: LastSearch) {
+  if (typeof window === 'undefined') return;
+  try { sessionStorage.setItem(LAST_SEARCH_KEY, JSON.stringify(data)); } catch {}
+}
+
+function loadLastSearch(): LastSearch | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = sessionStorage.getItem(LAST_SEARCH_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
 }
 
 function pickRandom<T>(arr: T[], n: number): T[] {
@@ -116,6 +136,12 @@ export default function LandingPage() {
     setSearchHistory(getSearchHistory());
     setDisplayedSeeds(pickRandom(EXAMPLE_SEEDS, 3));
     setDisplayedQueries(pickRandom(EXAMPLE_QUERIES, 4));
+    const last = loadLastSearch();
+    if (last) {
+      setInputValue(last.query);
+      setNaturalResults(last.results);
+      setRefinedQuery(last.refinedQuery);
+    }
   }, []);
 
   const handleDOILookup = async (doi: string) => {
@@ -158,8 +184,11 @@ export default function LandingPage() {
     setRefinedQuery(null);
     try {
       const data = await api.searchPapers(query.trim());
-      setNaturalResults(data.papers || []);
-      setRefinedQuery(data.refined_query || null);
+      const papers = data.papers || [];
+      const refined = data.refined_query || null;
+      setNaturalResults(papers);
+      setRefinedQuery(refined);
+      saveLastSearch({ query: query.trim(), results: papers, refinedQuery: refined });
       saveSearchHistory({ query: query.trim(), type: 'search' });
       setSearchHistory(getSearchHistory());
     } catch (e: unknown) {

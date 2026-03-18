@@ -10,6 +10,8 @@ import {
 } from 'lucide-react';
 import type { Paper } from '@/types';
 import { FIELD_COLORS } from '@/types';
+import { useGraphStore } from '@/hooks/useGraphStore';
+import { findCitationPath } from '@/lib/utils';
 
 interface PaperDetailPanelProps {
   paper: Paper;
@@ -25,6 +27,17 @@ export default function PaperDetailPanel({
   isExpanding = false,
 }: PaperDetailPanelProps) {
   const [showFullAbstract, setShowFullAbstract] = useState(false);
+  const [citationPath, setCitationPath] = useState<string[] | null | 'not-found'>(null);
+
+  const graphData = useGraphStore((s) => s.graphData);
+  const nodeCount = graphData?.nodes.length ?? 0;
+  const seedId = graphData?.meta?.seed_paper_id as string | undefined;
+
+  function handleFindPath() {
+    if (!graphData || !seedId) return;
+    const path = findCitationPath(seedId, paper.id, graphData.edges);
+    setCitationPath(path ?? 'not-found');
+  }
 
   const abstractText = paper.abstract || paper.tldr || 'No abstract available.';
   const isLongAbstract = abstractText.length > 300;
@@ -143,6 +156,40 @@ export default function PaperDetailPanel({
       <div className="px-1 mt-1.5 text-[10px] font-mono text-[#999999]/45">
         Adds references and citing papers around this paper.
       </div>
+
+      {/* ── Citation Path Finder (minimal) ── */}
+      {nodeCount >= 20 && seedId && seedId !== paper.id && (
+        <>
+          <div className="hud-divider my-4" />
+          <div>
+            <button
+              onClick={handleFindPath}
+              className="text-[10px] font-mono text-[#D4AF37]/70 hover:text-[#D4AF37] transition-colors uppercase tracking-wider"
+            >
+              Find citation path from seed
+            </button>
+            {citationPath === 'not-found' && (
+              <p className="mt-2 text-[10px] font-mono text-[#999999]/50">No citation path found.</p>
+            )}
+            {Array.isArray(citationPath) && (
+              <div className="mt-2 flex flex-col gap-1">
+                {citationPath.map((id, i) => {
+                  const node = graphData!.nodes.find((n) => n.id === id);
+                  const label = node
+                    ? `${node.authors[0]?.name?.split(' ').pop() ?? '?'} ${node.year}`
+                    : id;
+                  return (
+                    <div key={id} className="flex items-center gap-1 text-[10px] font-mono text-[#999999]/70">
+                      {i > 0 && <span className="text-[#D4AF37]/40">→</span>}
+                      <span>{label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
