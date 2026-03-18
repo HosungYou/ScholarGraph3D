@@ -25,8 +25,6 @@ import { FIELD_COLORS } from '@/types';
 import { useGraphStore } from '@/hooks/useGraphStore';
 import { findCitationPath } from '@/lib/utils';
 import { toBibtex, toRIS, downloadFile } from '@/lib/export';
-import { useAuth } from '@/lib/auth-context';
-import { api } from '@/lib/api';
 
 interface PaperDetailPanelProps {
   paper: Paper;
@@ -137,8 +135,6 @@ export default function PaperDetailPanel({
       ? abstractText.substring(0, 300) + '...'
       : abstractText;
 
-  const { user } = useAuth();
-
   const inGraphCounts = useMemo(() => {
     if (!graphData) return { references: 0, citedBy: 0 };
 
@@ -232,60 +228,10 @@ export default function PaperDetailPanel({
       setRecommendationFeedback({});
       return;
     }
+    setRecommendationFeedback(loadLocalRecommendationFeedback());
+  }, [loadLocalRecommendationFeedback, paper?.id]);
 
-    let cancelled = false;
-
-    if (!user) {
-      setRecommendationFeedback(loadLocalRecommendationFeedback());
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    const localState = loadLocalRecommendationFeedback();
-    const localEntriesForPaper = Object.entries(localState).filter(([key]) =>
-      key.startsWith(`${paper.id}:`)
-    );
-
-    api.getRecommendationFeedback(paper.id)
-      .then((items) => {
-        if (cancelled) return;
-
-        const serverState = items.reduce<Record<string, 'relevant' | 'not_now'>>((acc, item) => {
-          acc[`${item.source_paper_id}:${item.candidate_paper_id}`] = item.feedback;
-          return acc;
-        }, {});
-
-        const mergedState = { ...serverState };
-
-        for (const [key, value] of localEntriesForPaper) {
-          if (!mergedState[key]) {
-            mergedState[key] = value;
-            const candidateId = key.split(':').slice(1).join(':');
-            void api.upsertRecommendationFeedback({
-              source_paper_id: paper.id,
-              candidate_paper_id: candidateId,
-              feedback: value,
-            }).catch(() => {
-              // Keep local fallback if sync fails.
-            });
-          }
-        }
-
-        setRecommendationFeedback(mergedState);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setRecommendationFeedback(localState);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [loadLocalRecommendationFeedback, paper?.id, user]);
-
-  const recordRecommendationFeedback = async (candidateId: string, value: 'relevant' | 'not_now') => {
+  const recordRecommendationFeedback = (candidateId: string, value: 'relevant' | 'not_now') => {
     const key = `${paper.id}:${candidateId}`;
     const nextValue = recommendationFeedback[key] === value ? undefined : value;
     const nextState = { ...recommendationFeedback };
@@ -297,27 +243,7 @@ export default function PaperDetailPanel({
     }
 
     setRecommendationFeedback(nextState);
-
-    if (!user) {
-      persistLocalRecommendationFeedback(nextState);
-      return;
-    }
-
-    try {
-      if (nextValue) {
-        await api.upsertRecommendationFeedback({
-          source_paper_id: paper.id,
-          candidate_paper_id: candidateId,
-          feedback: nextValue,
-        });
-      } else {
-        await api.deleteRecommendationFeedback(paper.id, candidateId);
-      }
-      persistLocalRecommendationFeedback(nextState);
-    } catch (err) {
-      setRecommendationFeedback(recommendationFeedback);
-      console.error('Recommendation feedback sync failed:', err);
-    }
+    persistLocalRecommendationFeedback(nextState);
   };
 
   return (

@@ -125,7 +125,6 @@ function SeedExploreContent() {
     gaps,
     setGaps,
     setFrontierIds,
-    setNetworkOverview,
     showCitationEdges,
     showSimilarityEdges,
     showClusterHulls,
@@ -330,7 +329,7 @@ function SeedExploreContent() {
         setError(err instanceof Error ? err.message : 'Failed to build seed graph');
       })
       .finally(() => setLoading(false));
-  }, [paperId, graphId, setGraphData, setLoading, setError, setCitationIntents, setGaps, setFrontierIds, setNetworkOverview, autoSave]);
+  }, [paperId, graphId, setGraphData, setLoading, setError, setCitationIntents, setGaps, setFrontierIds, autoSave]);
 
   // Camera control events
   useEffect(() => {

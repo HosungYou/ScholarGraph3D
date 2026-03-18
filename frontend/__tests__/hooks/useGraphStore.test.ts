@@ -421,11 +421,6 @@ describe('setActiveTab', () => {
     expect(useGraphStore.getState().activeTab).toBe('gaps');
   });
 
-  it('switches to "chat" tab', () => {
-    useGraphStore.getState().setActiveTab('chat');
-    expect(useGraphStore.getState().activeTab).toBe('chat');
-  });
-
   it('switches back to "clusters" tab', () => {
     useGraphStore.getState().setActiveTab('gaps');
     useGraphStore.getState().setActiveTab('clusters');
