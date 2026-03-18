@@ -161,21 +161,16 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     showGhostEdges,
     showGapOverlay,
     hiddenClusterIds,
-    bridgeNodeIds,
     showTimeline,
     selectPaper,
     highlightedPaperIds,
     showCosmicTheme,
     expandedFromMap,
     activePath,
-    edgeVisMode,
     panelSelectionId,
     setPanelSelectionId,
     highlightedClusterPair,
     hoveredGapEdges,
-    nodeSizeMode,
-    layoutMode,
-    secondSeedIds,
   } = useGraphStore();
 
   const lastClickRef = useRef<{ nodeId: string; timestamp: number } | null>(
@@ -268,14 +263,6 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       citationRankMap.set(p.id, 1 - idx / sortedByCitations.length);
     });
 
-    // Precompute max values for PageRank/Betweenness normalization
-    const maxPagerank = Math.max(
-      ...graphData.nodes.map(n => n.pagerank ?? 0), 0.0001
-    );
-    const maxBetweenness = Math.max(
-      ...graphData.nodes.map(n => n.betweenness ?? 0), 0.0001
-    );
-
     const nodes: ForceGraphNode[] = graphData.nodes
       .filter((paper) => !hiddenClusterIds.has(paper.cluster_id))
       .map((paper) => {
@@ -287,26 +274,9 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         const opacity =
           0.3 + 0.7 * ((paperYear - yearRange.min) / yearSpan);
 
-        // Node size based on selected mode
-        let size: number;
-        switch (nodeSizeMode) {
-          case 'pagerank': {
-            const pr = paper.pagerank ?? 0;
-            size = Math.min(12, Math.max(2, (pr / maxPagerank) * 12));
-            break;
-          }
-          case 'betweenness': {
-            const bt = paper.betweenness ?? 0;
-            size = Math.min(12, Math.max(2, (bt / maxBetweenness) * 12));
-            break;
-          }
-          case 'citations':
-          default: {
-            const rawCitations = paper.citation_count || 0;
-            size = Math.min(12, Math.max(2, Math.sqrt(rawCitations + 1) * 0.8));
-            break;
-          }
-        }
+        // Node size based on citation count
+        const rawCitations = paper.citation_count || 0;
+        const size = Math.min(30, Math.max(4, Math.sqrt(rawCitations + 1) * 1.5));
 
         const authorName = paper.authors?.[0]?.name?.split(' ').pop() || 'Unknown';
         const citationPercentile = citationRankMap.get(paper.id) || 0;
@@ -324,7 +294,9 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
           x: paper.x * CS,
           y: paper.y * CS,
           z: paper.z * ZS,
-          ...(layoutMode === 'semantic' ? { fx: paper.x * CS, fy: paper.y * CS, fz: paper.z * ZS } : {}),
+          fx: paper.x * CS,
+          fy: paper.y * CS,
+          fz: paper.z * ZS,
         };
       });
 
@@ -460,7 +432,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     }
 
     return { nodes, links };
-  }, [graphData, yearRange, showCitationEdges, showSimilarityEdges, citationIntents, hiddenClusterIds, showGhostEdges, hoveredGapEdges, nodeSizeMode, layoutMode]);
+  }, [graphData, yearRange, showCitationEdges, showSimilarityEdges, citationIntents, hiddenClusterIds, showGhostEdges, hoveredGapEdges]);
 
   // Camera auto-focus when paper selected from panel
   useEffect(() => {
@@ -475,17 +447,6 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     }
     setPanelSelectionId(null);
   }, [panelSelectionId, forceGraphData.nodes, setPanelSelectionId]);
-
-  // Configure d3-force for network layout mode
-  useEffect(() => {
-    if (!fgRef.current || layoutMode !== 'network') return;
-    const linkForce = fgRef.current.d3Force('link');
-    if (linkForce) {
-      linkForce.distance((d: ForceGraphLink) =>
-        (d as ForceGraphLink).edgeType === 'citation' ? 30 : 60
-      );
-    }
-  }, [layoutMode]);
 
   // Node rendering
   const nodeThreeObject = useCallback(
@@ -583,22 +544,6 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
           frontierRing.rotation.x = Math.PI / 2;
           frontierRing.userData.isFrontierRing = true;
           group.add(frontierRing);
-        }
-
-        // Second-seed node indicator (teal ring)
-        if (secondSeedIds.includes(node.id)) {
-          const seedRingGeo = new THREE.RingGeometry(node.val * 1.6, node.val * 1.9, 32);
-          const seedRingMat = new THREE.MeshBasicMaterial({
-            color: 0x00E5FF,
-            transparent: true,
-            opacity: 0.4,
-            side: THREE.DoubleSide,
-            depthWrite: false,
-          });
-          const seedRing = new THREE.Mesh(seedRingGeo, seedRingMat);
-          seedRing.rotation.x = Math.PI / 2;
-          seedRing.userData.isSecondSeedRing = true;
-          group.add(seedRing);
         }
 
         // Selection pulsing ring (gold, animated via CosmicAnimationManager)
@@ -923,7 +868,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
 
       return group;
     },
-    [highlightSet, showLabels, showBloom, showOARings, showCitationAura, highlightedPaperIds, showCosmicTheme, yearRange, highlightedClusterPair, secondSeedIds]
+    [highlightSet, showLabels, showBloom, showOARings, showCitationAura, highlightedPaperIds, showCosmicTheme, yearRange, highlightedClusterPair]
   );
 
   // Link width
@@ -938,15 +883,11 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         return 3.0;
       }
     }
-    // Mode-specific width adjustments
-    if (edgeVisMode === 'crossCluster') {
-      return link.isCrossCluster ? Math.max(link.width || 0.5, 1.5) : 0.3;
-    }
     if (link.isInfluential) {
       return (link.width || 0.5) * 1.5; // Extra boost for influential
     }
     return Math.max(0.5, link.width || 0.5);
-  }, [edgeVisMode]);
+  }, []);
 
   // Build active path edge set for fast lookup
   const activePathEdgeSet = useMemo(() => {
@@ -1005,37 +946,18 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       if (link.isBidirectional) return '#FFD700'; // gold for mutual citation
       if (link.hasSharedAuthors) return '#2ECC71'; // green for shared authors
 
-      // Mode-dependent coloring
-      switch (edgeVisMode) {
-        case 'temporal': {
-          if (link.dashed) return '#333333'; // similarity edges dim in temporal mode
-          const gap = link.yearGap ?? 0;
-          const t = Math.min(gap / 10, 1);
-          // Lerp from gold (recent/close) to dim gray (distant)
-          const r = Math.round(212 + (85 - 212) * t);
-          const g = Math.round(175 + (85 - 175) * t);
-          const b = Math.round(55 + (85 - 55) * t);
-          return `rgb(${r},${g},${b})`;
-        }
-        case 'crossCluster': {
-          return link.isCrossCluster ? '#D4AF37' : '#222222';
-        }
-        case 'similarity':
-        default: {
-          // Original behavior: selection-based highlighting + intent colors
-          if (!selectedPaper) {
-            return link.dashed
-              ? '#555555'
-              : link.color || '#44444480';
-          }
-          if (highlightSet.has(sourceId) && highlightSet.has(targetId)) {
-            return link.color || '#D4AF37';
-          }
-          return '#050510';
-        }
+      // Selection-based highlighting + intent colors
+      if (!selectedPaper) {
+        return link.dashed
+          ? '#555555'
+          : link.color || '#44444480';
       }
+      if (highlightSet.has(sourceId) && highlightSet.has(targetId)) {
+        return link.color || '#D4AF37';
+      }
+      return '#050510';
     },
-    [selectedPaper, highlightSet, fgRef, activePathEdgeSet, edgeVisMode]
+    [selectedPaper, highlightSet, fgRef, activePathEdgeSet]
   );
 
   // Custom dashed link rendering for similarity edges
@@ -1332,12 +1254,8 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     };
 
     updateHulls();
-    const interval = layoutMode === 'network'
-      ? setInterval(updateHulls, 1000)
-      : null;
 
     return () => {
-      if (interval) clearInterval(interval);
       if (clusterOverlayRef.current && fgInstance?.scene()) {
         try {
           fgInstance.scene().remove(clusterOverlayRef.current);
@@ -1347,7 +1265,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         clusterOverlayRef.current = null;
       }
     };
-  }, [showClusterHulls, graphData, showCosmicTheme, hiddenClusterIds, fgMounted, forceGraphData.nodes, layoutMode]);
+  }, [showClusterHulls, graphData, showCosmicTheme, hiddenClusterIds, fgMounted, forceGraphData.nodes]);
 
   // Gap overlay useEffect
   useEffect(() => {
@@ -1500,9 +1418,6 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     };
 
     updateGapOverlay();
-    const interval = layoutMode === 'network'
-      ? setInterval(updateGapOverlay, 1500)
-      : null;
 
     // Animate hotspots
     let animFrame: number;
@@ -1523,14 +1438,13 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     animate();
 
     return () => {
-      if (interval) clearInterval(interval);
       cancelAnimationFrame(animFrame);
       if (gapOverlayRef.current && fgInstance?.scene()) {
         try { fgInstance.scene().remove(gapOverlayRef.current); } catch {}
         gapOverlayRef.current = null;
       }
     };
-  }, [showGapOverlay, graphData, fgMounted, forceGraphData.nodes, layoutMode]);
+  }, [showGapOverlay, graphData, fgMounted, forceGraphData.nodes]);
 
   // Gap Arc: QuadraticBezierCurve3 between highlighted cluster centroids
   useEffect(() => {
@@ -2276,8 +2190,8 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         onLinkClick={handleLinkClick}
         onBackgroundClick={handleBackgroundClick}
         warmupTicks={100}
-        cooldownTicks={layoutMode === 'network' ? Infinity : 0}
-        d3VelocityDecay={layoutMode === 'network' ? 0.6 : 0.9}
+        cooldownTicks={0}
+        d3VelocityDecay={0.9}
         enableNodeDrag={true}
         onNodeDrag={(node: any) => {
           node.fx = node.x;

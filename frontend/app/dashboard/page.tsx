@@ -4,7 +4,6 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import SavedGraphs from '@/components/dashboard/SavedGraphs';
-import SavedBookmarks from '@/components/dashboard/SavedBookmarks';
 import CosmicStarfield from '@/components/cosmic/CosmicStarfield';
 import { motion } from 'framer-motion';
 import {
@@ -89,7 +88,7 @@ export default function DashboardPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.2 }}
         >
-          <div className="grid gap-10 lg:grid-cols-[1.25fr_0.95fr]">
+          <div>
             <section>
               <div className="mb-4">
                 <h2 className="font-serif text-2xl tracking-tight text-white">
@@ -100,10 +99,6 @@ export default function DashboardPage() {
                 </p>
               </div>
               <SavedGraphs />
-            </section>
-
-            <section>
-              <SavedBookmarks />
             </section>
           </div>
         </motion.div>

@@ -8,7 +8,7 @@ import { STAR_COLOR_MAP } from './cosmic/cosmicConstants';
 export default function GraphLegend() {
   const [collapsed, setCollapsed] = useState(true);
   const [guideCollapsed, setGuideCollapsed] = useState(true);
-  const { edgeVisMode, setEdgeVisMode, selectedPaper } = useGraphStore();
+  const { selectedPaper } = useGraphStore();
 
   const LEGEND_FIELDS = [
     'Computer Science',
@@ -102,40 +102,6 @@ export default function GraphLegend() {
         </div>
       </div>
 
-      {/* Edge Mode Selector */}
-      <div className="mb-1.5 pt-1.5 border-t border-[#1A1A1A]/70">
-        <div className="text-[10px] font-mono uppercase tracking-widest text-[#D4AF37]/60 mb-1.5">
-          Connection Coloring
-        </div>
-        <div className="flex flex-col gap-1">
-          {([
-            { mode: 'similarity' as const, label: 'Context', desc: 'Citation meaning' },
-            { mode: 'temporal' as const, label: 'Time distance', desc: 'Year gap' },
-            { mode: 'crossCluster' as const, label: 'Cross-topic', desc: 'Between clusters' },
-          ]).map(({ mode, label, desc }) => (
-            <button
-              key={mode}
-              onClick={() => setEdgeVisMode(mode)}
-              className={`flex items-center gap-2 px-1.5 py-1 rounded transition-all text-left ${
-                edgeVisMode === mode
-                  ? 'bg-[#D4AF37]/10 text-[#D4AF37]'
-                  : 'text-[#999999]/50 hover:text-[#999999] hover:bg-[rgba(255,255,255,0.02)]'
-              }`}
-            >
-              <div className={`w-2 h-2 rounded-full border ${
-                edgeVisMode === mode
-                  ? 'border-[#D4AF37] bg-[#D4AF37]'
-                  : 'border-[#999999]/30'
-              }`} />
-              <div>
-                <div className="text-[10px] font-mono">{label}</div>
-                <div className="text-[8px] font-mono opacity-50">{desc}</div>
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* Always-on edge indicators */}
       <div className="mb-1.5 flex flex-col gap-0.5">
         <div className="text-[9px] font-mono text-[#999999]/40 mb-0.5">Always visible:</div>
@@ -149,69 +115,28 @@ export default function GraphLegend() {
         </div>
       </div>
 
-      {/* Mode-specific edge context */}
+      {/* Citation context legend */}
       <div className="mb-1.5 pt-1.5 border-t border-[#1A1A1A]/70">
-        {edgeVisMode === 'similarity' && (
-          <>
-            <div className="text-[10px] font-mono uppercase tracking-widest text-text-primary/60 mb-1">
-              Citation Context
-            </div>
-            <div className="flex flex-col gap-0.5">
-              <div className="flex items-center gap-2">
-                <div className="w-5 h-0 border-t-2 flex-shrink-0" style={{ borderColor: '#95A5A6' }} />
-                <span>Background</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-5 h-0 border-t-2 flex-shrink-0" style={{ borderColor: '#9B59B6' }} />
-                <span>Methodology</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-5 h-0 border-t-2 flex-shrink-0" style={{ borderColor: '#4A90D9' }} />
-                <span>Result/Comparison</span>
-              </div>
-            </div>
-            <div className="text-[10px] text-[#999999]/40 mt-1 italic">
-              Hover edges for details
-            </div>
-          </>
-        )}
-        {edgeVisMode === 'temporal' && (
-          <>
-            <div className="text-[10px] font-mono uppercase tracking-widest text-text-primary/60 mb-1">
-              Temporal Encoding
-            </div>
-            <div className="flex flex-col gap-0.5">
-              <div className="flex items-center gap-2">
-                <div className="w-5 h-0.5 bg-[#D4AF37] flex-shrink-0 rounded-full" />
-                <span>Close in time</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-5 h-0.5 bg-[#666666] flex-shrink-0 rounded-full" />
-                <span>Distant in time</span>
-              </div>
-            </div>
-            <div className="text-[10px] text-[#999999]/40 mt-1 italic">
-              Gold → gray = year gap
-            </div>
-          </>
-        )}
-        {edgeVisMode === 'crossCluster' && (
-          <>
-            <div className="text-[10px] font-mono uppercase tracking-widest text-text-primary/60 mb-1">
-              Cross-Cluster
-            </div>
-            <div className="flex flex-col gap-0.5">
-              <div className="flex items-center gap-2">
-                <div className="w-5 h-0.5 bg-[#D4AF37] flex-shrink-0 rounded-full" />
-                <span>Inter-cluster (thick)</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-5 h-px bg-[#333333] flex-shrink-0 rounded-full" />
-                <span>Intra-cluster (thin)</span>
-              </div>
-            </div>
-          </>
-        )}
+        <div className="text-[10px] font-mono uppercase tracking-widest text-text-primary/60 mb-1">
+          Citation Context
+        </div>
+        <div className="flex flex-col gap-0.5">
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-0 border-t-2 flex-shrink-0" style={{ borderColor: '#95A5A6' }} />
+            <span>Background</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-0 border-t-2 flex-shrink-0" style={{ borderColor: '#9B59B6' }} />
+            <span>Methodology</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-0 border-t-2 flex-shrink-0" style={{ borderColor: '#4A90D9' }} />
+            <span>Result/Comparison</span>
+          </div>
+        </div>
+        <div className="text-[10px] text-[#999999]/40 mt-1 italic">
+          Hover edges for details
+        </div>
       </div>
 
       {/* Cluster */}
