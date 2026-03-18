@@ -144,6 +144,7 @@ function GapCard({ gap, graphData, selectPaper, setPanelSelectionId, setHighligh
                         key={bp.paper_id}
                         onClick={() => {
                           if (fullPaper) {
+                            setHighlightedClusterPair(null);
                             selectPaper(fullPaper);
                             setPanelSelectionId(fullPaper.id);
                           }

@@ -715,17 +715,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         warmupTicks={100}
         cooldownTicks={0}
         d3VelocityDecay={0.9}
-        enableNodeDrag={true}
-        onNodeDrag={(node: any) => {
-          node.fx = node.x;
-          node.fy = node.y;
-          node.fz = node.z;
-        }}
-        onNodeDragEnd={(node: any) => {
-          node.fx = undefined;
-          node.fy = undefined;
-          node.fz = undefined;
-        }}
+        enableNodeDrag={false}
       />
       </Suspense>
       ) : (

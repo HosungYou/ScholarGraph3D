@@ -120,7 +120,7 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
   showOARings: false,
   showCitationAura: false,
   showGhostEdges: false,
-  showGapOverlay: true,
+  showGapOverlay: false,
   hiddenClusterIds: new Set<number>(),
   bridgeNodeIds: new Set<string>(),
   citationIntents: [],
