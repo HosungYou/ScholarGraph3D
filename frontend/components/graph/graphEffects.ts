@@ -8,8 +8,6 @@
 import * as THREE from 'three';
 import CosmicAnimationManager from './cosmic/CosmicAnimationManager';
 import { createNebulaCluster } from './cosmic/nebulaClusterRenderer';
-import { createGapVoid } from './cosmic/gapVoidRenderer';
-import { getGlowTexture } from './cosmic/cosmicTextures';
 import { CLUSTER_COLORS } from './cosmic/cosmicConstants';
 import type { GraphData } from '@/types';
 import type { ForceGraphNode } from './ScholarGraph3D';
@@ -409,150 +407,20 @@ export function updateGapOverlay({
   };
 }
 
-// ─── Foundation computation helper ───────────────────────────────────
-
-interface FoundationPaper {
-  nodeId: string;
-  title: string;
-  year: number;
-  count: number;
-  total: number;
-  position: THREE.Vector3;
-}
-
-function computeClusterFoundations(
-  clusterId: number,
-  graphData: GraphData,
-  nodePositions: Map<string, THREE.Vector3>,
-  maxResults: number = 3,
-): FoundationPaper[] {
-  const clusterPapers = graphData.nodes.filter(n => n.cluster_id === clusterId);
-  const clusterPaperIds = new Set(clusterPapers.map(n => n.id));
-  const clusterSize = clusterPaperIds.size;
-  if (clusterSize < 3) return [];
-
-  const citedByCount = new Map<string, number>();
-  graphData.edges.forEach(e => {
-    if (e.type === 'citation' && clusterPaperIds.has(e.source)) {
-      citedByCount.set(e.target, (citedByCount.get(e.target) || 0) + 1);
-    }
-  });
-
-  return Array.from(citedByCount.entries())
-    .filter(([, count]) => count >= 3)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, maxResults)
-    .map(([id, count]) => {
-      const paper = graphData.nodes.find(n => n.id === id);
-      const pos = nodePositions.get(id);
-      if (!paper || !pos) return null;
-      const authorName = paper.authors?.[0]?.name?.split(' ').pop() || '';
-      return {
-        nodeId: id,
-        title: `${authorName} ${paper.year || ''}`,
-        year: paper.year,
-        count,
-        total: clusterSize,
-        position: pos,
-      };
-    })
-    .filter((f): f is FoundationPaper => f !== null);
-}
-
-// ─── Gap arc (between highlighted cluster pair) ─────────────────────
+// ─── Gap camera fly-to (replaces full gap arc) ────────────────────
 
 export interface GapArcParams {
   fgRef: React.MutableRefObject<any>;
-  gapArcRef: React.MutableRefObject<THREE.Line | null>;
-  gapArcGlowRef: React.MutableRefObject<THREE.Sprite | null>;
-  gapVoidRef: React.MutableRefObject<THREE.Group | null>;
-  foundationGroupRef: React.MutableRefObject<THREE.Group | null>;
   highlightedClusterPair: [number, number] | null;
   graphData: GraphData | null;
-  forceGraphNodes: ForceGraphNode[];
-  onFoundationsComputed?: (ids: Set<string>) => void;
 }
 
 export function updateGapArc({
   fgRef,
-  gapArcRef,
-  gapArcGlowRef,
-  gapVoidRef,
-  foundationGroupRef,
   highlightedClusterPair,
   graphData,
-  forceGraphNodes,
-  onFoundationsComputed,
 }: GapArcParams): void {
-  if (!fgRef.current) return;
-  let scene: THREE.Scene;
-  try {
-    scene = fgRef.current.scene();
-    if (!scene) return;
-  } catch {
-    return;
-  }
-
-  const manager = CosmicAnimationManager.getInstance();
-
-  // Remove existing arc
-  if (gapArcRef.current) {
-    scene.getObjectByName('gap-arc')?.removeFromParent();
-    const arcMat = gapArcRef.current.material as THREE.ShaderMaterial;
-    const arcGeo = gapArcRef.current.geometry;
-    gapArcRef.current = null;
-    requestAnimationFrame(() => {
-      manager.deregisterShaderMaterial(arcMat);
-      arcGeo.dispose();
-      arcMat.dispose();
-    });
-  }
-
-  // Remove existing glow
-  if (gapArcGlowRef.current) {
-    scene.remove(gapArcGlowRef.current);
-    const glowMat = gapArcGlowRef.current.material;
-    gapArcGlowRef.current = null;
-    requestAnimationFrame(() => glowMat.dispose());
-  }
-
-  // Remove existing void
-  if (gapVoidRef.current) {
-    scene.remove(gapVoidRef.current);
-    const voidGroup = gapVoidRef.current;
-    gapVoidRef.current = null;
-    requestAnimationFrame(() => {
-      voidGroup.traverse((child) => {
-        if ((child as any).geometry) (child as any).geometry.dispose();
-        if ((child as any).material) {
-          if (child instanceof THREE.Points && child.material instanceof THREE.ShaderMaterial) {
-            manager.deregisterShaderMaterial(child.material);
-          }
-          (child as any).material.dispose();
-        }
-      });
-    });
-  }
-
-  // Remove existing foundation highlights
-  if (foundationGroupRef.current) {
-    const animId = foundationGroupRef.current.userData?.animFrameId;
-    if (animId?.value) cancelAnimationFrame(animId.value);
-    scene.remove(foundationGroupRef.current);
-    const fGroup = foundationGroupRef.current;
-    foundationGroupRef.current = null;
-    requestAnimationFrame(() => {
-      fGroup.traverse((child) => {
-        if ((child as any).geometry) (child as any).geometry.dispose();
-        if ((child as any).material) (child as any).material.dispose();
-      });
-    });
-  }
-
-  if (!highlightedClusterPair || !graphData) {
-    onFoundationsComputed?.(new Set());
-    return;
-  }
+  if (!fgRef.current || !highlightedClusterPair || !graphData) return;
 
   const [cidA, cidB] = highlightedClusterPair;
   const clusterA = graphData.clusters.find((c) => c.id === cidA);
@@ -572,315 +440,17 @@ export function updateGapArc({
     clusterB.centroid[2] * ZS,
   );
 
-  const mid = new THREE.Vector3(
+  const lookAt = new THREE.Vector3(
     (centA.x + centB.x) / 2,
-    (centA.y + centB.y) / 2 + 30,
+    (centA.y + centB.y) / 2,
     (centA.z + centB.z) / 2,
   );
-
-  // ── Build node position map from force graph nodes ──
-  const nodePositions = new Map<string, THREE.Vector3>();
-  forceGraphNodes.forEach(n => {
-    if (n.x !== undefined) {
-      nodePositions.set(n.id, new THREE.Vector3(n.x, n.y, n.z));
-    }
-  });
-
-  // ── Compute shared foundations for both clusters ──
-  const foundationsA = computeClusterFoundations(cidA, graphData, nodePositions, 3);
-  const foundationsB = computeClusterFoundations(cidB, graphData, nodePositions, 3);
-  const allFoundationIds = new Set<string>([
-    ...foundationsA.map(f => f.nodeId),
-    ...foundationsB.map(f => f.nodeId),
-  ]);
-  onFoundationsComputed?.(allFoundationIds);
-
-  // ── Arc line ──
-  const curve = new THREE.QuadraticBezierCurve3(centA, mid, centB);
-  const arcPoints = curve.getPoints(50);
-  const geo = new THREE.BufferGeometry().setFromPoints(arcPoints);
-
-  const mat = new THREE.ShaderMaterial({
-    vertexShader: `
-      attribute float lineDistance;
-      varying float vLineDistance;
-      void main() {
-        vLineDistance = lineDistance;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `
-      uniform vec3 uColor;
-      uniform float uTime;
-      uniform float uDashSize;
-      uniform float uGapSize;
-      varying float vLineDistance;
-      void main() {
-        float totalSize = uDashSize + uGapSize;
-        float modVal = mod(vLineDistance - uTime * 30.0, totalSize);
-        if (modVal > uDashSize) discard;
-        float pulse = 0.6 + 0.4 * sin(uTime * 3.0);
-        gl_FragColor = vec4(uColor, 0.8 * pulse);
-      }
-    `,
-    uniforms: {
-      uColor: { value: new THREE.Color('#D4AF37') },
-      uTime: { value: 0 },
-      uDashSize: { value: 8.0 },
-      uGapSize: { value: 4.0 },
-    },
-    transparent: true,
-    depthWrite: false,
-  });
-
-  const positions = geo.attributes.position;
-  const lineDistances = new Float32Array(positions.count);
-  let totalDist = 0;
-  for (let i = 1; i < positions.count; i++) {
-    const dx = positions.getX(i) - positions.getX(i - 1);
-    const dy = positions.getY(i) - positions.getY(i - 1);
-    const dz = positions.getZ(i) - positions.getZ(i - 1);
-    totalDist += Math.sqrt(dx * dx + dy * dy + dz * dz);
-    lineDistances[i] = totalDist;
-  }
-  geo.setAttribute('lineDistance', new THREE.BufferAttribute(lineDistances, 1));
-
-  manager.registerShaderMaterial(mat);
-  const arcLine = new THREE.Line(geo, mat);
-  arcLine.name = 'gap-arc';
-  scene.add(arcLine);
-  gapArcRef.current = arcLine;
-
-  // ── Glow sprite at arc midpoint ──
-  const glowSprite = new THREE.Sprite(
-    new THREE.SpriteMaterial({
-      map: getGlowTexture(),
-      color: new THREE.Color('#D4AF37'),
-      transparent: true,
-      opacity: 0.4,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    })
+  const dist = Math.max(centA.distanceTo(centB), 150);
+  fgRef.current.cameraPosition(
+    { x: lookAt.x + dist * 0.3, y: lookAt.y - dist * 0.6, z: lookAt.z + dist * 1.8 },
+    { x: lookAt.x, y: lookAt.y, z: lookAt.z },
+    1000
   );
-  glowSprite.position.copy(mid);
-  glowSprite.scale.setScalar(20);
-  glowSprite.name = 'gap-arc-glow';
-  scene.add(glowSprite);
-  gapArcGlowRef.current = glowSprite;
-
-  // ── Gap void particles ──
-  const gap = graphData.gaps?.find((g) =>
-    (g.cluster_a.id === cidA && g.cluster_b.id === cidB) ||
-    (g.cluster_a.id === cidB && g.cluster_b.id === cidA)
-  );
-  const gapStrength = gap?.gap_strength ?? 0.5;
-
-  const voidGroup = createGapVoid({
-    centroidA: centA,
-    centroidB: centB,
-    gapStrength,
-  });
-  scene.add(voidGroup);
-  gapVoidRef.current = voidGroup;
-
-  // ── Foundation highlights ──
-  const foundationGroup = new THREE.Group();
-  foundationGroup.name = 'foundation-highlights';
-
-  const clusterAColor = clusterA.color || CLUSTER_COLORS[cidA % CLUSTER_COLORS.length];
-  const clusterBColor = clusterB.color || CLUSTER_COLORS[cidB % CLUSTER_COLORS.length];
-
-  const renderFoundation = (f: FoundationPaper, clusterColor: string) => {
-    // Glow ring around foundation node
-    const ringRadius = f.count / f.total * 6 + 3;
-    const ringGeo = new THREE.RingGeometry(ringRadius, ringRadius + 1, 32);
-    const ringMat = new THREE.MeshBasicMaterial({
-      color: new THREE.Color(clusterColor),
-      transparent: true,
-      opacity: 0.6,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-    });
-    const ring = new THREE.Mesh(ringGeo, ringMat);
-    ring.position.copy(f.position);
-    ring.userData.isFoundationRing = true;
-    foundationGroup.add(ring);
-
-    // Label sprite: "Author Year · N/M"
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-      canvas.width = 256;
-      canvas.height = 48;
-      // Background
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-      const r = 6;
-      ctx.beginPath();
-      ctx.moveTo(r, 0);
-      ctx.lineTo(canvas.width - r, 0);
-      ctx.quadraticCurveTo(canvas.width, 0, canvas.width, r);
-      ctx.lineTo(canvas.width, canvas.height - r);
-      ctx.quadraticCurveTo(canvas.width, canvas.height, canvas.width - r, canvas.height);
-      ctx.lineTo(r, canvas.height);
-      ctx.quadraticCurveTo(0, canvas.height, 0, canvas.height - r);
-      ctx.lineTo(0, r);
-      ctx.quadraticCurveTo(0, 0, r, 0);
-      ctx.closePath();
-      ctx.fill();
-
-      // Left color bar
-      ctx.fillStyle = clusterColor;
-      ctx.fillRect(0, 0, 4, canvas.height);
-
-      ctx.font = 'bold 18px Arial, sans-serif';
-      ctx.fillStyle = '#FFFFFF';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(f.title, 12, 24);
-
-      ctx.font = '14px Arial, sans-serif';
-      ctx.fillStyle = clusterColor;
-      ctx.textAlign = 'right';
-      ctx.fillText(`${f.count}/${f.total}`, canvas.width - 8, 24);
-
-      const texture = new THREE.CanvasTexture(canvas);
-      const sprite = new THREE.Sprite(
-        new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false })
-      );
-      sprite.scale.set(35, 7, 1);
-      sprite.position.copy(f.position);
-      sprite.position.y += 8;
-      foundationGroup.add(sprite);
-    }
-  };
-
-  foundationsA.forEach(f => renderFoundation(f, clusterAColor));
-  foundationsB.forEach(f => renderFoundation(f, clusterBColor));
-
-  // ── Gap Brief card at arc midpoint ──
-  const papersACount = graphData.nodes.filter(n => n.cluster_id === cidA).length;
-  const papersBCount = graphData.nodes.filter(n => n.cluster_id === cidB).length;
-  const crossEdges = graphData.edges.filter(e => {
-    const srcCluster = graphData.nodes.find(n => n.id === e.source)?.cluster_id;
-    const tgtCluster = graphData.nodes.find(n => n.id === e.target)?.cluster_id;
-    return (srcCluster === cidA && tgtCluster === cidB) ||
-           (srcCluster === cidB && tgtCluster === cidA);
-  }).length;
-  const maxPossible = papersACount * papersBCount;
-
-  const briefCanvas = document.createElement('canvas');
-  const briefCtx = briefCanvas.getContext('2d');
-  if (briefCtx) {
-    briefCanvas.width = 400;
-    briefCanvas.height = 200;
-
-    // Background
-    briefCtx.fillStyle = 'rgba(0, 0, 0, 0.85)';
-    const br = 10;
-    briefCtx.beginPath();
-    briefCtx.moveTo(br, 0);
-    briefCtx.lineTo(briefCanvas.width - br, 0);
-    briefCtx.quadraticCurveTo(briefCanvas.width, 0, briefCanvas.width, br);
-    briefCtx.lineTo(briefCanvas.width, briefCanvas.height - br);
-    briefCtx.quadraticCurveTo(briefCanvas.width, briefCanvas.height, briefCanvas.width - br, briefCanvas.height);
-    briefCtx.lineTo(br, briefCanvas.height);
-    briefCtx.quadraticCurveTo(0, briefCanvas.height, 0, briefCanvas.height - br);
-    briefCtx.lineTo(0, br);
-    briefCtx.quadraticCurveTo(0, 0, br, 0);
-    briefCtx.closePath();
-    briefCtx.fill();
-
-    // Border
-    briefCtx.strokeStyle = 'rgba(212, 175, 55, 0.3)';
-    briefCtx.lineWidth = 1;
-    briefCtx.stroke();
-
-    let y = 24;
-
-    // Cluster A header
-    const labelA = clusterA.label.length > 18 ? clusterA.label.slice(0, 16) + '..' : clusterA.label;
-    const labelB = clusterB.label.length > 18 ? clusterB.label.slice(0, 16) + '..' : clusterB.label;
-
-    briefCtx.font = 'bold 16px Arial, sans-serif';
-    briefCtx.fillStyle = clusterAColor;
-    briefCtx.textAlign = 'left';
-    briefCtx.fillText(`${labelA} (${papersACount})`, 16, y);
-    y += 20;
-
-    // Cross-citation density
-    briefCtx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-    briefCtx.font = '12px Arial, sans-serif';
-    briefCtx.fillText(`\u2195 ${crossEdges} / ${maxPossible} cross-citations`, 16, y);
-    y += 20;
-
-    // Cluster B header
-    briefCtx.font = 'bold 16px Arial, sans-serif';
-    briefCtx.fillStyle = clusterBColor;
-    briefCtx.fillText(`${labelB} (${papersBCount})`, 16, y);
-    y += 28;
-
-    // Divider
-    briefCtx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-    briefCtx.beginPath();
-    briefCtx.moveTo(16, y);
-    briefCtx.lineTo(briefCanvas.width - 16, y);
-    briefCtx.stroke();
-    y += 16;
-
-    // Foundations
-    briefCtx.font = '11px Arial, sans-serif';
-    if (foundationsA.length > 0) {
-      briefCtx.fillStyle = clusterAColor;
-      briefCtx.fillText(foundationsA.map(f => f.title).join(', '), 16, y);
-      y += 18;
-    }
-    if (foundationsB.length > 0) {
-      briefCtx.fillStyle = clusterBColor;
-      briefCtx.fillText(foundationsB.map(f => f.title).join(', '), 16, y);
-    }
-
-    const briefTexture = new THREE.CanvasTexture(briefCanvas);
-    const briefSprite = new THREE.Sprite(
-      new THREE.SpriteMaterial({ map: briefTexture, transparent: true, depthTest: false })
-    );
-    briefSprite.scale.set(60, 30, 1);
-    briefSprite.position.copy(mid);
-    briefSprite.position.y += 15;
-    foundationGroup.add(briefSprite);
-  }
-
-  scene.add(foundationGroup);
-  foundationGroupRef.current = foundationGroup;
-
-  // Animate foundation rings to face camera (billboard)
-  const foundationAnimId = { value: 0 };
-  const animateFoundations = () => {
-    foundationAnimId.value = requestAnimationFrame(animateFoundations);
-    const camera = fgRef.current?.camera();
-    if (!camera || !foundationGroupRef.current) return;
-    foundationGroupRef.current.children.forEach((child: any) => {
-      if (child.userData?.isFoundationRing) {
-        child.lookAt(camera.position);
-      }
-    });
-  };
-  animateFoundations();
-  foundationGroup.userData.animFrameId = foundationAnimId;
-
-  // ── Camera fly-to ──
-  if (fgRef.current) {
-    const lookAt = new THREE.Vector3(
-      (centA.x + centB.x) / 2,
-      (centA.y + centB.y) / 2,
-      (centA.z + centB.z) / 2,
-    );
-    const dist = Math.max(centA.distanceTo(centB), 150);
-    fgRef.current.cameraPosition(
-      { x: lookAt.x + dist * 0.3, y: lookAt.y - dist * 0.6, z: lookAt.z + dist * 1.8 },
-      { x: lookAt.x, y: lookAt.y, z: lookAt.z },
-      1000
-    );
-  }
 }
 
 // ─── Timeline labels and grid ───────────────────────────────────────
@@ -1074,58 +644,12 @@ export function cleanupGraph(
     hoverTimeoutRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>;
     expandedEdgeTimerRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>;
     newNodeTimerRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>;
-    gapArcRef: React.MutableRefObject<THREE.Line | null>;
-    gapArcGlowRef: React.MutableRefObject<THREE.Sprite | null>;
-    gapVoidRef: React.MutableRefObject<THREE.Group | null>;
   }
 ): void {
   const fgInstance = fgRef.current;
   if (refs.hoverTimeoutRef.current) clearTimeout(refs.hoverTimeoutRef.current);
   if (refs.expandedEdgeTimerRef.current) clearTimeout(refs.expandedEdgeTimerRef.current);
   if (refs.newNodeTimerRef.current) clearTimeout(refs.newNodeTimerRef.current);
-
-  // Cleanup gap arc
-  if (refs.gapArcRef.current) {
-    try {
-      const scene = fgInstance?.scene();
-      if (scene) scene.remove(refs.gapArcRef.current);
-    } catch {}
-    refs.gapArcRef.current?.geometry.dispose();
-    CosmicAnimationManager.getInstance().deregisterShaderMaterial(
-      refs.gapArcRef.current?.material as THREE.ShaderMaterial
-    );
-    (refs.gapArcRef.current?.material as THREE.Material | undefined)?.dispose();
-    refs.gapArcRef.current = null;
-  }
-
-  // Cleanup gap arc glow
-  if (refs.gapArcGlowRef.current) {
-    try {
-      const scene = fgInstance?.scene();
-      if (scene) scene.remove(refs.gapArcGlowRef.current);
-    } catch {}
-    refs.gapArcGlowRef.current.material.dispose();
-    refs.gapArcGlowRef.current = null;
-  }
-
-  // Cleanup gap void
-  if (refs.gapVoidRef.current) {
-    try {
-      const scene = fgInstance?.scene();
-      if (scene) scene.remove(refs.gapVoidRef.current);
-    } catch {}
-    const voidGroup = refs.gapVoidRef.current;
-    refs.gapVoidRef.current = null;
-    voidGroup.traverse((child) => {
-      if ((child as any).geometry) (child as any).geometry.dispose();
-      if ((child as any).material) {
-        if (child instanceof THREE.Points && child.material instanceof THREE.ShaderMaterial) {
-          CosmicAnimationManager.getInstance().deregisterShaderMaterial(child.material);
-        }
-        (child as any).material.dispose();
-      }
-    });
-  }
 
   CosmicAnimationManager.reset();
 

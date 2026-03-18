@@ -26,7 +26,6 @@ interface UseGraphRendererParams {
   showCosmicTheme: boolean;
   yearRange: { min: number; max: number };
   activePath: string[] | null;
-  foundationPaperIds: Set<string>;
 }
 
 // ─── Hook ───────────────────────────────────────────────────────────
@@ -50,7 +49,6 @@ export function useGraphRenderer({
   showCosmicTheme,
   yearRange,
   activePath,
-  foundationPaperIds,
 }: UseGraphRendererParams) {
   // ── Active path edge set for link color ────────────────────────
 
@@ -84,8 +82,7 @@ export function useGraphRenderer({
         const cosmicOpacity = (() => {
           if (highlightedClusterPair) {
             const [cidA, cidB] = highlightedClusterPair;
-            if (foundationPaperIds.has(node.id)) return 1;
-            if (node.paper.cluster_id === cidA || node.paper.cluster_id === cidB) return 0.8;
+            if (node.paper.cluster_id === cidA || node.paper.cluster_id === cidB) return 1;
             return 0.05;
           }
           if (isSelected || isHighlightedByPanel || isHighlighted) return 1;
@@ -192,10 +189,9 @@ export function useGraphRenderer({
           group.add(selRing);
         }
 
-        // Centrality-based label: show only top 20% OR highlighted/selected/foundation
-        const isFoundation = foundationPaperIds.has(node.id);
+        // Centrality-based label: show only top 20% OR highlighted/selected
         const showLabel = showLabels && node.name && (
-          isSelected || isHighlighted || isFoundation || node.citationPercentile > 0.8
+          isSelected || isHighlighted || node.citationPercentile > 0.8
         );
 
         if (showLabel) {
