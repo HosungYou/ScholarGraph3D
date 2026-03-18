@@ -282,9 +282,6 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
           x: paper.x * CS,
           y: paper.y * CS,
           z: paper.z * ZS,
-          fx: paper.x * CS,
-          fy: paper.y * CS,
-          fz: paper.z * ZS,
         };
       });
 
@@ -584,6 +581,57 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     setTimeout(() => setupInitialCamera(fgRef), 1200);
   }, [graphData?.nodes?.length, fgMounted]);
 
+  // Cluster gravity: nodes pulled toward their cluster centroid so same-cluster papers form islands
+  useEffect(() => {
+    if (!fgRef.current || !graphData?.clusters?.length || !fgMounted) return;
+
+    const CS = 15;
+    const ZS = 10;
+
+    const clusterCentroids = new Map<number, { x: number; y: number; z: number }>();
+    graphData.clusters.forEach((cluster) => {
+      if (cluster.centroid) {
+        clusterCentroids.set(cluster.id, {
+          x: cluster.centroid[0] * CS,
+          y: cluster.centroid[1] * CS,
+          z: cluster.centroid[2] * ZS,
+        });
+      } else {
+        const clusterNodes = graphData.nodes.filter(n => n.cluster_id === cluster.id);
+        if (clusterNodes.length === 0) return;
+        const avg = clusterNodes.reduce(
+          (sum, n) => ({ x: sum.x + n.x * CS, y: sum.y + n.y * CS, z: sum.z + n.z * ZS }),
+          { x: 0, y: 0, z: 0 }
+        );
+        clusterCentroids.set(cluster.id, {
+          x: avg.x / clusterNodes.length,
+          y: avg.y / clusterNodes.length,
+          z: avg.z / clusterNodes.length,
+        });
+      }
+    });
+
+    const clusterForce = () => (alpha: number) => {
+      (forceGraphData.nodes as any[]).forEach((node) => {
+        const clusterId = (node.paper as any)?.cluster_id;
+        if (clusterId === undefined || clusterId < 0) return;
+        const centroid = clusterCentroids.get(clusterId);
+        if (!centroid) return;
+        const strength = 0.08;
+        node.vx = (node.vx || 0) + (centroid.x - (node.x || 0)) * strength * alpha;
+        node.vy = (node.vy || 0) + (centroid.y - (node.y || 0)) * strength * alpha;
+        node.vz = (node.vz || 0) + (centroid.z - (node.z || 0)) * strength * alpha;
+      });
+    };
+
+    try {
+      fgRef.current.d3Force('cluster', clusterForce());
+      fgRef.current.d3ReheatSimulation();
+    } catch {
+      // fgRef not ready
+    }
+  }, [fgMounted, graphData, forceGraphData.nodes]);
+
   // Cosmic animation manager lifecycle
   useEffect(() => {
     return setupCosmicAnimationManager(fgRef, showCosmicTheme);
@@ -712,9 +760,9 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         onNodeHover={handleNodeHover}
         onLinkClick={handleLinkClick}
         onBackgroundClick={handleBackgroundClick}
-        warmupTicks={100}
-        cooldownTicks={0}
-        d3VelocityDecay={0.9}
+        warmupTicks={50}
+        cooldownTicks={150}
+        d3VelocityDecay={0.4}
         enableNodeDrag={false}
       />
       </Suspense>
