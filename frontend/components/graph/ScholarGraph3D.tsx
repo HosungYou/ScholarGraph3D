@@ -564,9 +564,12 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     setTimeout(() => setupInitialCamera(fgRef), 1200);
   }, [graphData?.nodes?.length, fgMounted]);
 
-  // Cluster gravity: nodes pulled toward their cluster centroid so same-cluster papers form islands
+  // Cluster gravity: only meaningful with 2+ clusters; with 1 cluster it causes everything to pile up
   useEffect(() => {
     if (!fgRef.current || !graphData?.clusters?.length || !fgMounted) return;
+    // Skip if only 1 cluster — UMAP initial positions are better than pulling all nodes to one point
+    const validClusters = graphData.clusters.filter(c => c.id >= 0);
+    if (validClusters.length < 2) return;
 
     const CS = 15;
     const ZS = 10;
