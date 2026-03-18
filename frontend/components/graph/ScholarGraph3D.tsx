@@ -649,10 +649,10 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
           if (p.is_open_access) badges.push('🔓 OA');
           if (p.year && p.year >= 2024) badges.push('◆ New');
           return `
-            <div style="background: rgba(10,10,10,0.95); padding: 12px 14px; border-radius: 10px; font-family: system-ui; font-size: 12px; max-width: 320px; border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 4px 24px rgba(0,0,0,0.4);">
-              <div style="font-weight: 600; color: ${node.color}; margin-bottom: 5px; line-height: 1.4;">${p.title.length > 80 ? p.title.substring(0, 80) + '...' : p.title}</div>
+            <div style="background: rgba(8,8,8,0.97); padding: 12px 14px; border-radius: 10px; font-family: system-ui; font-size: 12px; max-width: 340px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 6px 28px rgba(0,0,0,0.55);">
+              <div style="font-weight: 600; color: ${node.color}; margin-bottom: 6px; line-height: 1.45; font-size: 13px;">${p.title}</div>
               <div style="color: #999999; font-size: 11px; margin-bottom: 3px;">${p.authors?.slice(0, 3).map((a) => a.name).join(', ') || 'Unknown'}${(p.authors?.length || 0) > 3 ? ' et al.' : ''}</div>
-              <div style="color: #777777; font-size: 11px; margin-bottom: 5px;">${p.venue || ''} ${p.year || ''} | ${p.citation_count.toLocaleString()} citations</div>
+              <div style="color: #777777; font-size: 11px; margin-bottom: 5px;">${p.venue || ''} ${p.year || ''} &middot; ${p.citation_count.toLocaleString()} citations</div>
               ${p.cluster_label ? `<div style="color: #888888; font-size: 10px; margin-bottom: 4px;">📍 ${p.cluster_label}</div>` : ''}
               ${tldrSnippet ? `<div style="color: #aaaaaa; font-size: 11px; line-height: 1.4; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 5px; margin-top: 5px;">${tldrSnippet}</div>` : ''}
               ${badges.length > 0 ? `<div style="margin-top: 5px; font-size: 10px; color: #999999;">${badges.join('  ')}</div>` : ''}
