@@ -14,7 +14,7 @@ import {
 import * as THREE from 'three';
 import { useGraphStore } from '@/hooks/useGraphStore';
 import type { Paper, CitationIntent } from '@/types';
-import { getStarColors } from './cosmic/cosmicConstants';
+import { getStarColors, CLUSTER_COLORS } from './cosmic/cosmicConstants';
 import { useGraphInteractions } from './useGraphInteractions';
 import { useGraphRenderer } from './useGraphRenderer';
 import {
@@ -246,14 +246,21 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       .map((paper) => {
         const primaryField = paper.fields?.[0] || 'Other';
         const starCol = getStarColors(primaryField);
-        const color = starCol.core;
+        // Color by cluster (with field-based fallback for noise)
+        const isSeed = paper.direction === 'seed';
+        const color = isSeed
+          ? '#D4AF37'
+          : paper.cluster_id >= 0
+            ? CLUSTER_COLORS[paper.cluster_id % CLUSTER_COLORS.length]
+            : starCol.core;
         const yearSpan = yearRange.max - yearRange.min || 1;
         const paperYear = paper.year || yearRange.min;
         const opacity =
           0.3 + 0.7 * ((paperYear - yearRange.min) / yearSpan);
 
         const rawCitations = paper.citation_count || 0;
-        const size = Math.min(30, Math.max(4, Math.sqrt(rawCitations + 1) * 1.5));
+        const baseSize = Math.min(12, Math.max(3, Math.log2(rawCitations + 2) * 2));
+        const size = isSeed ? baseSize * 2 : baseSize;
 
         const authorName = paper.authors?.[0]?.name?.split(' ').pop() || 'Unknown';
         const citationPercentile = citationRankMap.get(paper.id) || 0;

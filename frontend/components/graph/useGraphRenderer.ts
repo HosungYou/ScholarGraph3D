@@ -2,7 +2,7 @@ import { useCallback, useMemo, type MutableRefObject } from 'react';
 import * as THREE from 'three';
 import type { Paper } from '@/types';
 import { createStarNode } from './cosmic/starNodeRenderer';
-import { getStarColors } from './cosmic/cosmicConstants';
+import { getStarColors, CLUSTER_COLORS } from './cosmic/cosmicConstants';
 import type { ForceGraphNode, ForceGraphLink } from './ScholarGraph3D';
 
 // ─── Parameters ─────────────────────────────────────────────────────
@@ -82,6 +82,13 @@ export function useGraphRenderer({
           return node.opacity;
         })();
 
+        const isSeed = node.paper.direction === 'seed';
+        const clusterColor = isSeed
+          ? '#D4AF37'
+          : node.paper.cluster_id >= 0
+            ? CLUSTER_COLORS[node.paper.cluster_id % CLUSTER_COLORS.length]
+            : undefined;
+
         const group = createStarNode({
           field: node.paper.fields?.[0] || 'Other',
           size: node.val,
@@ -99,6 +106,8 @@ export function useGraphRenderer({
           showOARings,
           showCitationAura,
           direction: node.paper.direction,
+          colorOverride: clusterColor,
+          isSeed,
         });
         group.userData.nodeId = node.id;
 
@@ -330,6 +339,21 @@ export function useGraphRenderer({
         const ring = new THREE.Mesh(ringGeometry, ringMaterial);
         ring.rotation.x = Math.PI / 2;
         group.add(ring);
+      }
+
+      // Seed paper: gold glow ring
+      if (node.paper?.direction === 'seed' && !isSelected) {
+        const seedRingGeo = new THREE.RingGeometry(node.val * 1.4, node.val * 1.7, 32);
+        const seedRingMat = new THREE.MeshBasicMaterial({
+          color: '#D4AF37',
+          transparent: true,
+          opacity: 0.35,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+        });
+        const seedRing = new THREE.Mesh(seedRingGeo, seedRingMat);
+        seedRing.rotation.x = Math.PI / 2;
+        group.add(seedRing);
       }
 
       // Bridge node gold glow

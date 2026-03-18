@@ -1,3 +1,15 @@
+// Cluster colors: 8 visually distinct colors for cluster-based coloring
+export const CLUSTER_COLORS = [
+  '#4DA6FF',  // blue
+  '#FF6B6B',  // coral red
+  '#51CF66',  // green
+  '#FFD43B',  // yellow
+  '#CC5DE8',  // purple
+  '#FF922B',  // orange
+  '#20C997',  // teal
+  '#F06595',  // pink
+];
+
 // Star color map (stellar temperature inspired, replacing FIELD_COLOR_MAP)
 export const STAR_COLOR_MAP: Record<string, { core: string; glow: string }> = {
   'Computer Science': { core: '#4DA6FF', glow: '#2979FF' },
