@@ -68,7 +68,7 @@ export function createStarNode(options: StarNodeOptions): THREE.Group {
   const phase = Math.random() * Math.PI * 2;
 
   // Core star sphere with custom shader
-  const geometry = new THREE.SphereGeometry(size, 16, 16);
+  const geometry = new THREE.SphereGeometry(size, 8, 8);
   const material = new THREE.ShaderMaterial({
     vertexShader: STAR_VERTEX_SHADER,
     fragmentShader: STAR_FRAGMENT_SHADER,
@@ -98,7 +98,7 @@ export function createStarNode(options: StarNodeOptions): THREE.Group {
       depthWrite: false,
     })
   );
-  glowSprite.scale.setScalar(size * 1.0);
+  glowSprite.scale.setScalar(size * 0.5);
   group.add(glowSprite);
 
   // Selected: lens flare sprite
@@ -113,7 +113,7 @@ export function createStarNode(options: StarNodeOptions): THREE.Group {
         depthWrite: false,
       })
     );
-    flareSprite.scale.setScalar(size * 3);
+    flareSprite.scale.setScalar(size * 2);
     group.add(flareSprite);
     manager.registerAnimatedObject({
       type: 'flare',
@@ -135,7 +135,7 @@ export function createStarNode(options: StarNodeOptions): THREE.Group {
         depthWrite: false,
       })
     );
-    coronaSprite.scale.setScalar(size * 3.5);
+    coronaSprite.scale.setScalar(size * 2);
     group.add(coronaSprite);
   }
 
@@ -230,7 +230,7 @@ export function createStarNode(options: StarNodeOptions): THREE.Group {
     const seedGlowMat = new THREE.MeshBasicMaterial({
       color: new THREE.Color('#D4AF37'),
       transparent: true,
-      opacity: 0.35,
+      opacity: 0.2,
       side: THREE.DoubleSide,
       depthWrite: false,
     });
@@ -242,7 +242,7 @@ export function createStarNode(options: StarNodeOptions): THREE.Group {
       type: 'supernova',
       mesh: seedGlowRing,
       update: (time) => {
-        seedGlowMat.opacity = 0.25 + Math.sin(time * 1.5) * 0.1;
+        seedGlowMat.opacity = 0.15 + Math.sin(time * 1.5) * 0.05;
       },
     });
   }

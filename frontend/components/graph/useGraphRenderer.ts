@@ -527,7 +527,7 @@ export function useGraphRenderer({
     if (expandedEdgeIdsRef.current.size > 0) {
       if (expandedEdgeIdsRef.current.has(`${sourceId}-${targetId}`) ||
           expandedEdgeIdsRef.current.has(`${targetId}-${sourceId}`)) {
-        return 3.0;
+        return 0.6;
       }
     }
 
@@ -535,14 +535,15 @@ export function useGraphRenderer({
     const hId = hoveredNodeRef.current;
     if (hId && !selectedPaperIdRef.current) {
       if (sourceId === hId || targetId === hId) {
-        return Math.max(2.0, (link.width || 0.5) * 2);
+        return Math.max(0.5, (link.width || 0.2) * 2);
       }
     }
 
     if (link.isInfluential) {
-      return (link.width || 0.5) * 1.5;
+      return Math.min(0.3, (link.width || 0.2) * 1.5);
     }
-    return Math.max(0.5, link.width || 0.5);
+    const baseWidth = link.edgeType === 'similarity' ? 0.1 : 0.3;
+    return Math.min(baseWidth, link.width || baseWidth);
   }, [expandedEdgeIdsRef, hoveredNodeRef, selectedPaperIdRef]);
 
   // ── linkColor ──────────────────────────────────────────────────
