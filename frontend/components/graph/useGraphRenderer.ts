@@ -2,7 +2,7 @@ import { useCallback, useMemo, type MutableRefObject } from 'react';
 import * as THREE from 'three';
 import type { Paper } from '@/types';
 import { createStarNode } from './cosmic/starNodeRenderer';
-import { getStarColors } from './cosmic/cosmicConstants';
+import { getStarColors, CLUSTER_COLORS } from './cosmic/cosmicConstants';
 import type { ForceGraphNode, ForceGraphLink } from './ScholarGraph3D';
 
 // ─── Parameters ─────────────────────────────────────────────────────
@@ -10,6 +10,8 @@ import type { ForceGraphNode, ForceGraphLink } from './ScholarGraph3D';
 interface UseGraphRendererParams {
   fgRef: MutableRefObject<any>;
   selectedPaperIdRef: MutableRefObject<string | null>;
+  hoveredNodeRef: MutableRefObject<string | null>;
+  hoverConnectedRef: MutableRefObject<Set<string>>;
   newNodeIdsRef: MutableRefObject<Set<string>>;
   expandedFromRef: MutableRefObject<Map<string, string>>;
   expandedEdgeIdsRef: MutableRefObject<Set<string>>;
@@ -31,6 +33,8 @@ interface UseGraphRendererParams {
 export function useGraphRenderer({
   fgRef,
   selectedPaperIdRef,
+  hoveredNodeRef,
+  hoverConnectedRef,
   newNodeIdsRef,
   expandedFromRef,
   expandedEdgeIdsRef,
@@ -68,6 +72,10 @@ export function useGraphRenderer({
       const isSelected = selectedPaperIdRef.current === node.id;
       const hasSelection = selectedPaperIdRef.current !== null;
       const isHighlightedByPanel = highlightedPaperIds.has(node.id);
+      const hoveredId = hoveredNodeRef.current;
+      const isHovered = hoveredId === node.id;
+      const isHoverConnected = hoveredId ? hoverConnectedRef.current.has(node.id) : false;
+      const hasHover = hoveredId !== null;
 
       // === COSMIC THEME: Star nodes ===
       if (showCosmicTheme) {
@@ -78,9 +86,21 @@ export function useGraphRenderer({
             return 0.05;
           }
           if (isSelected || isHighlightedByPanel || isHighlighted) return 1;
+          // Hover dimming: connected nodes stay bright, others dim
+          if (hasHover && !hasSelection) {
+            if (isHovered || isHoverConnected) return 1;
+            return 0.3;
+          }
           if (hasSelection) return 0.15;
           return node.opacity;
         })();
+
+        const isSeed = node.paper.direction === 'seed';
+        const clusterColor = isSeed
+          ? '#D4AF37'
+          : node.paper.cluster_id >= 0
+            ? CLUSTER_COLORS[node.paper.cluster_id % CLUSTER_COLORS.length]
+            : undefined;
 
         const group = createStarNode({
           field: node.paper.fields?.[0] || 'Other',
@@ -99,6 +119,8 @@ export function useGraphRenderer({
           showOARings,
           showCitationAura,
           direction: node.paper.direction,
+          colorOverride: clusterColor,
+          isSeed,
         });
         group.userData.nodeId = node.id;
 
@@ -300,6 +322,9 @@ export function useGraphRenderer({
       if (isSelected) displayOpacity = 1;
       else if (isHighlightedByPanel) displayOpacity = 1;
       else if (isHighlighted) displayOpacity = 1;
+      else if (hasHover && !hasSelection) {
+        displayOpacity = (isHovered || isHoverConnected) ? 1 : 0.3;
+      }
       else if (hasSelection) displayOpacity = 0.15;
 
       const geometry = new THREE.SphereGeometry(node.val, 16, 16);
@@ -330,6 +355,21 @@ export function useGraphRenderer({
         const ring = new THREE.Mesh(ringGeometry, ringMaterial);
         ring.rotation.x = Math.PI / 2;
         group.add(ring);
+      }
+
+      // Seed paper: gold glow ring
+      if (node.paper?.direction === 'seed' && !isSelected) {
+        const seedRingGeo = new THREE.RingGeometry(node.val * 1.4, node.val * 1.7, 32);
+        const seedRingMat = new THREE.MeshBasicMaterial({
+          color: '#D4AF37',
+          transparent: true,
+          opacity: 0.35,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+        });
+        const seedRing = new THREE.Mesh(seedRingGeo, seedRingMat);
+        seedRing.rotation.x = Math.PI / 2;
+        group.add(seedRing);
       }
 
       // Bridge node gold glow
@@ -481,19 +521,29 @@ export function useGraphRenderer({
 
   const linkWidth = useCallback((linkData: unknown) => {
     const link = linkData as ForceGraphLink;
+    const sourceId = typeof link.source === 'string' ? link.source : (link.source as ForceGraphNode).id;
+    const targetId = typeof link.target === 'string' ? link.target : (link.target as ForceGraphNode).id;
+
     if (expandedEdgeIdsRef.current.size > 0) {
-      const sourceId = typeof link.source === 'string' ? link.source : (link.source as ForceGraphNode).id;
-      const targetId = typeof link.target === 'string' ? link.target : (link.target as ForceGraphNode).id;
       if (expandedEdgeIdsRef.current.has(`${sourceId}-${targetId}`) ||
           expandedEdgeIdsRef.current.has(`${targetId}-${sourceId}`)) {
         return 3.0;
       }
     }
+
+    // Hover: thicken connected edges
+    const hId = hoveredNodeRef.current;
+    if (hId && !selectedPaperIdRef.current) {
+      if (sourceId === hId || targetId === hId) {
+        return Math.max(2.0, (link.width || 0.5) * 2);
+      }
+    }
+
     if (link.isInfluential) {
       return (link.width || 0.5) * 1.5;
     }
     return Math.max(0.5, link.width || 0.5);
-  }, [expandedEdgeIdsRef]);
+  }, [expandedEdgeIdsRef, hoveredNodeRef, selectedPaperIdRef]);
 
   // ── linkColor ──────────────────────────────────────────────────
 
@@ -542,6 +592,16 @@ export function useGraphRenderer({
       if (link.isBidirectional) return '#FFD700';
       if (link.hasSharedAuthors) return '#2ECC71';
 
+      // Hover highlighting: brighten connected edges, dim others
+      const hId = hoveredNodeRef.current;
+      if (hId && !selectedPaper) {
+        const isConnected = sourceId === hId || targetId === hId;
+        if (isConnected) {
+          return link.color || '#FFFFFF';
+        }
+        return '#0505101A'; // ~10% opacity (hex alpha)
+      }
+
       // Selection-based highlighting + intent colors
       if (!selectedPaper) {
         return link.dashed
@@ -553,7 +613,7 @@ export function useGraphRenderer({
       }
       return '#050510';
     },
-    [selectedPaper, highlightSet, fgRef, activePathEdgeSet, expandedEdgeIdsRef]
+    [selectedPaper, highlightSet, fgRef, activePathEdgeSet, expandedEdgeIdsRef, hoveredNodeRef]
   );
 
   // ── linkThreeObject (dashed similarity lines) ──────────────────

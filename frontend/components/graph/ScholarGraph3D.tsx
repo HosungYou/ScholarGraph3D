@@ -14,7 +14,7 @@ import {
 import * as THREE from 'three';
 import { useGraphStore } from '@/hooks/useGraphStore';
 import type { Paper, CitationIntent } from '@/types';
-import { getStarColors } from './cosmic/cosmicConstants';
+import { getStarColors, CLUSTER_COLORS } from './cosmic/cosmicConstants';
 import { useGraphInteractions } from './useGraphInteractions';
 import { useGraphRenderer } from './useGraphRenderer';
 import {
@@ -103,6 +103,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
   const fgRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const hoveredNodeRef = useRef<string | null>(null);
+  const hoverConnectedRef = useRef<Set<string>>(new Set());
 
   // Client-only guard: React.lazy doesn't have ssr:false like next/dynamic
   const [isClient, setIsClient] = useState(false);
@@ -246,14 +247,21 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       .map((paper) => {
         const primaryField = paper.fields?.[0] || 'Other';
         const starCol = getStarColors(primaryField);
-        const color = starCol.core;
+        // Color by cluster (with field-based fallback for noise)
+        const isSeed = paper.direction === 'seed';
+        const color = isSeed
+          ? '#D4AF37'
+          : paper.cluster_id >= 0
+            ? CLUSTER_COLORS[paper.cluster_id % CLUSTER_COLORS.length]
+            : starCol.core;
         const yearSpan = yearRange.max - yearRange.min || 1;
         const paperYear = paper.year || yearRange.min;
         const opacity =
           0.3 + 0.7 * ((paperYear - yearRange.min) / yearSpan);
 
         const rawCitations = paper.citation_count || 0;
-        const size = Math.min(30, Math.max(4, Math.sqrt(rawCitations + 1) * 1.5));
+        const baseSize = Math.min(12, Math.max(3, Math.log2(rawCitations + 2) * 2));
+        const size = isSeed ? baseSize * 2 : baseSize;
 
         const authorName = paper.authors?.[0]?.name?.split(' ').pop() || 'Unknown';
         const citationPercentile = citationRankMap.get(paper.id) || 0;
@@ -422,6 +430,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     fgRef,
     containerRef,
     hoveredNodeRef,
+    hoverConnectedRef,
     justClickedNodeRef,
     forceGraphData,
     newNodeIdsRef,
@@ -441,6 +450,8 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
   } = useGraphRenderer({
     fgRef,
     selectedPaperIdRef,
+    hoveredNodeRef,
+    hoverConnectedRef,
     newNodeIdsRef,
     expandedFromRef,
     expandedEdgeIdsRef,
@@ -638,10 +649,10 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
           if (p.is_open_access) badges.push('🔓 OA');
           if (p.year && p.year >= 2024) badges.push('◆ New');
           return `
-            <div style="background: rgba(10,10,10,0.95); padding: 12px 14px; border-radius: 10px; font-family: system-ui; font-size: 12px; max-width: 320px; border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 4px 24px rgba(0,0,0,0.4);">
-              <div style="font-weight: 600; color: ${node.color}; margin-bottom: 5px; line-height: 1.4;">${p.title.length > 80 ? p.title.substring(0, 80) + '...' : p.title}</div>
+            <div style="background: rgba(8,8,8,0.97); padding: 12px 14px; border-radius: 10px; font-family: system-ui; font-size: 12px; max-width: 340px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 6px 28px rgba(0,0,0,0.55);">
+              <div style="font-weight: 600; color: ${node.color}; margin-bottom: 6px; line-height: 1.45; font-size: 13px;">${p.title}</div>
               <div style="color: #999999; font-size: 11px; margin-bottom: 3px;">${p.authors?.slice(0, 3).map((a) => a.name).join(', ') || 'Unknown'}${(p.authors?.length || 0) > 3 ? ' et al.' : ''}</div>
-              <div style="color: #777777; font-size: 11px; margin-bottom: 5px;">${p.venue || ''} ${p.year || ''} | ${p.citation_count.toLocaleString()} citations</div>
+              <div style="color: #777777; font-size: 11px; margin-bottom: 5px;">${p.venue || ''} ${p.year || ''} &middot; ${p.citation_count.toLocaleString()} citations</div>
               ${p.cluster_label ? `<div style="color: #888888; font-size: 10px; margin-bottom: 4px;">📍 ${p.cluster_label}</div>` : ''}
               ${tldrSnippet ? `<div style="color: #aaaaaa; font-size: 11px; line-height: 1.4; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 5px; margin-top: 5px;">${tldrSnippet}</div>` : ''}
               ${badges.length > 0 ? `<div style="margin-top: 5px; font-size: 10px; color: #999999;">${badges.join('  ')}</div>` : ''}

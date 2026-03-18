@@ -20,6 +20,10 @@ interface StarNodeOptions {
   showOARings: boolean;
   showCitationAura: boolean;
   direction?: string;
+  /** Override the field-derived color (e.g., cluster color or seed gold) */
+  colorOverride?: string;
+  /** Whether this node is the seed paper */
+  isSeed?: boolean;
 }
 
 export function createStarNode(options: StarNodeOptions): THREE.Group {
@@ -28,7 +32,7 @@ export function createStarNode(options: StarNodeOptions): THREE.Group {
     isSelected, isHighlighted, isHighlightedByPanel, hasSelection,
     isBridge, isOpenAccess, isTopCited,
     showBloom, showOARings, showCitationAura,
-    direction,
+    direction, colorOverride, isSeed,
   } = options;
 
   const group = new THREE.Group();
@@ -36,7 +40,7 @@ export function createStarNode(options: StarNodeOptions): THREE.Group {
   const starColors = getStarColors(field);
 
   // Determine display color
-  let displayColor = starColors.core;
+  let displayColor = colorOverride || starColors.core;
   if (isSelected) displayColor = '#D4AF37';
   else if (isHighlightedByPanel) displayColor = '#D4AF37';
   else if (isHighlighted) displayColor = '#FFFFFF';
@@ -218,6 +222,29 @@ export function createStarNode(options: StarNodeOptions): THREE.Group {
       depthWrite: false,
     });
     group.add(new THREE.Mesh(bloomGeo, bloomMat));
+  }
+
+  // Seed paper: subtle gold glow ring
+  if (isSeed && !isSelected) {
+    const seedGlowGeo = new THREE.RingGeometry(size * 1.4, size * 1.7, 32);
+    const seedGlowMat = new THREE.MeshBasicMaterial({
+      color: new THREE.Color('#D4AF37'),
+      transparent: true,
+      opacity: 0.35,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    const seedGlowRing = new THREE.Mesh(seedGlowGeo, seedGlowMat);
+    seedGlowRing.rotation.x = Math.PI / 2;
+    group.add(seedGlowRing);
+
+    manager.registerAnimatedObject({
+      type: 'supernova',
+      mesh: seedGlowRing,
+      update: (time) => {
+        seedGlowMat.opacity = 0.25 + Math.sin(time * 1.5) * 0.1;
+      },
+    });
   }
 
   return group;

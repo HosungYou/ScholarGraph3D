@@ -10,6 +10,7 @@ import CosmicAnimationManager from './cosmic/CosmicAnimationManager';
 import { createNebulaCluster } from './cosmic/nebulaClusterRenderer';
 import { createGapVoid } from './cosmic/gapVoidRenderer';
 import { getGlowTexture } from './cosmic/cosmicTextures';
+import { CLUSTER_COLORS } from './cosmic/cosmicConstants';
 import type { GraphData } from '@/types';
 import type { ForceGraphNode } from './ScholarGraph3D';
 
@@ -153,8 +154,11 @@ export function updateClusterOverlay({
         return sum + Math.sqrt((p.x - centroid.x) ** 2 + (p.y - centroid.y) ** 2 + (p.z - centroid.z) ** 2);
       }, 0) / positions.length;
 
+      const nebulaColor = cluster.id >= 0
+        ? CLUSTER_COLORS[cluster.id % CLUSTER_COLORS.length]
+        : cluster.color;
       const nebula = createNebulaCluster({
-        color: cluster.color,
+        color: nebulaColor,
         centroid,
         nodeCount: clusterNodes.length,
         spread: spread || 30,

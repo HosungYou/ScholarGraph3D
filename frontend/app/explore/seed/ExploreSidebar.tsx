@@ -19,9 +19,9 @@ interface ExploreSidebarProps {
   gaps: unknown[];
 }
 
-const tabs: { id: TabId; icon: React.ElementType; label: string }[] = [
-  { id: 'clusters', icon: Layers, label: 'DISCOVER' },
-  { id: 'gaps', icon: ScanSearch, label: 'GAPS' },
+const tabs: { id: TabId; icon: React.ElementType; label: string; shortLabel: string }[] = [
+  { id: 'clusters', icon: Layers, label: 'DISCOVER', shortLabel: 'Topics' },
+  { id: 'gaps', icon: ScanSearch, label: 'GAPS', shortLabel: 'Gaps' },
 ];
 
 export default function ExploreSidebar({
@@ -50,13 +50,14 @@ export default function ExploreSidebar({
                 onToggleCollapsed();
               }}
               title={tab.label}
-              className={`w-9 h-9 flex items-center justify-center rounded-lg transition-all relative ${
+              className={`w-9 flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-lg transition-all relative ${
                 activeTab === tab.id
                   ? 'bg-[#D4AF37]/10 text-[#D4AF37] shadow-[0_0_8px_rgba(212,175,55,0.15)]'
                   : 'text-[#999999]/40 hover:text-[#999999] hover:bg-[#111111]/50'
               }`}
             >
               <tab.icon className="w-4 h-4" />
+              <span className="text-[8px] font-mono leading-none">{tab.shortLabel}</span>
               {tab.id === 'gaps' && gaps.length > 0 && (
                 <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 flex items-center justify-center text-[7px] font-mono font-bold rounded-full bg-[#D4AF37] text-black">
                   {gaps.length}
