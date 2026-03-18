@@ -612,6 +612,11 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
 
     try {
       fgRef.current.d3Force('cluster', clusterForce());
+      // Similarity edges have near-zero link force — they are visual only, not layout drivers
+      // Without this, long cross-community similarity edges spread the graph to extremes
+      fgRef.current.d3Force('link')?.strength((link: any) =>
+        link.edgeType === 'similarity' ? 0.01 : 0.4
+      );
       fgRef.current.d3ReheatSimulation();
     } catch {
       // fgRef not ready
