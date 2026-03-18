@@ -675,6 +675,21 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
           return;
         }
 
+        // Build node position map — d3-force mutates link.source/target to objects,
+        // but after re-renders they might revert to string IDs. Use node map as fallback.
+        const nodeMap = new Map<string, ForceGraphNode>();
+        for (const n of forceGraphData.nodes) nodeMap.set(n.id, n);
+
+        const resolvePos = (ref: string | ForceGraphNode) => {
+          if (typeof ref === 'string') return nodeMap.get(ref);
+          if (typeof ref === 'object' && ref !== null && (ref as ForceGraphNode).x !== undefined) {
+            return ref as ForceGraphNode;
+          }
+          // ref is object with id but no x yet — look up by id
+          const id = (ref as any).id;
+          return id ? nodeMap.get(String(id)) : undefined;
+        };
+
         const distToSegment = (
           px: number, py: number,
           ax: number, ay: number,
@@ -687,27 +702,24 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
           return Math.sqrt((px - (ax + t * dx)) ** 2 + (py - (ay + t * dy)) ** 2);
         };
 
-        const THRESHOLD = 22; // pixels
+        const THRESHOLD = 28; // pixels — larger for easier hover
         let closest: ForceGraphLink | null = null;
         let closestDist = THRESHOLD;
 
         for (const link of simEdges) {
-          const src = link.source as ForceGraphNode;
-          const tgt = link.target as ForceGraphNode;
-          if (src.x === undefined || tgt.x === undefined) continue;
+          const srcNode = resolvePos(link.source as string | ForceGraphNode);
+          const tgtNode = resolvePos(link.target as string | ForceGraphNode);
+          if (!srcNode || !tgtNode || srcNode.x === undefined || tgtNode.x === undefined) continue;
           try {
-            const a = fgRef.current.graph2ScreenCoords(src.x, src.y ?? 0, src.z ?? 0);
-            const b = fgRef.current.graph2ScreenCoords(tgt.x, tgt.y ?? 0, tgt.z ?? 0);
+            const a = fgRef.current.graph2ScreenCoords(srcNode.x, srcNode.y ?? 0, srcNode.z ?? 0);
+            const b = fgRef.current.graph2ScreenCoords(tgtNode.x, tgtNode.y ?? 0, tgtNode.z ?? 0);
             if (!a || !b) continue;
             const dist = distToSegment(cx, cy, a.x, a.y, b.x, b.y);
             if (dist < closestDist) { closestDist = dist; closest = link; }
           } catch { /* graph2ScreenCoords not ready */ }
         }
 
-        setHoveredSimLink(prev => {
-          if (prev === closest) return prev;
-          return closest;
-        });
+        setHoveredSimLink(prev => prev === closest ? prev : closest);
       }}
     >
       {/* Z-axis legend — hybrid temporal+semantic */}
