@@ -193,6 +193,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     };
   }, [graphData]);
 
+
   // Build cluster color map
   const clusterColorMap = useMemo(() => {
     if (!graphData) return new Map<number, string>();
@@ -662,7 +663,52 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     <div
       ref={containerRef}
       className="w-full h-full bg-background relative"
-      onMouseMove={(e) => setMousePos({ x: e.clientX, y: e.clientY })}
+      onMouseMove={(e) => {
+        const cx = e.clientX;
+        const cy = e.clientY;
+        setMousePos({ x: cx, y: cy });
+
+        // Proximity-based similarity edge hover: screen-project each edge and find closest
+        const simEdges = forceGraphData.links.filter(l => l.dashed);
+        if (!fgRef.current || !simEdges.length) {
+          setHoveredSimLink(null);
+          return;
+        }
+
+        const distToSegment = (
+          px: number, py: number,
+          ax: number, ay: number,
+          bx: number, by: number
+        ) => {
+          const dx = bx - ax; const dy = by - ay;
+          const len2 = dx * dx + dy * dy;
+          if (len2 === 0) return Math.sqrt((px - ax) ** 2 + (py - ay) ** 2);
+          const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len2));
+          return Math.sqrt((px - (ax + t * dx)) ** 2 + (py - (ay + t * dy)) ** 2);
+        };
+
+        const THRESHOLD = 22; // pixels
+        let closest: ForceGraphLink | null = null;
+        let closestDist = THRESHOLD;
+
+        for (const link of simEdges) {
+          const src = link.source as ForceGraphNode;
+          const tgt = link.target as ForceGraphNode;
+          if (src.x === undefined || tgt.x === undefined) continue;
+          try {
+            const a = fgRef.current.graph2ScreenCoords(src.x, src.y ?? 0, src.z ?? 0);
+            const b = fgRef.current.graph2ScreenCoords(tgt.x, tgt.y ?? 0, tgt.z ?? 0);
+            if (!a || !b) continue;
+            const dist = distToSegment(cx, cy, a.x, a.y, b.x, b.y);
+            if (dist < closestDist) { closestDist = dist; closest = link; }
+          } catch { /* graph2ScreenCoords not ready */ }
+        }
+
+        setHoveredSimLink(prev => {
+          if (prev === closest) return prev;
+          return closest;
+        });
+      }}
     >
       {/* Z-axis legend — hybrid temporal+semantic */}
       <div className="absolute bottom-16 left-4 glass rounded-lg px-3 py-2 text-xs text-text-secondary pointer-events-none z-10">
@@ -757,10 +803,6 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         onNodeClick={handleNodeClick}
         onNodeHover={handleNodeHover}
         onLinkClick={handleLinkClick}
-        onLinkHover={(link) => {
-          const l = link as ForceGraphLink | null;
-          setHoveredSimLink(l?.edgeType === 'similarity' ? l : null);
-        }}
         onBackgroundClick={handleBackgroundClick}
         warmupTicks={50}
         cooldownTicks={150}
