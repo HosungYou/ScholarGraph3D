@@ -118,7 +118,7 @@ export const api = {
           z: n.z,
           cluster_id: n.cluster_id,
         })),
-        limit: 20,
+        limit: 50,
       }),
     }).then((r: any) => ({
       nodes: (r.nodes || []).map((n: any) => ({
