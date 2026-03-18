@@ -208,7 +208,7 @@ export default function LandingPage() {
       <nav className="relative z-10 flex items-center justify-between px-8 md:px-16 py-6">
         <div className="flex items-center gap-3">
           <span className="font-serif text-2xl tracking-tight text-white">SG3D</span>
-          <span className="text-[10px] font-mono text-neutral-600 tracking-wider">v3.0</span>
+          <span className="text-[10px] font-mono text-neutral-600 tracking-wider">v4.0</span>
         </div>
         <div className="flex items-center gap-6">
           <a href={user ? '/dashboard' : '/auth'} className="text-xs font-mono text-neutral-500 hover:text-white transition-colors tracking-wider uppercase">
@@ -248,8 +248,7 @@ export default function LandingPage() {
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.6, delay: 0.4 }}
               >
-                Start from a topic, choose one promising paper, then expand,
-                compare, and turn the workspace into a reading plan or research brief.
+                Start from a topic, choose one paper, then explore its citation network in 3D.
               </motion.p>
 
               {/* Stats row */}
@@ -262,7 +261,7 @@ export default function LandingPage() {
                 {[
                   { number: 'Topic', label: 'search first' },
                   { number: 'Seed', label: 'pick one paper' },
-                  { number: 'Brief', label: 'turn results into output' },
+                  { number: 'Explore', label: 'navigate the citation map' },
                 ].map((stat) => (
                   <div key={stat.label}>
                     <div className="font-serif text-3xl md:text-4xl text-white">{stat.number}</div>
@@ -599,21 +598,21 @@ export default function LandingPage() {
             {[
               {
                 num: '01',
-                title: 'Citation Mapping',
-                desc: 'References and co-citations reveal the intellectual lineage of every idea. See how papers build upon each other across disciplines.',
-                stat: '16M+ pairs',
+                title: 'Find Connections',
+                desc: 'See how papers reference each other. Citation links reveal the intellectual lineage behind every idea.',
+                stat: 'citations',
               },
               {
                 num: '02',
-                title: 'Semantic Clustering',
-                desc: 'SPECTER2 embeddings place papers by meaning, not keywords. Related research naturally groups into visible clusters.',
-                stat: 'HDBSCAN',
+                title: 'Discover Communities',
+                desc: 'Papers with similar topics naturally group together. Explore research communities as they emerge from the data.',
+                stat: 'auto-detected',
               },
               {
                 num: '03',
-                title: 'Temporal Depth',
-                desc: 'Publication year maps to the Z-axis. Navigate through time, from foundational works to cutting-edge discoveries.',
-                stat: 'Z-axis',
+                title: 'See the Timeline',
+                desc: 'Publication year maps to depth. Navigate from foundational works to the latest discoveries.',
+                stat: 'year depth',
               },
             ].map((item, i) => (
               <motion.div

@@ -72,9 +72,6 @@ import {
   Search,
   ArrowLeft,
   Network,
-  GitBranch,
-  Layers,
-  Share2,
   CheckCircle,
   ScanSearch,
   X,
@@ -121,10 +118,6 @@ function SeedExploreContent() {
     gaps,
     setGaps,
     setFrontierIds,
-    showCitationEdges,
-    showSimilarityEdges,
-    showClusterHulls,
-    showLabels,
   } = useGraphStore();
 
   const graphRef = useRef<ScholarGraph3DRef>(null);
@@ -484,15 +477,6 @@ function SeedExploreContent() {
     ? Math.min(420, Math.max(320, viewportWidth - 24))
     : DRAWER_WIDTH;
 
-  const handleRestoreDefaultView = useCallback(() => {
-    const store = useGraphStore.getState();
-    if (!store.showCitationEdges) store.toggleCitationEdges();
-    if (!store.showSimilarityEdges) store.toggleSimilarityEdges();
-    if (!store.showClusterHulls) store.toggleClusterHulls();
-    if (!store.showLabels) store.toggleLabels();
-    graphRef.current?.resetCamera();
-  }, []);
-
   /* ── Responsive auto-collapse: narrow viewports ── */
   useEffect(() => {
     if (showPaperDetail && typeof window !== 'undefined' && window.innerWidth < 1200) {
@@ -734,46 +718,6 @@ function SeedExploreContent() {
             </div>
           )}
 
-          {graphData && !showPaperDetail && !isLoading && (
-            <div className="absolute top-4 left-1/2 z-30 w-[min(720px,calc(100%-32px))] -translate-x-1/2 rounded-2xl border border-[rgba(212,175,55,0.18)] bg-[rgba(8,8,8,0.92)] p-3 shadow-[0_14px_40px_rgba(0,0,0,0.35)] backdrop-blur-xl">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <div className="text-[9px] font-mono uppercase tracking-[0.18em] text-[#D4AF37]/70">
-                    Choose Your Next Move
-                  </div>
-                  <div className="mt-1 text-[11px] font-mono text-[#E5E5E5]">
-                    {seedPaper?.title || seedMeta?.seed_title || 'Start from the seed paper and branch into one concrete task.'}
-                  </div>
-                  <div className="mt-1 text-[10px] font-mono text-[#999999]/40">
-                    Use the graph as a workspace: review the seed, build a reading list, or write a quick output.
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {seedPaper && (
-                    <button
-                      onClick={() => handlePaperSelect(seedPaper)}
-                      className="rounded-full border border-[rgba(255,255,255,0.06)] px-3 py-1.5 text-[10px] font-mono uppercase tracking-wide text-[#E5E5E5] transition-colors hover:border-[rgba(212,175,55,0.2)] hover:text-[#D4AF37]"
-                    >
-                      Review Seed
-                    </button>
-                  )}
-                  <button
-                    onClick={() => openSidebarTab('gaps')}
-                    className="rounded-full border border-[rgba(212,175,55,0.2)] bg-[rgba(212,175,55,0.08)] px-3 py-1.5 text-[10px] font-mono uppercase tracking-wide text-[#D4AF37] transition-colors hover:bg-[rgba(212,175,55,0.14)]"
-                  >
-                    Explore Gaps
-                  </button>
-                  <button
-                    onClick={() => openSidebarTab('clusters')}
-                    className="rounded-full border border-[rgba(255,255,255,0.06)] px-3 py-1.5 text-[10px] font-mono uppercase tracking-wide text-[#E5E5E5] transition-colors hover:border-[rgba(212,175,55,0.2)] hover:text-[#D4AF37]"
-                  >
-                    Browse Clusters
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
           {graphData && (
             <Graph3DErrorBoundary
               recoveryNonce={graphRenderNonce}
@@ -789,53 +733,12 @@ function SeedExploreContent() {
           {/* ─── Bottom Status Bar ─── */}
           {graphData && seedMeta && (
             <div data-testid="graph-status-strip" className="absolute bottom-4 left-4 right-4 z-10 pointer-events-none">
-              <div className="pointer-events-auto inline-flex max-w-full flex-wrap items-center gap-2 rounded-xl border border-[rgba(255,255,255,0.06)] bg-[rgba(8,8,8,0.9)] px-3 py-2 shadow-[0_12px_32px_rgba(0,0,0,0.28)] backdrop-blur-xl">
-                <div className="flex items-center gap-1.5 text-[10px] font-mono text-[#999999]">
-                  <Network className="w-3 h-3 text-[#D4AF37]" />
-                  <span className="text-text-primary font-medium">{graphData.nodes.length}</span>
-                  <span className="text-[#999999]/50">papers</span>
-                </div>
-                <div className="flex items-center gap-1.5 text-[10px] font-mono text-[#999999]">
-                  <GitBranch className="w-3 h-3" />
-                  <span className="text-text-primary font-medium">
-                    {graphData.edges.filter(e => e.type === 'citation').length}
-                  </span>
-                  <span className="text-[#999999]/50">citations</span>
-                </div>
-                <div className="flex items-center gap-1.5 text-[10px] font-mono text-[#999999]">
-                  <Share2 className="w-3 h-3 text-[#D4AF37]/60" />
-                  <span className="text-text-primary font-medium">
-                    {graphData.edges.filter(e => e.type === 'similarity').length}
-                  </span>
-                  <span className="text-[#999999]/50">similar</span>
-                </div>
-                <div className="flex items-center gap-1.5 text-[10px] font-mono text-[#999999]">
-                  <Layers className="w-3 h-3" />
-                  <span className="text-text-primary font-medium">{graphData.clusters.length}</span>
-                  <span className="text-[#999999]/50">clusters</span>
-                </div>
-
-                <div className="mx-1 h-4 w-px bg-[rgba(255,255,255,0.06)]" />
-
-                <span className="rounded-full border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] px-2 py-1 text-[10px] font-mono text-[#999999]/75">
-                  View {[
-                    showCitationEdges ? 'citations' : null,
-                    showSimilarityEdges ? 'similarity' : null,
-                    showClusterHulls ? 'hulls' : null,
-                    showLabels ? 'labels' : null,
-                  ].filter(Boolean).join(' · ')}
-                </span>
-
-                <button
-                  onClick={handleRestoreDefaultView}
-                  className="rounded-full border border-[rgba(212,175,55,0.2)] bg-[rgba(212,175,55,0.08)] px-2.5 py-1 text-[10px] font-mono uppercase tracking-wide text-[#D4AF37] transition-colors hover:bg-[rgba(212,175,55,0.14)]"
-                >
-                  Default View
-                </button>
-
-                <span className="text-[10px] font-mono italic text-[#999999]/35">
-                  Double-click a paper or use the drawer to expand.
-                </span>
+              <div className="pointer-events-auto inline-flex max-w-full items-center gap-1.5 rounded-xl border border-[rgba(255,255,255,0.06)] bg-[rgba(8,8,8,0.9)] px-3 py-2 shadow-[0_12px_32px_rgba(0,0,0,0.28)] backdrop-blur-xl">
+                <Network className="w-3 h-3 text-[#D4AF37]" />
+                <span className="text-[10px] font-mono text-text-primary font-medium">{graphData.nodes.length}</span>
+                <span className="text-[10px] font-mono text-[#999999]/50">papers across</span>
+                <span className="text-[10px] font-mono text-text-primary font-medium">{graphData.clusters.length}</span>
+                <span className="text-[10px] font-mono text-[#999999]/50">topics</span>
               </div>
             </div>
           )}

@@ -44,7 +44,7 @@ export function createNebulaCluster(options: NebulaClusterOptions): THREE.Group 
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   geometry.setAttribute('alpha', new THREE.BufferAttribute(alphas, 1));
 
-  const baseOpacity = isEmerging ? 0.40 : 0.20;
+  const baseOpacity = isEmerging ? 0.15 : 0.12;
 
   const cloudMaterial = new THREE.ShaderMaterial({
     vertexShader: `
@@ -110,7 +110,7 @@ export function createNebulaCluster(options: NebulaClusterOptions): THREE.Group 
       varying vec2  vUv;
       void main() {
         float pulse = 0.6 + 0.4 * sin(uTime * 1.2);
-        float opacity = 0.05 * pulse;
+        float opacity = 0.025 * pulse;
         gl_FragColor = vec4(uColor, opacity);
       }
     `,

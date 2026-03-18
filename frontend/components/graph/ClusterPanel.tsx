@@ -156,8 +156,8 @@ export default function ClusterPanel() {
       {/* Cluster quality warning */}
       {graphData?.meta?.cluster_silhouette !== undefined && (graphData.meta.cluster_silhouette as number) < 0.15 && (
         <div className="mx-0 mb-3 px-3 py-2 border border-yellow-500/40 bg-yellow-500/5 rounded text-xs text-yellow-400 font-mono">
-          ⚠ 클러스터 구분도 낮음 (silhouette={(graphData.meta.cluster_silhouette as number).toFixed(2)})
-          — 논문들의 주제가 매우 유사하거나 데이터가 부족합니다.
+          ⚠ Low cluster separation (silhouette={(graphData.meta.cluster_silhouette as number).toFixed(2)})
+          — papers may be too similar or the dataset too small for meaningful clusters.
         </div>
       )}
 
