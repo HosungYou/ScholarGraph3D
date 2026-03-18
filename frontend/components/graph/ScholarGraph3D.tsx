@@ -702,17 +702,6 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
           return Math.sqrt((px - (ax + t * dx)) ** 2 + (py - (ay + t * dy)) ** 2);
         };
 
-        // DEBUG — log once every 2s to avoid spam
-        if ((window as any).__dbgLastLog === undefined || Date.now() - (window as any).__dbgLastLog > 2000) {
-          (window as any).__dbgLastLog = Date.now();
-          const firstSim = simEdges[0];
-          const firstSrc = firstSim ? resolvePos(firstSim.source as string | ForceGraphNode) : null;
-          const screenTest = firstSrc && fgRef.current?.graph2ScreenCoords
-            ? (() => { try { return fgRef.current.graph2ScreenCoords(firstSrc.x ?? 0, firstSrc.y ?? 0, firstSrc.z ?? 0); } catch { return 'throws'; } })()
-            : 'no_fg';
-          console.log('[SIM DBG] simEdges:', simEdges.length, 'firstSrc:', firstSrc ? `x=${firstSrc.x?.toFixed(1)},y=${firstSrc.y?.toFixed(1)}` : 'null', 'screen:', JSON.stringify(screenTest), 'viewport:', window.innerWidth);
-        }
-
         const THRESHOLD = 28; // pixels — larger for easier hover
         let closest: ForceGraphLink | null = null;
         let closestDist = THRESHOLD;
