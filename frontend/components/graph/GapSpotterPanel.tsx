@@ -4,7 +4,6 @@ import { useMemo, useState, useCallback } from 'react';
 import { useGraphStore } from '@/hooks/useGraphStore';
 import { Radar, Waypoints, Sparkles, ChevronDown, ChevronRight, FileText, Loader2, Copy, AlertTriangle } from 'lucide-react';
 import type { StructuralGap, Paper, GapScoreBreakdown } from '@/types';
-import { api } from '@/lib/api';
 
 export default function GapSpotterPanel() {
   const {
@@ -17,10 +16,8 @@ export default function GapSpotterPanel() {
     setPanelSelectionId,
     setHighlightedClusterPair,
     setHoveredGapEdges,
-    setActiveGapReport,
-    setGapReportLoading,
-    gapReportLoading,
   } = useGraphStore();
+  const [gapReportLoading, setGapReportLoading] = useState(false);
   const [showAllGaps, setShowAllGaps] = useState(false);
 
   const frontierPapers = useMemo(() => {
@@ -46,47 +43,10 @@ export default function GapSpotterPanel() {
     };
   }, [gaps, showAllGaps]);
 
-  const handleGenerateReport = useCallback(async (gap: StructuralGap) => {
-    if (!graphData || gapReportLoading) return;
-
-    setGapReportLoading(true);
-    try {
-      // Capture 3D graph snapshot if possible
-      let snapshotDataUrl: string | undefined;
-      try {
-        const canvas = document.querySelector('canvas');
-        if (canvas) {
-          snapshotDataUrl = canvas.toDataURL('image/png');
-        }
-      } catch {
-        // Snapshot capture is best-effort
-      }
-
-      const graphContext = {
-        papers: graphData.nodes.map(n => ({
-          id: n.id,
-          title: n.title,
-          cluster_id: n.cluster_id,
-          cluster_label: n.cluster_label,
-          year: n.year,
-          citation_count: n.citation_count,
-        })),
-        clusters: graphData.clusters.map(c => ({
-          id: c.id,
-          label: c.label,
-          paper_count: c.paper_count,
-        })),
-        total_papers: graphData.nodes.length,
-      };
-
-      const report = await api.generateGapReport(gap, graphContext, snapshotDataUrl);
-      setActiveGapReport(report);
-    } catch (err) {
-      console.error('Gap report generation failed:', err);
-    } finally {
-      setGapReportLoading(false);
-    }
-  }, [graphData, gapReportLoading, setActiveGapReport, setGapReportLoading]);
+  // Gap report generation removed in MVP cleanup
+  const handleGenerateReport = useCallback((_gap: StructuralGap) => {
+    return;
+  }, []);
 
   // Empty state — differentiate between "no gaps" and "quality-filtered"
   if (gaps.length === 0) {
@@ -527,29 +487,6 @@ function GapCard({ gap, graphData, selectPaper, setPanelSelectionId, onGenerateR
           </div>
         </div>
 
-        {/* Actionability badge */}
-        {gap.actionability && (
-          <div className="mb-2">
-            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[8px] font-mono font-bold uppercase tracking-wider ${
-              gap.actionability.recommendation === 'high_opportunity'
-                ? 'bg-[rgba(46,204,113,0.1)] text-[#2ECC71] border border-[rgba(46,204,113,0.2)]'
-                : gap.actionability.recommendation === 'exploratory'
-                ? 'bg-[rgba(52,152,219,0.1)] text-[#3498DB] border border-[rgba(52,152,219,0.2)]'
-                : gap.actionability.recommendation === 'needs_collaboration'
-                ? 'bg-[rgba(230,126,34,0.1)] text-[#E67E22] border border-[rgba(230,126,34,0.2)]'
-                : gap.actionability.recommendation === 'terminology_barrier'
-                ? 'bg-[rgba(231,76,60,0.1)] text-[#E74C3C] border border-[rgba(231,76,60,0.2)]'
-                : 'bg-[rgba(149,165,166,0.1)] text-[#95A5A6] border border-[rgba(149,165,166,0.2)]'
-            }`}>
-              {gap.actionability.recommendation === 'high_opportunity' ? 'HIGH OPPORTUNITY' :
-               gap.actionability.recommendation === 'exploratory' ? 'EXPLORATORY' :
-               gap.actionability.recommendation === 'needs_collaboration' ? 'NEEDS COLLABORATION' :
-               gap.actionability.recommendation === 'terminology_barrier' ? 'TERMINOLOGY BARRIER' :
-               'INFRASTRUCTURE GAP'}
-            </span>
-          </div>
-        )}
-
         {/* Score breakdown mini bars */}
         {gap.gap_score_breakdown && (
           <ScoreBreakdown breakdown={gap.gap_score_breakdown} />
@@ -660,12 +597,7 @@ function ScoreBreakdown({ breakdown }: { breakdown: GapScoreBreakdown }) {
     { key: 'structural', label: 'STR' },
     { key: 'relatedness', label: 'REL' },
     { key: 'temporal', label: 'TMP' },
-    { key: 'intent', label: 'INT' },
-    { key: 'directional', label: 'DIR' },
-    { key: 'structural_holes', label: 'SHL' },
-    { key: 'influence', label: 'INF' },
-    { key: 'author_silo', label: 'AUT' },
-    { key: 'venue_diversity', label: 'VEN' },
+    { key: 'composite', label: 'CMP' },
   ];
 
   return (

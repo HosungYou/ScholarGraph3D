@@ -2,14 +2,7 @@ import type {
   GraphData,
   SavedGraph,
   CitationIntent,
-  Bookmark,
-  RecommendationFeedback,
   Paper,
-  ChatAction,
-  GapReport,
-  StructuralGap,
-  AcademicReport,
-  NetworkOverview,
 } from '@/types';
 import { getSession } from './supabase';
 
@@ -155,51 +148,6 @@ export const api = {
       meta: r.meta,
     })),
 
-  addPaperAsSeed: (
-    id: string,
-    existingNodes: import('@/types').Paper[],
-    existingEdges: import('@/types').GraphEdge[]
-  ): Promise<{ nodes: import('@/types').Paper[]; edges: import('@/types').GraphEdge[]; meta?: { references_ok: boolean; citations_ok: boolean; refs_count: number; cites_count: number; error_detail?: string } }> =>
-    request(`${API_BASE}/api/papers/${encodeURIComponent(id)}/expand-stable`, {
-      method: 'POST',
-      body: JSON.stringify({
-        existing_nodes: existingNodes.map((n) => ({
-          id: n.id,
-          x: n.x,
-          y: n.y,
-          z: n.z,
-          cluster_id: n.cluster_id,
-        })),
-        limit: 80,
-      }),
-    }).then((r: any) => ({
-      nodes: (r.nodes || []).map((n: any) => ({
-        id: n.paper_id,
-        title: n.title || '',
-        authors: n.authors || [],
-        year: n.year || 0,
-        venue: n.venue,
-        citation_count: n.citation_count || 0,
-        abstract: n.abstract || undefined,
-        tldr: n.tldr || undefined,
-        fields: n.fields || [],
-        topics: [],
-        x: n.initial_x || 0,
-        y: n.initial_y || 0,
-        z: n.initial_z || 0,
-        cluster_id: n.cluster_id ?? -1,
-        cluster_label: 'Second Seed',
-        is_open_access: n.is_open_access || false,
-        oa_url: undefined,
-        is_bridge: false,
-        frontier_score: n.frontier_score || 0,
-        s2_paper_id: n.paper_id,
-        doi: n.doi || undefined,
-      })),
-      edges: r.edges || [],
-      meta: r.meta,
-    })),
-
   // Saved Graphs (auth required)
   listGraphs: async (): Promise<SavedGraph[]> =>
     request<SavedGraph[]>(`${API_BASE}/api/graphs`),
@@ -302,124 +250,6 @@ export const api = {
       frontier_score: 0,
     })),
 
-  // ─── Seed Chat ───────────────────────────────────────────────────
-  sendSeedChat: (
-    message: string,
-    graphContext: { papers: any[]; clusters: any[]; total_papers: number },
-    history: { role: 'user' | 'assistant'; content: string }[]
-  ): Promise<{ reply: string; suggested_followups: string[]; actions?: ChatAction[] }> =>
-    request(`${API_BASE}/api/seed-chat`, {
-      method: 'POST',
-      body: JSON.stringify({ message, graph_context: graphContext, history }),
-    }),
-
-  // ─── Bookmarks (P10) ──────────────────────────────────────────────
-  getBookmarks: async (tag?: string): Promise<Bookmark[]> => {
-    const params = new URLSearchParams();
-    if (tag) params.set('tag', tag);
-    const qs = params.toString();
-    return request<Bookmark[]>(`${API_BASE}/api/bookmarks${qs ? '?' + qs : ''}`);
-  },
-
-  getBookmarkForPaper: async (paperId: string): Promise<Bookmark | null> => {
-    try {
-      return await request<Bookmark>(
-        `${API_BASE}/api/bookmarks/paper/${encodeURIComponent(paperId)}`
-      );
-    } catch {
-      return null; // 404 = no bookmark
-    }
-  },
-
-  createBookmark: async (data: {
-    paper_id: string;
-    tags?: string[];
-    memo?: string;
-    paper_title?: string;
-    paper_authors?: string[];
-    paper_year?: number;
-    paper_venue?: string;
-    paper_citation_count?: number;
-  }): Promise<Bookmark> =>
-    request<Bookmark>(`${API_BASE}/api/bookmarks`, {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
-
-  updateBookmark: async (
-    id: string,
-    data: {
-      tags?: string[];
-      memo?: string;
-      paper_title?: string;
-      paper_authors?: string[];
-      paper_year?: number;
-      paper_venue?: string;
-      paper_citation_count?: number;
-    }
-  ): Promise<Bookmark> =>
-    request<Bookmark>(`${API_BASE}/api/bookmarks/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }),
-
-  deleteBookmark: async (id: string): Promise<void> => {
-    const authHeaders = await getAuthHeaders();
-    const response = await fetch(`${API_BASE}/api/bookmarks/${id}`, {
-      method: 'DELETE',
-      headers: { ...authHeaders },
-    });
-    if (!response.ok) {
-      throw new Error(`Failed to delete bookmark: ${response.status}`);
-    }
-  },
-
-  // ─── Recommendation Feedback ─────────────────────────────────────
-  getRecommendationFeedback: async (sourcePaperId: string): Promise<RecommendationFeedback[]> => {
-    const params = new URLSearchParams({ source_paper_id: sourcePaperId });
-    return request<RecommendationFeedback[]>(`${API_BASE}/api/recommendation-feedback?${params.toString()}`);
-  },
-
-  upsertRecommendationFeedback: async (data: {
-    source_paper_id: string;
-    candidate_paper_id: string;
-    feedback: 'relevant' | 'not_now';
-  }): Promise<RecommendationFeedback> =>
-    request<RecommendationFeedback>(`${API_BASE}/api/recommendation-feedback`, {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
-
-  deleteRecommendationFeedback: async (sourcePaperId: string, candidatePaperId: string): Promise<void> => {
-    const authHeaders = await getAuthHeaders();
-    const params = new URLSearchParams({
-      source_paper_id: sourcePaperId,
-      candidate_paper_id: candidatePaperId,
-    });
-    const response = await fetch(`${API_BASE}/api/recommendation-feedback?${params.toString()}`, {
-      method: 'DELETE',
-      headers: { ...authHeaders },
-    });
-    if (!response.ok && response.status !== 404) {
-      throw new Error(`Failed to delete recommendation feedback: ${response.status}`);
-    }
-  },
-
-  // ─── Gap Report ────────────────────────────────────────────────
-  generateGapReport: (
-    gap: StructuralGap,
-    graphContext: { papers: any[]; clusters: any[]; total_papers: number },
-    snapshotDataUrl?: string
-  ): Promise<GapReport> =>
-    request<GapReport>(`${API_BASE}/api/gaps/report`, {
-      method: 'POST',
-      body: JSON.stringify({
-        gap,
-        graph_context: graphContext,
-        snapshot_data_url: snapshotDataUrl,
-      }),
-    }, 30000),
-
   // ─── Seed Paper Exploration ──────────────────────────────────────
   seedExplore: (
     paperId: string,
@@ -435,28 +265,6 @@ export const api = {
         include_citations: options?.include_citations ?? true,
       }),
     }, 30000),
-  // ─── Academic Analysis ────────────────────────────────────────────
-  generateAcademicReport: (
-    graphContext: { papers: any[]; clusters: any[]; edges: any[]; total_papers: number },
-    gapIds?: string[],
-    analysisParameters?: Record<string, any>
-  ): Promise<AcademicReport> =>
-    request<AcademicReport>(`${API_BASE}/api/academic-report`, {
-      method: 'POST',
-      body: JSON.stringify({
-        graph_context: graphContext,
-        gap_ids: gapIds,
-        analysis_parameters: analysisParameters,
-      }),
-    }, 60000),
-
-  getNetworkOverview: (
-    graphContext: { papers: any[]; clusters: any[]; edges: any[] }
-  ): Promise<NetworkOverview> =>
-    request<NetworkOverview>(`${API_BASE}/api/network-overview`, {
-      method: 'POST',
-      body: JSON.stringify({ graph_context: graphContext }),
-    }),
 };
 
 export default api;

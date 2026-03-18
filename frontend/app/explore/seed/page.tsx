@@ -8,16 +8,11 @@ import { getSession } from '@/lib/supabase';
 import { useGraphStore } from '@/hooks/useGraphStore';
 import ScholarGraph3D, { type ScholarGraph3DRef } from '@/components/graph/ScholarGraph3D';
 import PaperDetailPanel from '@/components/graph/PaperDetailPanel';
-import ClusterPanel from '@/components/graph/ClusterPanel';
+import ExploreSidebar from './ExploreSidebar';
 import GraphControls from '@/components/graph/GraphControls';
 import GraphLegend from '@/components/graph/GraphLegend';
 import RadarLoader from '@/components/cosmic/RadarLoader';
-import SeedChatPanel from '@/components/graph/SeedChatPanel';
-import GapSpotterPanel from '@/components/graph/GapSpotterPanel';
-import GapReportView from '@/components/graph/GapReportView';
-import AcademicAnalysisPanel from '@/components/graph/AcademicAnalysisPanel';
-import type { Paper, CitationIntent, GraphData, StructuralGap } from '@/types';
-import { getReviewFixture, loadGeneratedReviewFixture, type ReviewFixture } from '@/lib/review-fixtures';
+import type { Paper, CitationIntent, GraphData } from '@/types';
 
 /* ──────────────────────────────────────────────
    Error Boundary — catches Three.js dispose crashes
@@ -81,24 +76,19 @@ import {
   Layers,
   Share2,
   CheckCircle,
-  MessageCircle,
   ScanSearch,
-  ChevronLeft,
-  ChevronRight,
   X,
-  BarChart3,
 } from 'lucide-react';
 
 /* ──────────────────────────────────────────────
    Sidebar collapsed width & expanded width
    ────────────────────────────────────────────── */
-const SIDEBAR_COLLAPSED = 48;
 const SIDEBAR_DEFAULT = 300;
 const DRAWER_WIDTH = 480;
 const COMPACT_DRAWER_BREAKPOINT = 1380;
 
 type ExpandDiffSummary = {
-  mode: 'expand' | 'second-seed';
+  mode: 'expand';
   paperTitle: string;
   addedCount: number;
   referencesCount: number;
@@ -113,10 +103,6 @@ function SeedExploreContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const paperId = searchParams.get('paper_id') || '';
-  const fixtureId = searchParams.get('fixture');
-  const staticReviewFixture = useMemo(() => getReviewFixture(fixtureId), [fixtureId]);
-  const [reviewFixture, setReviewFixture] = useState<ReviewFixture | null>(staticReviewFixture);
-  const isReviewMode = !!fixtureId;
   const [viewportWidth, setViewportWidth] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth : 1440
   );
@@ -135,20 +121,10 @@ function SeedExploreContent() {
     gaps,
     setGaps,
     setFrontierIds,
-    activeGapReport,
-    academicReport,
-    addSeedMerging,
-    addSecondSeedId,
-    setGapRefreshNeeded,
-    gapRefreshNeeded,
-    setAddSeedMerging,
-    setNetworkOverview,
     showCitationEdges,
     showSimilarityEdges,
     showClusterHulls,
     showLabels,
-    nodeSizeMode,
-    layoutMode,
   } = useGraphStore();
 
   const graphRef = useRef<ScholarGraph3DRef>(null);
@@ -176,32 +152,6 @@ function SeedExploreContent() {
     citation_edges?: number;
     similarity_edges?: number;
   } | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    if (!fixtureId) {
-      setReviewFixture(null);
-      return;
-    }
-
-    if (staticReviewFixture) {
-      setReviewFixture(staticReviewFixture);
-      return;
-    }
-
-    loadGeneratedReviewFixture(fixtureId)
-      .then((loaded) => {
-        if (!cancelled) setReviewFixture(loaded);
-      })
-      .catch(() => {
-        if (!cancelled) setReviewFixture(null);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [fixtureId, staticReviewFixture]);
 
   /* ── Left sidebar collapse ── */
   const [leftCollapsed, setLeftCollapsed] = useState(() => {
@@ -278,7 +228,6 @@ function SeedExploreContent() {
 
   const autoSave = useCallback(async (data: GraphData, seedTitle?: string) => {
     try {
-      if (isReviewMode) return;
       const session = await getSession();
       if (!session?.access_token) return; // Skip auto-save when not authenticated
       const name = seedTitle
@@ -304,7 +253,7 @@ function SeedExploreContent() {
         console.debug('[AutoSave] Failed:', err);
       }
     }
-  }, [isReviewMode, paperId, showSavedIndicator]);
+  }, [paperId, showSavedIndicator]);
 
   const scheduleDebouncedSave = useCallback((data: GraphData, seedTitle?: string) => {
     if (autoSaveDebounceRef.current) clearTimeout(autoSaveDebounceRef.current);
@@ -335,37 +284,6 @@ function SeedExploreContent() {
 
   // Fetch seed graph (or load saved graph)
   useEffect(() => {
-    if (fixtureId && reviewFixture) {
-      setLoading(false);
-      setError(null);
-      setGraphData(reviewFixture.graph);
-      setSeedMeta(reviewFixture.graph.meta as any);
-      setGaps(reviewFixture.graph.gaps || []);
-      setFrontierIds(reviewFixture.graph.frontier_ids || []);
-      setNetworkOverview(reviewFixture.overview);
-      savedGraphIdRef.current = `fixture:${reviewFixture.id}`;
-
-      const intents: CitationIntent[] = reviewFixture.graph.edges
-        .filter((e) => e.type === 'citation' && e.intent)
-        .map((e) => ({
-          citing_id: e.source,
-          cited_id: e.target,
-          basic_intent: e.intent as CitationIntent['basic_intent'],
-          is_influential: false,
-        }));
-
-      if (intents.length > 0) {
-        setCitationIntents(intents);
-      }
-      return;
-    }
-
-    if (fixtureId && !reviewFixture) {
-      setLoading(true);
-      setError(null);
-      return;
-    }
-
     if (!paperId && !graphId) return;
     setLoading(true);
     setError(null);
@@ -407,7 +325,7 @@ function SeedExploreContent() {
         setError(err instanceof Error ? err.message : 'Failed to build seed graph');
       })
       .finally(() => setLoading(false));
-  }, [paperId, graphId, fixtureId, reviewFixture, setGraphData, setLoading, setError, setCitationIntents, setGaps, setFrontierIds, setNetworkOverview, autoSave]);
+  }, [paperId, graphId, setGraphData, setLoading, setError, setCitationIntents, setGaps, setFrontierIds, autoSave]);
 
   // Camera control events
   useEffect(() => {
@@ -452,20 +370,13 @@ function SeedExploreContent() {
         let result;
         const expandId = s2Id || doiId;
 
-        if (fixtureId && reviewFixture) {
-          result = reviewFixture.expansions[paper.id] || reviewFixture.expansions[expandId];
-          if (!result) {
-            throw new Error('No mock expansion is defined for this paper in review mode');
-          }
-        } else {
-          try {
-            result = await api.expandPaperStable(expandId, graphData?.nodes || [], graphData?.edges || []);
-          } catch (err) {
-            if (expandId === s2Id && doiId) {
-              result = await api.expandPaperStable(doiId, graphData?.nodes || [], graphData?.edges || []);
-            } else {
-              throw err;
-            }
+        try {
+          result = await api.expandPaperStable(expandId, graphData?.nodes || [], graphData?.edges || []);
+        } catch (err) {
+          if (expandId === s2Id && doiId) {
+            result = await api.expandPaperStable(doiId, graphData?.nodes || [], graphData?.edges || []);
+          } else {
+            throw err;
           }
         }
 
@@ -550,96 +461,7 @@ function SeedExploreContent() {
         setIsExpanding(false);
       }
     },
-    [graphData, fixtureId, reviewFixture, scheduleClearExpandFeedback, scheduleDebouncedSave, seedMeta]
-  );
-
-  const handleAddAsSeed = useCallback(
-    async (paper: Paper) => {
-      const s2Id = paper.s2_paper_id;
-      const doiId = paper.doi ? `DOI:${paper.doi}` : '';
-      if (!s2Id && !doiId) {
-        setExpandError('This paper cannot be added as seed (no identifier available)');
-        setTimeout(() => setExpandError(null), 4000);
-        return;
-      }
-      setAddSeedMerging(true);
-      setExpandError(null);
-      setExpandSummary(null);
-      try {
-        const expandId = s2Id || doiId;
-        const result = fixtureId && reviewFixture
-          ? reviewFixture.expansions[paper.id] || reviewFixture.expansions[expandId]
-          : await api.addPaperAsSeed(expandId, graphData?.nodes || [], graphData?.edges || []);
-
-        if (!result) {
-          throw new Error('No mock merge is defined for this paper in review mode');
-        }
-
-        const count = result.nodes.length;
-        const existingClusterIds = new Set((graphData?.clusters || []).map((cluster) => cluster.id));
-        if (count > 0) {
-          const store = useGraphStore.getState();
-          const newMap = new Map(store.expandedFromMap);
-          result.nodes.forEach((n: Paper) => newMap.set(n.id, paper.id));
-          store.setExpandedFromMap(newMap);
-          const parentNode = graphData?.nodes.find(
-            (n) => n.id === expandId || n.s2_paper_id === expandId || (n.doi && `DOI:${n.doi}` === expandId)
-          );
-          const nodesAtOrigin = result.nodes.map((n) => ({
-            ...n,
-            x: parentNode?.x ?? 0,
-            y: parentNode?.y ?? 0,
-            z: parentNode?.z ?? 0,
-          }));
-          const targets = new Map(result.nodes.map((n) => [n.id, { x: n.x, y: n.y, z: n.z }]));
-          const newNodeIds = result.nodes.map((n) => n.id);
-          useGraphStore.getState().addNodesStable(nodesAtOrigin, result.edges);
-          // Track second seed IDs
-          newNodeIds.forEach((id) => addSecondSeedId(id));
-          addSecondSeedId(paper.id);
-          setTimeout(() => {
-            graphRef.current?.animateExpandNodes(
-              parentNode?.id || paper.id,
-              newNodeIds,
-              targets
-            );
-          }, 50);
-          setGapRefreshNeeded(true);
-          const meta = result.meta;
-          setExpandSummary({
-            mode: 'second-seed',
-            paperTitle: paper.title,
-            addedCount: count,
-            referencesCount: meta?.refs_count ?? result.nodes.filter((node) => node.direction === 'reference').length,
-            citationsCount: meta?.cites_count ?? result.nodes.filter((node) => node.direction === 'citation').length,
-            newClusters: new Set(
-              result.nodes
-                .map((node) => node.cluster_id)
-                .filter((clusterId) => clusterId !== -1 && !existingClusterIds.has(clusterId))
-            ).size,
-            bridgeCandidates: result.nodes.filter((node) => node.is_bridge).length,
-            partial: Boolean(meta && (!meta.references_ok || !meta.citations_ok)),
-            errorDetail: meta?.error_detail,
-          });
-          setExpandSuccess(`Added ${count} papers from "${paper.title.substring(0, 40)}${paper.title.length > 40 ? '...' : ''}"`);
-          const currentGraphData = useGraphStore.getState().graphData;
-          if (currentGraphData) {
-            scheduleDebouncedSave(currentGraphData, seedMeta?.seed_title);
-          }
-        } else {
-          setExpandSuccess('No new papers found for this seed');
-        }
-        scheduleClearExpandFeedback();
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Failed to add seed';
-        setExpandSummary(null);
-        setExpandError(msg);
-        setTimeout(() => setExpandError(null), 5000);
-      } finally {
-        setAddSeedMerging(false);
-      }
-    },
-    [graphData, fixtureId, reviewFixture, scheduleClearExpandFeedback, scheduleDebouncedSave, seedMeta, setAddSeedMerging, addSecondSeedId, setGapRefreshNeeded]
+    [graphData, scheduleClearExpandFeedback, scheduleDebouncedSave, seedMeta]
   );
 
   // Double-click expand
@@ -650,7 +472,7 @@ function SeedExploreContent() {
     };
     window.addEventListener('expandPaper', handle);
     return () => window.removeEventListener('expandPaper', handle);
-  }, [graphData, handleExpandPaper]);
+  }, [handleExpandPaper]);
 
   const handlePaperSelect = useCallback((paper: Paper | null) => {
     selectPaper(paper);
@@ -664,8 +486,6 @@ function SeedExploreContent() {
 
   const handleRestoreDefaultView = useCallback(() => {
     const store = useGraphStore.getState();
-    if (store.layoutMode !== 'semantic') store.setLayoutMode('semantic');
-    if (store.nodeSizeMode !== 'citations') store.setNodeSizeMode('citations');
     if (!store.showCitationEdges) store.toggleCitationEdges();
     if (!store.showSimilarityEdges) store.toggleSimilarityEdges();
     if (!store.showClusterHulls) store.toggleClusterHulls();
@@ -689,41 +509,19 @@ function SeedExploreContent() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  /* ── Tab metadata for sidebar ── */
-  const tabs = [
-    { id: 'clusters' as const, icon: Layers, label: 'DISCOVER' },
-    { id: 'gaps' as const, icon: ScanSearch, label: 'GAPS' },
-    { id: 'chat' as const, icon: MessageCircle, label: 'ASK' },
-    { id: 'academic' as const, icon: BarChart3, label: 'WRITE' },
-  ];
-
   const seedPaper = useMemo(() => {
     if (!graphData) return null;
     const seedId = graphData.meta?.seed_paper_id;
     return seedId ? graphData.nodes.find((node) => node.id === seedId) || null : null;
   }, [graphData]);
 
-  const openSidebarTab = useCallback((tabId: typeof tabs[number]['id']) => {
+  const openSidebarTab = useCallback((tabId: 'clusters' | 'gaps') => {
     setActiveTab(tabId);
     if (leftCollapsed) {
       setLeftCollapsed(false);
       localStorage.setItem('seed-left-collapsed', 'false');
     }
   }, [leftCollapsed, setActiveTab]);
-
-  const promptReadingList = useCallback(() => {
-    openSidebarTab('chat');
-    window.dispatchEvent(new CustomEvent('seedChatPrompt', {
-      detail: { prompt: 'Which papers should I read next and in what order?' },
-    }));
-  }, [openSidebarTab]);
-
-  const openReportIntent = useCallback((goal: 'brief' | 'related' | 'gap') => {
-    openSidebarTab('academic');
-    window.dispatchEvent(new CustomEvent('reportIntent', {
-      detail: { goal },
-    }));
-  }, [openSidebarTab]);
 
   return (
     <div className="h-screen flex flex-col bg-black">
@@ -794,20 +592,8 @@ function SeedExploreContent() {
           </div>
         </div>
 
-        {(gapRefreshNeeded || expandError || expandSuccess || expandSummary || (gapToastVisible && !gapToastDismissed && gaps.length > 0)) && (
+        {(expandError || expandSuccess || expandSummary || (gapToastVisible && !gapToastDismissed && gaps.length > 0)) && (
           <div className="flex flex-wrap items-center gap-2 border-t border-[rgba(255,255,255,0.04)] px-4 py-2">
-            {gapRefreshNeeded && (
-              <div className="inline-flex items-center gap-2 rounded-full border border-[rgba(0,229,255,0.22)] bg-[rgba(0,229,255,0.08)] px-3 py-1 text-[10px] font-mono text-[#00E5FF]/85">
-                <span>Gap analysis may be outdated after merging a new seed.</span>
-                <button
-                  onClick={() => setGapRefreshNeeded(false)}
-                  className="text-[#00E5FF]/60 transition-colors hover:text-[#00E5FF]"
-                  title="Dismiss"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-            )}
             {expandSummary && (
               <div
                 data-testid="expand-summary"
@@ -815,7 +601,7 @@ function SeedExploreContent() {
               >
                 <CheckCircle className="w-3 h-3 text-green-300" />
                 <span className="text-green-100">
-                  {expandSummary.mode === 'second-seed' ? 'Second seed merged' : 'Expand complete'}
+                  Expand complete
                 </span>
                 <span className="rounded-full border border-green-700/20 bg-black/20 px-2 py-0.5">
                   +{expandSummary.addedCount} papers
@@ -901,102 +687,15 @@ function SeedExploreContent() {
           ═══════════════════════════════════════════ */}
       <div className="flex-1 flex overflow-hidden">
         {/* ─── Left Sidebar — Collapsible ─── */}
-        <motion.div
-          animate={{ width: leftCollapsed ? SIDEBAR_COLLAPSED : sidebarWidth }}
-          transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-          className="flex-shrink-0 border-r border-[rgba(255,255,255,0.04)] bg-[rgba(10,10,10,0.95)] flex flex-col relative z-10"
-        >
-          {leftCollapsed ? (
-            /* ── Collapsed: icon-only vertical tabs ── */
-            <div className="flex flex-col items-center pt-2 gap-1">
-              {tabs.map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => {
-                    setActiveTab(tab.id);
-                    setLeftCollapsed(false);
-                    localStorage.setItem('seed-left-collapsed', 'false');
-                  }}
-                  title={tab.label}
-                  className={`w-9 h-9 flex items-center justify-center rounded-lg transition-all relative ${
-                    activeTab === tab.id
-                      ? 'bg-[#D4AF37]/10 text-[#D4AF37] shadow-[0_0_8px_rgba(212,175,55,0.15)]'
-                      : 'text-[#999999]/40 hover:text-[#999999] hover:bg-[#111111]/50'
-                  }`}
-                >
-                  <tab.icon className="w-4 h-4" />
-                  {tab.id === 'gaps' && gaps.length > 0 && (
-                    <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 flex items-center justify-center text-[7px] font-mono font-bold rounded-full bg-[#D4AF37] text-black">
-                      {gaps.length}
-                    </span>
-                  )}
-                </button>
-              ))}
-              <div className="flex-1" />
-              <button
-                onClick={toggleLeftCollapsed}
-                className="w-9 h-9 flex items-center justify-center text-[#999999]/30 hover:text-[#999999] transition-colors mb-2"
-                title="Expand sidebar"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          ) : (
-            /* ── Expanded: full tabs + content ── */
-            <>
-              {/* Tab header */}
-              <div className="flex-shrink-0 border-b border-[rgba(255,255,255,0.04)]">
-                <div className="flex">
-                  {tabs.map(tab => (
-                    <button
-                      key={tab.id}
-                      onClick={() => setActiveTab(tab.id)}
-                      className={`flex items-center gap-1.5 px-3 py-2.5 text-[10px] font-mono uppercase tracking-widest transition-colors ${
-                        activeTab === tab.id
-                          ? 'text-[#D4AF37] border-b-2 border-[#D4AF37]'
-                          : 'text-[#999999]/40 hover:text-[#999999]'
-                      }`}
-                    >
-                      <tab.icon className="w-3 h-3" />
-                      {tab.label}
-                      {tab.id === 'gaps' && gaps.length > 0 && (
-                        <span className="ml-1 px-1.5 py-0.5 text-[8px] font-mono font-bold rounded-full bg-[rgba(212,175,55,0.15)] text-[#D4AF37] border border-[rgba(212,175,55,0.3)]">
-                          {gaps.length}
-                        </span>
-                      )}
-                    </button>
-                  ))}
-                  <div className="flex-1" />
-                  <button
-                    onClick={toggleLeftCollapsed}
-                    className="px-2 flex items-center text-[#999999]/30 hover:text-[#999999] transition-colors"
-                    title="Collapse sidebar"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-              {/* Tab content */}
-              <div className="flex-1 overflow-y-auto min-h-0">
-                {activeTab === 'clusters' && <ClusterPanel />}
-                {activeTab === 'gaps' && (
-                  activeGapReport ? <GapReportView /> : <GapSpotterPanel />
-                )}
-                {activeTab === 'chat' && <SeedChatPanel />}
-                {activeTab === 'academic' && <AcademicAnalysisPanel />}
-              </div>
-            </>
-          )}
-          {/* Resize handle */}
-          {!leftCollapsed && (
-            <div
-              onMouseDown={handleResizeStart}
-              className="absolute top-0 right-0 w-1.5 h-full cursor-col-resize group z-20"
-            >
-              <div className="w-full h-full bg-transparent group-hover:bg-[rgba(212,175,55,0.3)] transition-colors" />
-            </div>
-          )}
-        </motion.div>
+        <ExploreSidebar
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          leftCollapsed={leftCollapsed}
+          onToggleCollapsed={toggleLeftCollapsed}
+          sidebarWidth={sidebarWidth}
+          onResizeStart={handleResizeStart}
+          gaps={gaps}
+        />
 
         {/* ─── Center: 3D Graph ─── */}
         <div className="flex-1 relative overflow-hidden" style={{ minWidth: '400px' }}>
@@ -1017,7 +716,7 @@ function SeedExploreContent() {
             </div>
           )}
 
-          {!paperId && !fixtureId && (
+          {!paperId && (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="text-center max-w-md px-4">
                 <Network className="w-12 h-12 text-[#D4AF37] mx-auto mb-4 opacity-60" />
@@ -1059,22 +758,16 @@ function SeedExploreContent() {
                     </button>
                   )}
                   <button
-                    onClick={promptReadingList}
-                    className="rounded-full border border-[rgba(255,255,255,0.06)] px-3 py-1.5 text-[10px] font-mono uppercase tracking-wide text-[#E5E5E5] transition-colors hover:border-[rgba(212,175,55,0.2)] hover:text-[#D4AF37]"
-                  >
-                    Build Reading List
-                  </button>
-                  <button
-                    onClick={() => openReportIntent('brief')}
+                    onClick={() => openSidebarTab('gaps')}
                     className="rounded-full border border-[rgba(212,175,55,0.2)] bg-[rgba(212,175,55,0.08)] px-3 py-1.5 text-[10px] font-mono uppercase tracking-wide text-[#D4AF37] transition-colors hover:bg-[rgba(212,175,55,0.14)]"
                   >
-                    Generate Topic Brief
+                    Explore Gaps
                   </button>
                   <button
-                    onClick={() => openSidebarTab('gaps')}
+                    onClick={() => openSidebarTab('clusters')}
                     className="rounded-full border border-[rgba(255,255,255,0.06)] px-3 py-1.5 text-[10px] font-mono uppercase tracking-wide text-[#E5E5E5] transition-colors hover:border-[rgba(212,175,55,0.2)] hover:text-[#D4AF37]"
                   >
-                    Review Gaps
+                    Browse Clusters
                   </button>
                 </div>
               </div>
@@ -1090,59 +783,6 @@ function SeedExploreContent() {
             </Graph3DErrorBoundary>
           )}
 
-          {fixtureId && reviewFixture && graphData && (
-            <div
-              data-testid="review-dock"
-              className="absolute top-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 rounded-xl border border-[rgba(212,175,55,0.22)] bg-[rgba(8,8,8,0.92)] px-3 py-2 backdrop-blur-xl shadow-[0_8px_30px_rgba(0,0,0,0.35)]"
-            >
-              <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-[#D4AF37]/70">
-                Review Fixture
-              </span>
-              <span className="text-[10px] font-mono text-[#999999]/70">
-                {reviewFixture.label}
-              </span>
-              <button
-                data-testid="review-open-seed"
-                onClick={() => {
-                  const seed = reviewFixture.graph.nodes.find((node) => node.id === reviewFixture.graph.meta.seed_paper_id);
-                  if (seed) handlePaperSelect(seed);
-                }}
-                className="rounded-md border border-[rgba(255,255,255,0.08)] px-2 py-1 text-[10px] font-mono text-[#E5E5E5] hover:border-[rgba(212,175,55,0.28)] hover:text-[#D4AF37] transition-colors"
-              >
-                Seed Detail
-              </button>
-              <button
-                data-testid="review-expand-seed"
-                onClick={() => {
-                  const seed = reviewFixture.graph.nodes.find((node) => node.id === reviewFixture.graph.meta.seed_paper_id);
-                  if (seed) void handleExpandPaper(seed);
-                }}
-                className="rounded-md border border-[rgba(255,255,255,0.08)] px-2 py-1 text-[10px] font-mono text-[#E5E5E5] hover:border-[rgba(212,175,55,0.28)] hover:text-[#D4AF37] transition-colors"
-              >
-                Expand Seed
-              </button>
-              <button
-                data-testid="review-open-gaps"
-                onClick={() => {
-                  setActiveTab('gaps');
-                  if (leftCollapsed) setLeftCollapsed(false);
-                }}
-                className="rounded-md border border-[rgba(255,255,255,0.08)] px-2 py-1 text-[10px] font-mono text-[#E5E5E5] hover:border-[rgba(212,175,55,0.28)] hover:text-[#D4AF37] transition-colors"
-              >
-                Gaps
-              </button>
-              <button
-                data-testid="review-open-academic"
-                onClick={() => {
-                  setActiveTab('academic');
-                  if (leftCollapsed) setLeftCollapsed(false);
-                }}
-                className="rounded-md border border-[rgba(255,255,255,0.08)] px-2 py-1 text-[10px] font-mono text-[#E5E5E5] hover:border-[rgba(212,175,55,0.28)] hover:text-[#D4AF37] transition-colors"
-              >
-                Academic
-              </button>
-            </div>
-          )}
           <GraphControls />
           <GraphLegend />
 
@@ -1177,16 +817,6 @@ function SeedExploreContent() {
 
                 <div className="mx-1 h-4 w-px bg-[rgba(255,255,255,0.06)]" />
 
-                <span className={`rounded-full border px-2 py-1 text-[10px] font-mono ${
-                  layoutMode === 'network'
-                    ? 'border-[rgba(0,229,255,0.25)] bg-[rgba(0,229,255,0.1)] text-[#00E5FF]'
-                    : 'border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] text-[#E5E5E5]'
-                }`}>
-                  Layout: {layoutMode}
-                </span>
-                <span className="rounded-full border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] px-2 py-1 text-[10px] font-mono text-[#E5E5E5]">
-                  Size: {nodeSizeMode}
-                </span>
                 <span className="rounded-full border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] px-2 py-1 text-[10px] font-mono text-[#999999]/75">
                   View {[
                     showCitationEdges ? 'citations' : null,
@@ -1233,8 +863,6 @@ function SeedExploreContent() {
                   onClose={() => handlePaperSelect(null)}
                   onExpand={() => handleExpandPaper(selectedPaper)}
                   isExpanding={isExpanding}
-                  onAddAsSeed={() => handleAddAsSeed(selectedPaper)}
-                  isAddingAsSeed={addSeedMerging}
                 />
               </div>
             </motion.div>

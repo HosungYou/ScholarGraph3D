@@ -1,4 +1,49 @@
-import type { Paper, GapReport, AcademicReport } from '@/types';
+import type { Paper } from '@/types';
+
+// ─── Local types for deleted report types ───────────────────────────
+
+interface GapReport {
+  title: string;
+  generated_at: string;
+  snapshot_data_url?: string;
+  executive_summary: string;
+  raw_metrics?: {
+    structural: number;
+    temporal: number;
+    intent: number;
+    directional: number;
+    composite: number;
+    [key: string]: number;
+  };
+  sections: { title: string; content: string }[];
+  research_questions: { question: string; justification: string; methodology_hint: string }[];
+  significance_statement?: string;
+  limitations?: string;
+  cited_papers: { paper_id: string; title: string }[];
+  bibtex: string;
+}
+
+interface AcademicReport {
+  generated_at: string;
+  methods_section: string;
+  tables: {
+    [key: string]: {
+      title: string;
+      headers: string[];
+      rows: string[][];
+      note?: string;
+    } | undefined;
+  };
+  figure_captions: {
+    figure_1: string;
+    figure_2: string;
+    figure_3: string;
+  };
+  reference_list: {
+    methodology_refs: string[];
+    analysis_refs: { apa_citation: string }[];
+  };
+}
 
 export function toBibtex(paper: Paper): string {
   const authorStr = paper.authors.map(a => a.name).join(' and ');

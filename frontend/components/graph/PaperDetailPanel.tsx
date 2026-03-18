@@ -15,34 +15,22 @@ import {
   Loader2,
   RouteIcon,
   Download,
-  Bookmark,
-  BookmarkCheck,
-  Tag,
-  StickyNote,
-  Plus,
   Sparkles,
-  Link2,
   ScanSearch,
   ThumbsDown,
   ThumbsUp,
 } from 'lucide-react';
-import { motion } from 'framer-motion';
 import type { Paper } from '@/types';
 import { FIELD_COLORS } from '@/types';
 import { useGraphStore } from '@/hooks/useGraphStore';
 import { findCitationPath } from '@/lib/utils';
 import { toBibtex, toRIS, downloadFile } from '@/lib/export';
-import { useAuth } from '@/lib/auth-context';
-import { api } from '@/lib/api';
-import type { Bookmark as BookmarkType } from '@/types';
 
 interface PaperDetailPanelProps {
   paper: Paper;
   onClose: () => void;
   onExpand: () => void;
   isExpanding?: boolean;
-  onAddAsSeed?: () => void;
-  isAddingAsSeed?: boolean;
 }
 
 export default function PaperDetailPanel({
@@ -50,8 +38,6 @@ export default function PaperDetailPanel({
   onClose,
   onExpand,
   isExpanding = false,
-  onAddAsSeed,
-  isAddingAsSeed = false,
 }: PaperDetailPanelProps) {
   const [showFullAbstract, setShowFullAbstract] = useState(false);
   const [recommendationFeedback, setRecommendationFeedback] = useState<Record<string, 'relevant' | 'not_now'>>({});
@@ -149,14 +135,6 @@ export default function PaperDetailPanel({
       ? abstractText.substring(0, 300) + '...'
       : abstractText;
 
-  // ── Bookmark state ──
-  const { user } = useAuth();
-  const [bookmark, setBookmark] = useState<BookmarkType | null>(null);
-  const [bookmarkLoading, setBookmarkLoading] = useState(false);
-  const [showBookmarkEditor, setShowBookmarkEditor] = useState(false);
-  const [tagInput, setTagInput] = useState('');
-  const [memoText, setMemoText] = useState('');
-
   const inGraphCounts = useMemo(() => {
     if (!graphData) return { references: 0, citedBy: 0 };
 
@@ -250,108 +228,10 @@ export default function PaperDetailPanel({
       setRecommendationFeedback({});
       return;
     }
+    setRecommendationFeedback(loadLocalRecommendationFeedback());
+  }, [loadLocalRecommendationFeedback, paper?.id]);
 
-    let cancelled = false;
-
-    if (!user) {
-      setRecommendationFeedback(loadLocalRecommendationFeedback());
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    const localState = loadLocalRecommendationFeedback();
-    const localEntriesForPaper = Object.entries(localState).filter(([key]) =>
-      key.startsWith(`${paper.id}:`)
-    );
-
-    api.getRecommendationFeedback(paper.id)
-      .then((items) => {
-        if (cancelled) return;
-
-        const serverState = items.reduce<Record<string, 'relevant' | 'not_now'>>((acc, item) => {
-          acc[`${item.source_paper_id}:${item.candidate_paper_id}`] = item.feedback;
-          return acc;
-        }, {});
-
-        const mergedState = { ...serverState };
-
-        for (const [key, value] of localEntriesForPaper) {
-          if (!mergedState[key]) {
-            mergedState[key] = value;
-            const candidateId = key.split(':').slice(1).join(':');
-            void api.upsertRecommendationFeedback({
-              source_paper_id: paper.id,
-              candidate_paper_id: candidateId,
-              feedback: value,
-            }).catch(() => {
-              // Keep local fallback if sync fails.
-            });
-          }
-        }
-
-        setRecommendationFeedback(mergedState);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setRecommendationFeedback(localState);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [loadLocalRecommendationFeedback, paper?.id, user]);
-
-  // Fetch bookmark when paper changes
-  React.useEffect(() => {
-    if (!user || !paper?.id) {
-      setBookmark(null);
-      return;
-    }
-    let cancelled = false;
-    api.getBookmarkForPaper(paper.id).then((bm) => {
-      if (!cancelled) {
-        setBookmark(bm);
-        if (bm) {
-          setMemoText(bm.memo || '');
-          setShowBookmarkEditor(true);
-        }
-      }
-    });
-    return () => { cancelled = true; };
-  }, [user, paper?.id]);
-
-  const toggleBookmark = async () => {
-    if (!user || !paper) return;
-    setBookmarkLoading(true);
-    try {
-      if (bookmark) {
-        await api.deleteBookmark(bookmark.id);
-        setBookmark(null);
-        setShowBookmarkEditor(false);
-        setMemoText('');
-      } else {
-        const bm = await api.createBookmark({
-          paper_id: paper.id,
-          paper_title: paper.title,
-          paper_authors: paper.authors.map((author) => author.name).filter(Boolean),
-          paper_year: paper.year,
-          paper_venue: paper.venue,
-          paper_citation_count: paper.citation_count,
-        });
-        setBookmark(bm);
-        setMemoText('');
-        setShowBookmarkEditor(true);
-      }
-    } catch (err) {
-      console.error('Bookmark toggle failed:', err);
-    } finally {
-      setBookmarkLoading(false);
-    }
-  };
-
-  const recordRecommendationFeedback = async (candidateId: string, value: 'relevant' | 'not_now') => {
+  const recordRecommendationFeedback = (candidateId: string, value: 'relevant' | 'not_now') => {
     const key = `${paper.id}:${candidateId}`;
     const nextValue = recommendationFeedback[key] === value ? undefined : value;
     const nextState = { ...recommendationFeedback };
@@ -363,64 +243,7 @@ export default function PaperDetailPanel({
     }
 
     setRecommendationFeedback(nextState);
-
-    if (!user) {
-      persistLocalRecommendationFeedback(nextState);
-      return;
-    }
-
-    try {
-      if (nextValue) {
-        await api.upsertRecommendationFeedback({
-          source_paper_id: paper.id,
-          candidate_paper_id: candidateId,
-          feedback: nextValue,
-        });
-      } else {
-        await api.deleteRecommendationFeedback(paper.id, candidateId);
-      }
-      persistLocalRecommendationFeedback(nextState);
-    } catch (err) {
-      setRecommendationFeedback(recommendationFeedback);
-      console.error('Recommendation feedback sync failed:', err);
-    }
-  };
-
-  const addTag = async () => {
-    if (!bookmark || !tagInput.trim()) return;
-    const newTag = tagInput.trim().toLowerCase();
-    if (bookmark.tags.includes(newTag)) { setTagInput(''); return; }
-    try {
-      const updated = await api.updateBookmark(bookmark.id, {
-        tags: [...bookmark.tags, newTag],
-      });
-      setBookmark(updated);
-      setTagInput('');
-    } catch (err) {
-      console.error('Add tag failed:', err);
-    }
-  };
-
-  const removeTag = async (tag: string) => {
-    if (!bookmark) return;
-    try {
-      const updated = await api.updateBookmark(bookmark.id, {
-        tags: bookmark.tags.filter((t) => t !== tag),
-      });
-      setBookmark(updated);
-    } catch (err) {
-      console.error('Remove tag failed:', err);
-    }
-  };
-
-  const saveMemo = async () => {
-    if (!bookmark) return;
-    try {
-      const updated = await api.updateBookmark(bookmark.id, { memo: memoText });
-      setBookmark(updated);
-    } catch (err) {
-      console.error('Save memo failed:', err);
-    }
+    persistLocalRecommendationFeedback(nextState);
   };
 
   return (
@@ -455,22 +278,6 @@ export default function PaperDetailPanel({
           )}
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
-          <button
-            onClick={toggleBookmark}
-            disabled={bookmarkLoading || !user}
-            title={!user ? 'Sign in to bookmark' : bookmark ? 'Remove bookmark' : 'Bookmark this paper'}
-            className={`p-1.5 rounded-lg transition-all border ${
-              bookmark
-                ? 'bg-[#D4AF37]/10 border-[#D4AF37]/25 text-[#D4AF37]'
-                : 'border-transparent hover:border-[rgba(255,255,255,0.08)] hover:bg-[rgba(255,255,255,0.03)]'
-            } disabled:opacity-30 disabled:cursor-not-allowed`}
-          >
-            {bookmark ? (
-              <BookmarkCheck className="w-4 h-4" />
-            ) : (
-              <Bookmark className="w-4 h-4 text-[#999999] hover:text-[#D4AF37]" />
-            )}
-          </button>
           <button
             onClick={onClose}
             className="p-1.5 rounded-lg hover:bg-[rgba(255,255,255,0.03)] border border-transparent hover:border-[rgba(255,255,255,0.08)] transition-all"
@@ -592,108 +399,7 @@ export default function PaperDetailPanel({
           Adds references and citing papers around this paper.
         </div>
 
-        {onAddAsSeed && (
-          <>
-            <button
-              onClick={onAddAsSeed}
-              disabled={isAddingAsSeed || isExpanding}
-              className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg uppercase text-xs tracking-wider transition-all border border-[rgba(0,229,255,0.15)] bg-[rgba(0,229,255,0.05)] hover:bg-[rgba(0,229,255,0.12)] text-[#00E5FF]/70 hover:text-[#00E5FF] disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {isAddingAsSeed ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  MERGING NETWORK...
-                </>
-              ) : (
-                <>
-                  <Link2 className="w-4 h-4" />
-                  COMPARE AS SECOND ANCHOR
-                </>
-              )}
-            </button>
-            <div className="px-1 text-[10px] font-mono text-[#999999]/45">
-              Merge a second anchor if this paper deserves to reshape the workspace.
-            </div>
-          </>
-        )}
       </div>
-
-      {/* ── Bookmark Editor ── */}
-      {user && bookmark && showBookmarkEditor && (
-        <div className="mb-4">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="hud-label text-[#D4AF37]/50">BOOKMARK</span>
-            <div className="flex-1 h-px bg-gradient-to-r from-[rgba(255,255,255,0.08)] to-transparent" />
-          </div>
-
-          {/* Tags */}
-          <div className="mb-3">
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <Tag className="w-3 h-3 text-[#999999]/50" />
-              <span className="hud-label">Tags</span>
-            </div>
-            <div className="flex flex-wrap gap-1.5 mb-2">
-              {bookmark.tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono bg-[#D4AF37]/08 text-[#D4AF37]/80 border border-[#D4AF37]/15"
-                >
-                  {tag}
-                  <button
-                    onClick={() => removeTag(tag)}
-                    className="hover:text-[#D4AF37] transition-colors"
-                  >
-                    <X className="w-2.5 h-2.5" />
-                  </button>
-                </span>
-              ))}
-            </div>
-            <div className="flex gap-1.5">
-              <input
-                type="text"
-                value={tagInput}
-                onChange={(e) => setTagInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } }}
-                placeholder="Add tag..."
-                className="flex-1 px-2 py-1 rounded text-[10px] font-mono bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.06)] text-white placeholder-[#999999]/25 focus:outline-none focus:border-[#D4AF37]/30"
-              />
-              <button
-                onClick={addTag}
-                disabled={!tagInput.trim()}
-                className="px-2 py-1 rounded text-[10px] font-mono text-[#D4AF37]/60 hover:text-[#D4AF37] bg-[#D4AF37]/05 hover:bg-[#D4AF37]/10 border border-[#D4AF37]/15 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-              >
-                <Plus className="w-3 h-3" />
-              </button>
-            </div>
-          </div>
-
-          {/* Memo */}
-          <div>
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <StickyNote className="w-3 h-3 text-[#999999]/50" />
-              <span className="hud-label">Memo</span>
-            </div>
-            <textarea
-              value={memoText}
-              onChange={(e) => setMemoText(e.target.value)}
-              onBlur={saveMemo}
-              placeholder="Add notes about this paper..."
-              rows={3}
-              className="w-full px-2.5 py-2 rounded-lg text-xs font-mono bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.06)] text-[#999999]/80 placeholder-[#999999]/25 focus:outline-none focus:border-[#D4AF37]/30 resize-none"
-            />
-          </div>
-
-          <div className="hud-divider my-4" />
-        </div>
-      )}
-
-      {!user && (
-        <div className="mb-4 px-3 py-2 rounded-lg bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.04)]">
-          <p className="text-[10px] font-mono text-[#999999]/40 text-center">
-            Sign in to bookmark papers
-          </p>
-        </div>
-      )}
 
       {/* ── Authors ── */}
       <div className="mb-4">
