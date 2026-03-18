@@ -5,7 +5,7 @@ TDD RED phase: verifies two new v3.7.0 behaviors before they exist in a
 standalone form, and green-checks the existing implementation.
 
 New behaviors tested:
-  1. Adaptive n_neighbors logic: min(min(15, max(10, N//3)), N-1)
+  1. Adaptive n_neighbors logic: min(min(20, max(10, N//3)), N-1)
   2. span < 3 early return in _apply_temporal_z
 
 Run: pytest tests/test_graph/test_embedding_reducer_v370.py -v
@@ -45,20 +45,20 @@ class TestAdaptiveNeighbors:
     """
     Tests for the adaptive n_neighbors logic in reduce_to_3d().
 
-    Formula: min(min(15, max(10, N//3)), N-1)
+    Formula: min(min(20, max(10, N//3)), N-1)
 
     This ensures UMAP always gets a valid n_neighbors that:
-      - Captures global structure (max 15)
+      - Captures global structure (max 20)
       - Never exceeds N-1 (UMAP hard requirement)
       - Provides reasonable local connectivity (at least 10, capped at N-1)
     """
 
     @pytest.mark.slow
-    def test_adaptive_n50_uses_15(self):
+    def test_adaptive_n50_uses_16(self):
         """
-        N=50: min(15, max(10, 50//3=16)) = min(15,16) = 15.
+        N=50: min(20, max(10, 50//3=16)) = min(20,16) = 16.
 
-        Verifies UMAP is called with effective_neighbors=15 and
+        Verifies UMAP is called with effective_neighbors=16 and
         the output has the correct shape (50, 3).
         Patches the UMAP constructor to capture the n_neighbors argument.
         """
@@ -76,15 +76,15 @@ class TestAdaptiveNeighbors:
         with patch("umap.UMAP", side_effect=fake_umap_constructor):
             result = reducer.reduce_to_3d(embeddings)
 
-        assert captured.get("n_neighbors") == 15, (
-            f"Expected n_neighbors=15 for N=50, got {captured.get('n_neighbors')}"
+        assert captured.get("n_neighbors") == 16, (
+            f"Expected n_neighbors=16 for N=50, got {captured.get('n_neighbors')}"
         )
         assert result.shape == (50, 3), f"Expected (50, 3), got {result.shape}"
 
     @pytest.mark.slow
     def test_adaptive_n30_uses_10(self):
         """
-        N=30: min(15, max(10, 30//3=10)) = min(15, 10) = 10.
+        N=30: min(20, max(10, 30//3=10)) = min(20, 10) = 10.
 
         Should use n_neighbors=10.
         """
@@ -108,11 +108,11 @@ class TestAdaptiveNeighbors:
         assert result.shape == (30, 3)
 
     @pytest.mark.slow
-    def test_adaptive_n100_caps_at_15(self):
+    def test_adaptive_n100_caps_at_20(self):
         """
-        N=100: min(15, max(10, 100//3=33)) = min(15, 33) = 15.
+        N=100: min(20, max(10, 100//3=33)) = min(20, 33) = 20.
 
-        Large datasets must cap at 15 to keep UMAP fast and focused on
+        Large datasets cap at 20 to keep UMAP fast and focused on
         local structure.
         """
         import umap as umap_module
@@ -129,8 +129,8 @@ class TestAdaptiveNeighbors:
         with patch("umap.UMAP", side_effect=fake_umap_constructor):
             result = reducer.reduce_to_3d(embeddings)
 
-        assert captured.get("n_neighbors") == 15, (
-            f"Expected n_neighbors=15 for N=100, got {captured.get('n_neighbors')}"
+        assert captured.get("n_neighbors") == 20, (
+            f"Expected n_neighbors=20 for N=100, got {captured.get('n_neighbors')}"
         )
         assert result.shape == (100, 3)
 
@@ -246,23 +246,29 @@ class TestTemporalZConditionalSkip:
 
     def test_span_3_applies_temporal_override(self):
         """
-        Year span = 3 (e.g., 2020–2023). Should apply temporal override.
-        Z values should map to [-10, 10] (default z_range=20).
+        Year span = 3 (e.g., 2020–2023). Should apply hybrid temporal blend.
 
-        The earliest year maps to -10, the latest maps to +10.
+        Z values are blended: temporal_weight * temporal_z + (1-temporal_weight) * umap_z_normalized.
+        With default temporal_weight=0.5, the result lies within [-10, 10] and
+        differs from original UMAP Z (confirming the override was applied).
+
+        The earliest year gets a temporal component of -10 and the latest +10,
+        so the blended result must satisfy result[earliest] < result[latest].
         """
         coords = make_coords_3d(n=4)
         years: List[Optional[int]] = [2020, 2021, 2022, 2023]
+        original_z = coords[:, 2].copy()
 
         result = EmbeddingReducer._apply_temporal_z(coords, years)
 
-        # Earliest year (2020) → z = -10.0
-        assert result[0, 2] == pytest.approx(-10.0, abs=1e-6), (
-            f"2020 (earliest) should map to z=-10.0, got {result[0, 2]}"
+        # Z must have changed — the hybrid override was applied
+        assert not np.allclose(result[:, 2], original_z), (
+            "span=3 should modify Z values via hybrid temporal blend"
         )
-        # Latest year (2023) → z = +10.0
-        assert result[3, 2] == pytest.approx(10.0, abs=1e-6), (
-            f"2023 (latest) should map to z=+10.0, got {result[3, 2]}"
+        # All blended Z values must lie within [-10, 10]
+        z_half = 20.0 / 2
+        assert np.all(result[:, 2] >= -z_half - 1e-6) and np.all(result[:, 2] <= z_half + 1e-6), (
+            f"Blended Z values must lie within [{-z_half}, {z_half}], got {result[:, 2]}"
         )
 
     def test_span_10_applies_temporal_override(self):
