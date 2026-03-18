@@ -90,7 +90,7 @@ export function createNebulaCluster(options: NebulaClusterOptions): THREE.Group 
 
   // Glow ring: subtle cluster boundary marker with pulse animation
   const ringRadius = spread * 1.2;
-  const ringGeometry = new THREE.RingGeometry(ringRadius * 0.985, ringRadius, 64);
+  const ringGeometry = new THREE.RingGeometry(ringRadius * 0.94, ringRadius, 64);
 
   const ringMaterial = new THREE.ShaderMaterial({
     uniforms: {
@@ -110,7 +110,7 @@ export function createNebulaCluster(options: NebulaClusterOptions): THREE.Group 
       varying vec2  vUv;
       void main() {
         float pulse = 0.6 + 0.4 * sin(uTime * 1.2);
-        float opacity = 0.04 * pulse;
+        float opacity = 0.10 * pulse;
         gl_FragColor = vec4(uColor, opacity);
       }
     `,

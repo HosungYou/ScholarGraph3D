@@ -135,10 +135,15 @@ function GapCard({ gap, graphData, selectPaper, setPanelSelectionId, setHighligh
             {/* Bridge papers */}
             {gap.bridge_papers.length > 0 && (
               <div>
-                <span className="hud-label mb-1 block">Bridge Papers</span>
-                <div className="space-y-0.5">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <span className="hud-label">Bridge Papers</span>
+                  <span className="text-[9px] font-mono text-[#999999]/30 ml-auto">cited by both clusters</span>
+                </div>
+                <div className="space-y-1">
                   {gap.bridge_papers.slice(0, 5).map((bp) => {
                     const fullPaper = graphData.nodes.find((n) => n.id === bp.paper_id);
+                    const hasCitationEvidence = (bp.cited_by_a_count ?? 0) > 0 || (bp.cited_by_b_count ?? 0) > 0;
+                    const bothSides = (bp.cited_by_a_count ?? 0) > 0 && (bp.cited_by_b_count ?? 0) > 0;
                     return (
                       <button
                         key={bp.paper_id}
@@ -149,11 +154,35 @@ function GapCard({ gap, graphData, selectPaper, setPanelSelectionId, setHighligh
                             setPanelSelectionId(fullPaper.id);
                           }
                         }}
-                        className="w-full text-left px-1.5 py-1 rounded hover:bg-[rgba(255,255,255,0.04)] transition-colors"
+                        className="w-full text-left px-2 py-1.5 rounded border border-transparent hover:bg-[rgba(255,255,255,0.04)] hover:border-[rgba(255,255,255,0.06)] transition-colors"
                       >
-                        <span className="text-[10px] font-mono text-[#999999]/60 leading-snug line-clamp-1 hover:text-[#D4AF37]/80 transition-colors">
-                          {bp.title}
-                        </span>
+                        <div className="flex items-start gap-1.5">
+                          {bothSides && (
+                            <span className="text-[8px] font-mono text-[#D4AF37]/60 mt-0.5 flex-shrink-0">⬡</span>
+                          )}
+                          <div className="min-w-0">
+                            <span className={`text-[10px] font-mono leading-snug line-clamp-1 hover:text-[#D4AF37]/80 transition-colors ${
+                              bothSides ? 'text-[#999999]/80' : 'text-[#999999]/50'
+                            }`}>
+                              {bp.title}
+                            </span>
+                            {hasCitationEvidence ? (
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <span className="text-[9px] font-mono text-[#D4AF37]/40">
+                                  A: {bp.cited_by_a_count ?? 0} cit.
+                                </span>
+                                <span className="text-[9px] font-mono text-[rgba(255,255,255,0.15)]">·</span>
+                                <span className="text-[9px] font-mono text-[#4DA6FF]/40">
+                                  B: {bp.cited_by_b_count ?? 0} cit.
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="text-[9px] font-mono text-[#999999]/25 mt-0.5">
+                                semantic similarity only
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       </button>
                     );
                   })}

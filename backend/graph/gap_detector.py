@@ -175,9 +175,9 @@ class GapDetector:
                 "composite": round(composite, 4),
             }
 
-            # Find bridge candidates using centroid similarity
+            # Find bridge candidates using citation evidence + embedding similarity
             bridge_papers = self._find_bridge_papers(
-                papers_a, papers_b, centroid_a, centroid_b,
+                papers_a, papers_b, centroid_a, centroid_b, edges=edges,
             )
 
             # Find potential ghost edges (cross-cluster high-similarity pairs)
@@ -447,46 +447,86 @@ class GapDetector:
         papers_b: List[Dict[str, Any]],
         centroid_a: Optional[np.ndarray],
         centroid_b: Optional[np.ndarray],
-        top_n: int = 3,
+        edges: Optional[List[Dict[str, Any]]] = None,
+        top_n: int = 5,
     ) -> List[Dict[str, Any]]:
         """
-        Find papers that could bridge two clusters.
+        Find papers that bridge two clusters using citation evidence + embedding similarity.
 
-        Score = geometric_mean(sim_to_centroid_a, sim_to_centroid_b)
+        Citation score: papers cited by BOTH clusters are true bridges.
+        Embedding score: geometric_mean(sim_to_centroid_a, sim_to_centroid_b) as fallback.
+        Final score: citation-weighted hybrid, citations dominate when evidence exists.
         """
-        if centroid_a is None or centroid_b is None:
-            return []
+        papers_a_ids = {str(p.get("id", "")) for p in papers_a}
+        papers_b_ids = {str(p.get("id", "")) for p in papers_b}
+
+        # Count cross-cluster citations: who cites whom across the gap
+        cited_by_a: Dict[str, int] = defaultdict(int)  # target -> count cited by A
+        cited_by_b: Dict[str, int] = defaultdict(int)  # target -> count cited by B
+        if edges:
+            for edge in edges:
+                src = str(edge.get("source", ""))
+                tgt = str(edge.get("target", ""))
+                if src in papers_a_ids and tgt not in papers_a_ids:
+                    cited_by_a[tgt] += 1
+                if src in papers_b_ids and tgt not in papers_b_ids:
+                    cited_by_b[tgt] += 1
+                # Also count reverse direction (cited paper cites across)
+                if tgt in papers_a_ids and src not in papers_a_ids:
+                    cited_by_a[src] += 1
+                if tgt in papers_b_ids and src not in papers_b_ids:
+                    cited_by_b[src] += 1
+
+        n_a = max(1, len(papers_a_ids))
+        n_b = max(1, len(papers_b_ids))
 
         all_papers = papers_a + papers_b
-        candidates: List[Tuple[float, Dict[str, Any]]] = []
+        candidates: List[Tuple[float, int, int, float, float, Dict[str, Any]]] = []
 
         for paper in all_papers:
+            pid = str(paper.get("id", ""))
+            ca = cited_by_a.get(pid, 0)
+            cb = cited_by_b.get(pid, 0)
+
+            # Normalized citation bridge score: geometric mean of cross-citations
+            citation_score = sqrt((ca / n_a) * (cb / n_b)) if ca > 0 and cb > 0 else 0.0
+
+            # Embedding similarity score
+            sim_a, sim_b, sim_score = 0.0, 0.0, 0.0
             emb = paper.get("embedding")
-            if emb is None:
-                continue
+            if emb is not None and centroid_a is not None and centroid_b is not None:
+                emb_arr = np.array(emb)
+                sim_a = self._cosine_similarity(emb_arr, centroid_a)
+                sim_b = self._cosine_similarity(emb_arr, centroid_b)
+                if sim_a > 0 and sim_b > 0:
+                    sim_score = sqrt(sim_a * sim_b)
 
-            emb = np.array(emb)
-            sim_a = self._cosine_similarity(emb, centroid_a)
-            sim_b = self._cosine_similarity(emb, centroid_b)
+            # Hybrid: citation evidence dominates, embedding as fallback
+            if ca > 0 and cb > 0:
+                final_score = 0.7 * citation_score + 0.3 * sim_score
+            elif (ca > 0 or cb > 0) and sim_score > 0.5:
+                final_score = 0.15 * sim_score  # weak single-side signal
+            else:
+                final_score = 0.3 * sim_score   # embedding-only fallback
 
-            # Geometric mean of similarities to both centroids
-            if sim_a > 0 and sim_b > 0:
-                score = sqrt(sim_a * sim_b)
-                candidates.append((score, paper))
+            if final_score > 0:
+                candidates.append((final_score, ca, cb, sim_a, sim_b, paper))
 
-        # Sort by score descending
+        # Sort: citation-evidence papers first, then embedding-only
         candidates.sort(key=lambda x: x[0], reverse=True)
 
-        return [
-            {
-                "paper_id": str(p.get("id", "")),
-                "title": p.get("title", ""),
+        results = []
+        for score, ca, cb, sim_a, sim_b, paper in candidates[:top_n]:
+            results.append({
+                "paper_id": str(paper.get("id", "")),
+                "title": paper.get("title", ""),
                 "score": round(score, 4),
-                "sim_to_cluster_a": round(float(self._cosine_similarity(np.array(p["embedding"]), centroid_a)), 4),
-                "sim_to_cluster_b": round(float(self._cosine_similarity(np.array(p["embedding"]), centroid_b)), 4),
-            }
-            for score, p in candidates[:top_n]
-        ]
+                "sim_to_cluster_a": round(float(sim_a), 4),
+                "sim_to_cluster_b": round(float(sim_b), 4),
+                "cited_by_a_count": ca,
+                "cited_by_b_count": cb,
+            })
+        return results
 
     def _find_potential_edges(
         self,

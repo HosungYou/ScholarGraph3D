@@ -140,7 +140,7 @@ export interface StructuralGap {
   cluster_a: { id: number; label: string; paper_count: number };
   cluster_b: { id: number; label: string; paper_count: number };
   gap_strength: number;
-  bridge_papers: { paper_id: string; title: string; score: number; sim_to_cluster_a?: number; sim_to_cluster_b?: number }[];
+  bridge_papers: { paper_id: string; title: string; score: number; sim_to_cluster_a?: number; sim_to_cluster_b?: number; cited_by_a_count?: number; cited_by_b_count?: number }[];
   potential_edges: { source: string; target: string; similarity: number }[];
   research_questions: (string | { question: string; justification: string; methodology_hint: string })[];
   gap_score_breakdown?: GapScoreBreakdown;
