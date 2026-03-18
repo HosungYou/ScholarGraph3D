@@ -21,7 +21,6 @@ from graph.embedding_reducer import EmbeddingReducer
 from graph.similarity import SimilarityComputer
 from graph.bridge_detector import detect_bridge_nodes
 from graph.gap_detector import GapDetector
-from graph.network_metrics import compute_node_lightweight
 from integrations.semantic_scholar import get_s2_client, SemanticScholarRateLimitError
 from services.citation_intent import CitationIntentService
 from middleware.rate_limiter import check_rate_limit
@@ -81,13 +80,7 @@ class SeedClusterInfo(BaseModel):
     paper_count: int = 0
     color: str = "#888888"
     hull_points: List[List[float]] = []
-    centroid: List[float] = [0.0, 0.0, 0.0]   # PageRank-weighted centroid [x, y, z]
-
-
-class SeedGapActionability(BaseModel):
-    score: float
-    breakdown: Dict[str, float] = {}
-    recommendation: str = "high_opportunity"
+    centroid: List[float] = [0.0, 0.0, 0.0]   # arithmetic mean centroid [x, y, z]
 
 
 class SeedGapInfo(BaseModel):
@@ -102,9 +95,7 @@ class SeedGapInfo(BaseModel):
     key_papers_a: Optional[List[Dict[str, Any]]] = None
     key_papers_b: Optional[List[Dict[str, Any]]] = None
     temporal_context: Optional[Dict[str, Any]] = None
-    intent_summary: Optional[Dict[str, Any]] = None
     evidence_detail: Optional[Dict[str, Any]] = None
-    actionability: Optional[SeedGapActionability] = None
 
 
 class SeedGraphResponse(BaseModel):
@@ -174,7 +165,7 @@ async def _seed_explore_pipeline(request: SeedExploreRequest, start_time: float)
     # Check cache first
     try:
         from cache import get_cached_seed_explore
-        cached = await get_cached_seed_explore(f"{request.paper_id}:v3.7.0")
+        cached = await get_cached_seed_explore(f"{request.paper_id}:v4.0.0")
         if cached:
             logger.info(f"[timing] cache_hit: {time.time() - start_time:.2f}s — returning cached response")
             return SeedGraphResponse(**cached)
@@ -481,7 +472,7 @@ async def _seed_explore_pipeline(request: SeedExploreRequest, start_time: float)
                 node.cluster_label = "Unclustered"
             nodes.append(node)
 
-        # 6. Citation intents FIRST (enriches edges), then gap detection (uses enriched data)
+        # 6. Citation intents (enriches edges)
         try:
             intent_service = CitationIntentService()
             seed_intents = await intent_service.get_basic_intents(
@@ -514,25 +505,7 @@ async def _seed_explore_pipeline(request: SeedExploreRequest, start_time: float)
 
         logger.info(f"[timing] intents: {time.time() - start_time:.2f}s")
 
-        # 7. SNA metrics (PageRank, Betweenness) — computed BEFORE gap detection
-        #    so node_metrics can be passed to gap_detector for influence scoring
-        sna_metrics: Dict[str, Dict[str, float]] = {}
-        try:
-            sna_papers = [{"id": n.id} for n in nodes]
-            sna_edges = [{"source": e.source, "target": e.target, "type": e.type} for e in edges]
-            sna_clusters = [{"id": c.id} for c in clusters_info]
-            sna_metrics = await asyncio.to_thread(
-                compute_node_lightweight, sna_papers, sna_edges, sna_clusters
-            )
-            for n in nodes:
-                m = sna_metrics.get(n.id, {})
-                n.pagerank = m.get("pagerank", 0.0)
-                n.betweenness = m.get("betweenness", 0.0)
-            logger.info(f"[timing] sna_metrics: {time.time() - start_time:.2f}s")
-        except Exception as e:
-            logger.warning(f"SNA metrics failed (non-fatal): {e}")
-
-        # 8. Gap detection with enriched intent data, citation_pairs, and SNA metrics
+        # 7. Gap detection
         gaps_info: List[SeedGapInfo] = []
         if len(clusters_info) >= 2 and len(nodes) >= 5:
             try:
@@ -548,10 +521,6 @@ async def _seed_explore_pipeline(request: SeedExploreRequest, start_time: float)
                     "tldr": getattr(papers_map.get(n.id), 'tldr', None) if papers_map.get(n.id) else None,
                     "citation_count": n.citation_count,
                     "embedding": emb_lookup.get(n.id),
-                    "authors": n.authors,
-                    "venue": n.venue,
-                    "is_open_access": n.is_open_access,
-                    "abstract": n.abstract,
                 } for n in nodes]
                 gap_clusters = [{"id": c.id, "label": c.label, "paper_count": c.paper_count} for c in clusters_info]
                 gap_edges = [{"source": e.source, "target": e.target, "type": e.type, "weight": e.weight, "intent": e.intent} for e in edges]
@@ -559,21 +528,10 @@ async def _seed_explore_pipeline(request: SeedExploreRequest, start_time: float)
                 gap_result = await asyncio.to_thread(
                     gap_detector.detect_gaps,
                     gap_papers, gap_clusters, gap_edges,
-                    citation_pairs, gap_edges,
-                    sna_metrics if sna_metrics else None,
                     cluster_quality=cluster_silhouette if cluster_silhouette > 0 else None,
                 )
 
                 for gap in gap_result.gaps[:10]:  # Limit to top 10 gaps
-                    # Build actionability response model
-                    actionability_info = None
-                    if gap.actionability:
-                        actionability_info = SeedGapActionability(
-                            score=gap.actionability.score,
-                            breakdown=gap.actionability.breakdown,
-                            recommendation=gap.actionability.recommendation,
-                        )
-
                     gaps_info.append(SeedGapInfo(
                         gap_id=gap.gap_id,
                         cluster_a=gap.cluster_a,
@@ -586,30 +544,26 @@ async def _seed_explore_pipeline(request: SeedExploreRequest, start_time: float)
                         key_papers_a=gap.key_papers_a if gap.key_papers_a else None,
                         key_papers_b=gap.key_papers_b if gap.key_papers_b else None,
                         temporal_context=gap.temporal_context if gap.temporal_context else None,
-                        intent_summary=gap.intent_summary if gap.intent_summary else None,
                         evidence_detail=gap.evidence_detail if gap.evidence_detail else None,
-                        actionability=actionability_info,
                     ))
 
                 logger.info(f"Gap detection: {len(gaps_info)} gaps found")
             except Exception as e:
                 logger.warning(f"Gap detection failed (non-fatal): {e}")
 
-        logger.info(f"[timing] intents_and_gaps: {time.time() - start_time:.2f}s")
+        logger.info(f"[timing] gaps: {time.time() - start_time:.2f}s")
 
-        # PageRank-weighted centroid — computed after SNA so n.pagerank is set
+        # Arithmetic mean centroid
         try:
             for c_info in clusters_info:
                 cid = c_info.id
                 cluster_nodes = [n for n in nodes if n.cluster_id == cid]
-                if not cluster_nodes:
-                    continue
-                total_pr = sum(max(n.pagerank, 0.001) for n in cluster_nodes)
-                c_info.centroid = [
-                    sum(n.x * max(n.pagerank, 0.001) for n in cluster_nodes) / total_pr,
-                    sum(n.y * max(n.pagerank, 0.001) for n in cluster_nodes) / total_pr,
-                    sum(n.z * max(n.pagerank, 0.001) for n in cluster_nodes) / total_pr,
-                ]
+                if cluster_nodes:
+                    c_info.centroid = [
+                        sum(n.x for n in cluster_nodes) / len(cluster_nodes),
+                        sum(n.y for n in cluster_nodes) / len(cluster_nodes),
+                        sum(n.z for n in cluster_nodes) / len(cluster_nodes),
+                    ]
             logger.info(f"[timing] centroid_calc: {time.time() - start_time:.2f}s")
         except Exception as e:
             logger.warning(f"Centroid calc failed (non-fatal): {e}")
@@ -678,7 +632,7 @@ async def _seed_explore_pipeline(request: SeedExploreRequest, start_time: float)
     )
     try:
         from cache import cache_seed_explore
-        await cache_seed_explore(f"{request.paper_id}:v3.7.0", response.model_dump())
+        await cache_seed_explore(f"{request.paper_id}:v4.0.0", response.model_dump())
     except Exception:
         pass  # cache write failure is non-fatal
 

@@ -19,13 +19,9 @@ from database import db, init_db, close_db
 from integrations.semantic_scholar import init_s2_client, close_s2_client
 from auth.supabase_client import supabase_client
 from auth.middleware import AuthMiddleware
-from routers import papers, graphs, bookmarks
+from routers import papers, graphs
 from routers.seed_explore import router as seed_explore_router
 from routers.paper_search import router as paper_search_router
-from routers.seed_chat import router as seed_chat_router
-from routers.gap_report import router as gap_report_router
-from routers.academic_report import router as academic_report_router
-from routers.recommendation_feedback import router as recommendation_feedback_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -106,7 +102,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="ScholarGraph3D API",
     description="3D academic paper graph visualization with SPECTER2 embeddings",
-    version="3.7.0",
+    version="4.0.0",
     lifespan=lifespan,
 )
 
@@ -145,11 +141,6 @@ app.include_router(papers.router, tags=["Papers"])
 app.include_router(graphs.router, tags=["Graphs"])
 app.include_router(seed_explore_router, tags=["Seed Explore"])
 app.include_router(paper_search_router, tags=["Paper Search"])
-app.include_router(seed_chat_router, tags=["Seed Chat"])
-app.include_router(bookmarks.router, tags=["Bookmarks"])
-app.include_router(recommendation_feedback_router, tags=["Recommendation Feedback"])
-app.include_router(gap_report_router, tags=["Gap Report"])
-app.include_router(academic_report_router, tags=["Academic Report"])
 
 
 # ==================== Global Exception Handler ====================
@@ -172,7 +163,7 @@ async def root():
     return {
         "status": "healthy",
         "service": "ScholarGraph3D",
-        "version": "3.7.0",
+        "version": "4.0.0",
     }
 
 

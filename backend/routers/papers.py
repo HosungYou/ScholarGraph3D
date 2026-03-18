@@ -12,9 +12,8 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, computed_field
 
-from config import settings
 from database import Database, get_db
-from integrations.semantic_scholar import SemanticScholarClient, SemanticScholarPaper, get_s2_client
+from integrations.semantic_scholar import SemanticScholarPaper, get_s2_client
 from services.citation_intent import CitationIntentService
 
 logger = logging.getLogger(__name__)
@@ -559,47 +558,19 @@ class CitationIntent(BaseModel):
 @router.get("/api/papers/{paper_id:path}/intents", response_model=List[CitationIntent])
 async def get_citation_intents(
     paper_id: str,
-    enhanced: bool = Query(default=False, description="Use LLM for enhanced intent classification"),
-    provider: Optional[str] = Query(default=None, description="LLM provider (required if enhanced=true)"),
-    api_key: Optional[str] = Query(default=None, description="LLM API key (required if enhanced=true)"),
 ):
     """
     Get citation intents for a paper.
 
-    Basic mode (free): Returns S2 citation intents (methodology, background, result_comparison).
-    Enhanced mode (premium): Uses LLM to classify intents more granularly
-    (supports, contradicts, extends, applies, compares). Requires provider + api_key.
+    Returns S2 citation intents (methodology, background, result_comparison).
     """
     s2_client = get_s2_client()
     svc = CitationIntentService()
 
-    # Get basic S2 intents
     intents = await svc.get_basic_intents(paper_id, s2_client)
 
     if not intents:
         return []
-
-    # Enhanced intents via Groq (single provider)
-    if enhanced:
-        try:
-            from config import settings
-            from llm.groq_provider import GroqProvider
-
-            if not settings.groq_api_key:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Groq API key not configured on server for enhanced intents",
-                )
-            groq = GroqProvider(api_key=settings.groq_api_key)
-            try:
-                intents = await svc.enhance_intents_with_llm(intents, groq)
-            finally:
-                await groq.close()
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.warning(f"Enhanced intent classification failed: {e}")
-            # Fall back to basic intents (already populated)
 
     return [
         CitationIntent(
