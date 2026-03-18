@@ -9,6 +9,7 @@ interface UseGraphInteractionsParams {
   fgRef: MutableRefObject<any>;
   containerRef: MutableRefObject<HTMLDivElement | null>;
   hoveredNodeRef: MutableRefObject<string | null>;
+  hoverConnectedRef: MutableRefObject<Set<string>>;
   justClickedNodeRef: MutableRefObject<boolean>;
   forceGraphData: { nodes: ForceGraphNode[]; links: ForceGraphLink[] };
   /** Refs for expand animation state */
@@ -24,6 +25,7 @@ export function useGraphInteractions({
   fgRef,
   containerRef,
   hoveredNodeRef,
+  hoverConnectedRef,
   justClickedNodeRef,
   forceGraphData,
   newNodeIdsRef,
@@ -84,12 +86,30 @@ export function useGraphInteractions({
       const newId = node?.id || null;
       if (newId !== hoveredNodeRef.current) {
         hoveredNodeRef.current = newId;
+
+        // Build set of connected node IDs for hover highlighting
+        if (newId) {
+          const connected = new Set<string>([newId]);
+          forceGraphData.links.forEach((link) => {
+            const srcId = typeof link.source === 'string' ? link.source : (link.source as ForceGraphNode).id;
+            const tgtId = typeof link.target === 'string' ? link.target : (link.target as ForceGraphNode).id;
+            if (srcId === newId) connected.add(tgtId);
+            if (tgtId === newId) connected.add(srcId);
+          });
+          hoverConnectedRef.current = connected;
+        } else {
+          hoverConnectedRef.current = new Set();
+        }
+
         if (containerRef.current) {
           containerRef.current.style.cursor = newId ? 'pointer' : 'default';
         }
+
+        // Trigger visual refresh for hover highlighting
+        try { fgRef.current?.refresh(); } catch { /* not yet mounted */ }
       }
     },
-    [hoveredNodeRef, containerRef]
+    [hoveredNodeRef, hoverConnectedRef, containerRef, forceGraphData.links, fgRef]
   );
 
   // ── Background click (deselect) ───────────────────────────────

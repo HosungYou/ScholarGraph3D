@@ -103,6 +103,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
   const fgRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const hoveredNodeRef = useRef<string | null>(null);
+  const hoverConnectedRef = useRef<Set<string>>(new Set());
 
   // Client-only guard: React.lazy doesn't have ssr:false like next/dynamic
   const [isClient, setIsClient] = useState(false);
@@ -429,6 +430,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     fgRef,
     containerRef,
     hoveredNodeRef,
+    hoverConnectedRef,
     justClickedNodeRef,
     forceGraphData,
     newNodeIdsRef,
@@ -448,6 +450,8 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
   } = useGraphRenderer({
     fgRef,
     selectedPaperIdRef,
+    hoveredNodeRef,
+    hoverConnectedRef,
     newNodeIdsRef,
     expandedFromRef,
     expandedEdgeIdsRef,
