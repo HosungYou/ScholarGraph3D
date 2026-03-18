@@ -6,9 +6,6 @@ import type {
   GraphData,
   CitationIntent,
   StructuralGap,
-  GapReport,
-  AcademicReport,
-  NetworkOverview,
 } from '@/types';
 
 interface GraphStore {
@@ -20,7 +17,7 @@ interface GraphStore {
   isLoading: boolean;
   error: string | null;
 
-  activeTab: 'clusters' | 'gaps' | 'chat' | 'academic';
+  activeTab: 'clusters' | 'gaps';
   highlightedPaperIds: Set<string>;
 
   // Phase 1.5: Visual enhancement state
@@ -44,20 +41,6 @@ interface GraphStore {
   frontierIds: string[];
   setGaps: (gaps: StructuralGap[]) => void;
   setFrontierIds: (ids: string[]) => void;
-
-  // Gap Report
-  activeGapReport: GapReport | null;
-  gapReportLoading: boolean;
-  setActiveGapReport: (report: GapReport | null) => void;
-  setGapReportLoading: (loading: boolean) => void;
-
-  // Academic Analysis
-  academicReport: AcademicReport | null;
-  academicReportLoading: boolean;
-  networkOverview: NetworkOverview | null;
-  setAcademicReport: (report: AcademicReport | null) => void;
-  setAcademicReportLoading: (loading: boolean) => void;
-  setNetworkOverview: (overview: NetworkOverview | null) => void;
 
   // Panel selection → camera focus
   panelSelectionId: string | null;
@@ -87,26 +70,6 @@ interface GraphStore {
   showLabels: boolean;
   showCosmicTheme: boolean;
 
-  // Edge visualization mode
-  edgeVisMode: 'similarity' | 'temporal' | 'crossCluster';
-  setEdgeVisMode: (mode: 'similarity' | 'temporal' | 'crossCluster') => void;
-
-  // Node size encoding mode
-  nodeSizeMode: 'citations' | 'pagerank' | 'betweenness';
-  setNodeSizeMode: (mode: 'citations' | 'pagerank' | 'betweenness') => void;
-
-  // Layout mode toggle (v3.6.0)
-  layoutMode: 'semantic' | 'network';
-  setLayoutMode: (mode: 'semantic' | 'network') => void;
-
-  // Multi-seed state (v3.6.0)
-  addSeedMerging: boolean;
-  secondSeedIds: string[];
-  gapRefreshNeeded: boolean;
-  setAddSeedMerging: (v: boolean) => void;
-  addSecondSeedId: (id: string) => void;
-  setGapRefreshNeeded: (v: boolean) => void;
-
   // Actions
   setGraphData: (data: GraphData) => void;
   selectPaper: (paper: Paper | null) => void;
@@ -121,7 +84,7 @@ interface GraphStore {
   toggleLabels: () => void;
   toggleCosmicTheme: () => void;
 
-  setActiveTab: (tab: 'clusters' | 'gaps' | 'chat' | 'academic') => void;
+  setActiveTab: (tab: 'clusters' | 'gaps') => void;
   setHighlightedPaperIds: (ids: Set<string>) => void;
   clearHighlightedPaperIds: () => void;
 
@@ -165,18 +128,6 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
   setGaps: (gaps: StructuralGap[]) => set({ gaps }),
   setFrontierIds: (ids: string[]) => set({ frontierIds: ids }),
 
-  activeGapReport: null,
-  gapReportLoading: false,
-  setActiveGapReport: (report) => set({ activeGapReport: report }),
-  setGapReportLoading: (loading) => set({ gapReportLoading: loading }),
-
-  academicReport: null,
-  academicReportLoading: false,
-  networkOverview: null,
-  setAcademicReport: (report) => set({ academicReport: report }),
-  setAcademicReportLoading: (loading) => set({ academicReportLoading: loading }),
-  setNetworkOverview: (overview) => set({ networkOverview: overview }),
-
   panelSelectionId: null,
   setPanelSelectionId: (id) => set({ panelSelectionId: id }),
 
@@ -199,21 +150,6 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
   showClusterHulls: true,
   showLabels: true,
   showCosmicTheme: true,
-  edgeVisMode: 'similarity' as const,
-  setEdgeVisMode: (mode) => set({ edgeVisMode: mode }),
-
-  nodeSizeMode: 'citations' as const,
-  setNodeSizeMode: (mode) => set({ nodeSizeMode: mode }),
-
-  layoutMode: 'semantic' as const,
-  setLayoutMode: (mode) => set({ layoutMode: mode }),
-
-  addSeedMerging: false,
-  secondSeedIds: [],
-  gapRefreshNeeded: false,
-  setAddSeedMerging: (v) => set({ addSeedMerging: v }),
-  addSecondSeedId: (id) => set((s) => ({ secondSeedIds: [...s.secondSeedIds, id] })),
-  setGapRefreshNeeded: (v) => set({ gapRefreshNeeded: v }),
 
   setGraphData: (data) => set({ graphData: data, error: null }),
   setGraphMeta: (meta) => set({ graphMeta: meta }),
