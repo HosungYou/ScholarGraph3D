@@ -15,11 +15,6 @@ const StarfieldBackground = dynamic(
   { ssr: false }
 );
 
-const AstronautHelmet = dynamic(
-  () => import('@/components/cosmic/AstronautHelmet'),
-  { ssr: false }
-);
-
 type InputMode = 'doi' | 'natural';
 
 const DOI_PATTERN = /10\.\d{4,}\/\S+/;
@@ -223,7 +218,7 @@ export default function LandingPage() {
       {/* Hero Section */}
       <div className={`relative z-10 ${isWarping ? 'animate-warp' : ''}`}>
         <div className="max-w-7xl mx-auto px-8 md:px-16 pt-8 md:pt-16">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center min-h-[60vh]">
+          <div className="flex items-center min-h-[60vh]">
 
             {/* Left: Text */}
             <motion.div
@@ -271,15 +266,6 @@ export default function LandingPage() {
               </motion.div>
             </motion.div>
 
-            {/* Right: 3D Helmet */}
-            <motion.div
-              className="hidden md:flex items-center justify-center"
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 1.2, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
-            >
-              <AstronautHelmet size={450} />
-            </motion.div>
           </div>
         </div>
 
@@ -510,52 +496,37 @@ export default function LandingPage() {
                       {naturalResults.map((paper) => (
                         <div
                           key={paper.paper_id}
-                          className="text-left rounded-xl p-4 bg-neutral-950 border border-neutral-800 hover:border-[#D4AF37]/40 transition-all group"
+                          className="text-left rounded-xl px-4 py-3 bg-neutral-950 border border-neutral-800 hover:border-[#D4AF37]/40 transition-all group"
                         >
                           <div className="flex items-start justify-between gap-3">
-                            <h3 className="mt-0 text-sm font-medium text-white group-hover:text-[#D4AF37] transition-colors leading-snug">
+                            <h3 className="mt-0 text-sm font-semibold text-white group-hover:text-[#D4AF37] transition-colors leading-snug">
                               {paper.title}
                             </h3>
-                            <div className="text-right text-[10px] font-mono text-neutral-500 flex-shrink-0">
-                              {paper.year || 'n.d.'}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-3 mt-1.5 text-[11px] text-neutral-600 font-mono">
-                            <span>{formatAuthors(paper)}</span>
-                            {paper.citation_count > 0 && <span>&middot; {paper.citation_count} cit.</span>}
-                          </div>
-                          {paper.venue && (
-                            <div className="mt-1 flex items-center gap-1.5 text-[10px] font-mono text-neutral-500">
-                              <BookOpen className="w-3 h-3" />
-                              {paper.venue}
-                            </div>
-                          )}
-                          {paper.abstract_snippet && (
-                            <p className="mt-2 line-clamp-3 text-[12px] leading-relaxed text-neutral-400">
-                              {paper.abstract_snippet}
-                            </p>
-                          )}
-                          {paper.fields.length > 0 && (
-                            <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                              {paper.fields.slice(0, 3).map((field) => (
-                                <span
-                                  key={`${paper.paper_id}-${field}`}
-                                  className="rounded-full border border-[rgba(255,255,255,0.08)] px-2 py-0.5 text-[9px] font-mono text-neutral-400"
-                                >
-                                  {field}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                          <div className="mt-3">
                             <button
                               onClick={() => startSeedWorkspace(paper.paper_id)}
-                              className="inline-flex items-center gap-2 rounded-full border border-[rgba(212,175,55,0.22)] px-3 py-1.5 text-[10px] font-mono uppercase tracking-wider text-[#D4AF37] transition-colors hover:bg-[rgba(212,175,55,0.08)]"
+                              className="flex-shrink-0 inline-flex items-center gap-1.5 rounded-full border border-[rgba(212,175,55,0.22)] px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider text-[#D4AF37] transition-colors hover:bg-[rgba(212,175,55,0.08)]"
                             >
                               <ArrowRight className="w-3 h-3" />
-                              Use as seed
+                              Seed
                             </button>
                           </div>
+                          <div className="flex items-center gap-2 mt-1.5 text-[11px] text-neutral-600 font-mono flex-wrap">
+                            <span>{formatAuthors(paper)}</span>
+                            <span className="text-neutral-700">&middot;</span>
+                            <span>{paper.year || 'n.d.'}</span>
+                            {paper.citation_count > 0 && (
+                              <>
+                                <span className="text-neutral-700">&middot;</span>
+                                <span>{paper.citation_count.toLocaleString()} cit.</span>
+                              </>
+                            )}
+                          </div>
+                          {paper.venue && (
+                            <div className="mt-1 flex items-center gap-1.5 text-[10px] font-mono text-neutral-600 truncate">
+                              <BookOpen className="w-3 h-3 flex-shrink-0" />
+                              <span className="truncate">{paper.venue}</span>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </motion.div>

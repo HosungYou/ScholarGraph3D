@@ -23,7 +23,7 @@ const StarfieldBackground = forwardRef<StarfieldBackgroundRef>((_, ref) => {
     const containerEl = containerRef.current;
     if (!containerEl) return;
     const isMobile = window.innerWidth < 768;
-    const starCount = isMobile ? 2000 : 4000;
+    const starCount = isMobile ? 300 : 500;
     const dpr = isMobile
       ? Math.min(window.devicePixelRatio, 1.5)
       : Math.min(window.devicePixelRatio, 2);
@@ -93,33 +93,6 @@ const StarfieldBackground = forwardRef<StarfieldBackgroundRef>((_, ref) => {
     scene.add(stars);
     starsRef.current = stars;
 
-    // --- Subtle milky way band ---
-    const mwCount = isMobile ? 600 : 1200;
-    const mwGeo = new THREE.BufferGeometry();
-    const mwPos = new Float32Array(mwCount * 3);
-    const mwCol = new Float32Array(mwCount * 3);
-    for (let i = 0; i < mwCount; i++) {
-      const i3 = i * 3;
-      const t = (Math.random() - 0.5) * 300;
-      mwPos[i3] = t;
-      mwPos[i3 + 1] = Math.sin(t * 0.03) * 12 + (Math.random() - 0.5) * 25;
-      mwPos[i3 + 2] = (Math.random() - 0.5) * 80;
-      mwCol[i3] = 0.3 + Math.random() * 0.15;
-      mwCol[i3 + 1] = 0.3 + Math.random() * 0.2;
-      mwCol[i3 + 2] = 0.5 + Math.random() * 0.3;
-    }
-    mwGeo.setAttribute('position', new THREE.BufferAttribute(mwPos, 3));
-    mwGeo.setAttribute('color', new THREE.BufferAttribute(mwCol, 3));
-    const mwMat = new THREE.PointsMaterial({
-      size: 0.3,
-      vertexColors: true,
-      transparent: true,
-      opacity: 0.2,
-      sizeAttenuation: true,
-    });
-    const milkyWay = new THREE.Points(mwGeo, mwMat);
-    scene.add(milkyWay);
-
     // --- Animation loop ---
     const animate = () => {
       frameRef.current = requestAnimationFrame(animate);
@@ -129,7 +102,6 @@ const StarfieldBackground = forwardRef<StarfieldBackgroundRef>((_, ref) => {
         cameraRef.current.rotation.y += (mouseRef.current.x * 0.03 - cameraRef.current.rotation.y) * 0.015;
       }
       if (starsRef.current) starsRef.current.rotation.y += 0.00005;
-      milkyWay.rotation.y += 0.00003;
       renderer.render(scene, camera);
     };
     animate();
@@ -157,8 +129,6 @@ const StarfieldBackground = forwardRef<StarfieldBackgroundRef>((_, ref) => {
       // Dispose all Three.js resources before renderer
       starGeo.dispose();
       starMat.dispose();
-      mwGeo.dispose();
-      mwMat.dispose();
       scene.clear();
       renderer.dispose();
 
