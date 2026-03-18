@@ -1,250 +1,138 @@
-# ScholarGraph3D — Product Requirements Document
+# ScholarGraph3D -- Product Requirements Document
 
-> **Version:** 1.1 | **Last Updated:** 2026-02-24
-> **Related:** [SPEC.md](./SPEC.md) | [ARCHITECTURE.md](./ARCHITECTURE.md) | [SDD/TDD Plan](./SDD_TDD_PLAN.md)
-
----
-
-## Document Map
-
-```
-PRD.md (this file)          — What we build and why
-  |
-  +-- SPEC.md               — How it works technically
-  |     |
-  |     +-- API contracts, DB schemas, data pipelines
-  |
-  +-- ARCHITECTURE.md       — How the system is structured
-  |     |
-  |     +-- Component design, deployment, code organization
-  |
-  +-- SDD_TDD_PLAN.md       — How we verify correctness
-        |
-        +-- Test strategy, TDD cycles, acceptance criteria
-```
-
-All four documents form a complete project specification. Cross-references use relative links throughout.
+> **Version:** 4.0.0 | **Last Updated:** 2026-03-18
+> **Related:** [SPEC.md](./SPEC.md) | [ARCHITECTURE.md](./ARCHITECTURE.md)
 
 ---
 
-## 1. Vision & Mission
+## 1. Vision
 
-**Vision:** "Visualize the universe of academic papers in 3D — search, explore, and let AI guide your research journey."
-
-**Mission:** Build a literature discovery platform that makes academic research exploration visual, intuitive, and AI-powered. Researchers type a keyword and instantly see a 3D galaxy of related papers — clustered by topic, connected by citations and semantic similarity, and navigable with AI assistance.
-
-**Korean:** "키워드를 입력하면 3D 논문 우주가 펼쳐지고, AI가 연구 지형을 안내한다."
+Visualize the citation universe from a single seed paper in 3D. ScholarGraph3D helps researchers explore scholarly neighborhoods, discover research gaps, and find bridge papers connecting disparate fields.
 
 ### Design Principles
 
-1. **Discovery over search** — The graph reveals connections no keyword search could surface.
-2. **Visual-first** — 3D spatial layout encodes meaning: proximity = similarity, color = field, size = impact.
-3. **Open data, open science** — OpenAlex CC0 as primary source; no paywall for core features.
-4. **Progressive disclosure** — Free tier delivers immediate value; premium unlocks AI depth.
+1. **Seed-first exploration** -- start from one paper, expand outward through citations
+2. **Visual-first** -- 3D layout encodes meaning: proximity = semantic similarity, color = field, size = impact, depth = time
+3. **No LLM dependency** -- all analysis (clustering, gaps, research questions) is computed from paper data
+4. **Single data source** -- Semantic Scholar provides metadata, embeddings, citations, and intents
 
 ---
 
 ## 2. Target Users
 
-| Persona | Need | Key Workflow |
-|---------|------|-------------|
-| **Graduate students** starting literature reviews | Quickly map a new research area | Search keyword -> explore clusters -> save interesting papers |
-| **Researchers** exploring adjacent fields | Find unexpected connections across disciplines | Search -> expand citation networks -> discover bridge papers |
-| **Research teams** mapping competitive landscapes | Understand who is working on what, and where gaps exist | Search -> cluster analysis -> trend/gap detection (Phase 2) |
-| **Systematic review authors** | Comprehensive, reproducible coverage | Search -> expand all citations -> export paper list |
-
-### User Characteristics
-
-- Comfortable with academic databases (Google Scholar, PubMed, S2)
-- Familiar with citation networks conceptually, but rarely visualize them
-- Time-pressured — a literature review that takes weeks should take hours
-- Multilingual — interface in English, but papers span all languages
+| Persona | Need | Workflow |
+|---------|------|----------|
+| Graduate students | Map a research area from a known paper | Search -> select seed -> explore clusters -> save graph |
+| Researchers | Find connections to adjacent fields | Select seed -> expand -> identify gaps and bridge papers |
+| Systematic reviewers | Trace citation networks comprehensively | Seed -> expand -> export BibTeX |
 
 ---
 
-## 3. User Stories & Acceptance Criteria
+## 3. User Stories (MVP v4.0.0)
 
-### Phase 1 (MVP) — v0.1.0 ~ v0.5.0
-
-Core search, visualization, and exploration. Free for all users.
-
-| ID | User Story | Acceptance Criteria | Priority | Status |
-|----|-----------|-------------------|----------|--------|
-| US-01 | As a researcher, I want to search papers by keyword | Search returns 200+ papers in <5s; OA+S2 fusion with DOI dedup; year and field filters work | P0 | Complete ✅ |
-| US-02 | As a researcher, I want to see papers in 3D space | SPECTER2 embeddings reduced to 3D via UMAP; nodes colored by field, sized by sqrt(citations); smooth 30+ FPS | P0 | Complete ✅ |
-| US-03 | As a researcher, I want to see auto-detected clusters | HDBSCAN clusters with OA Topics labels; nebula particle clouds per cluster (since v1.0.0); cluster panel lists all clusters | P0 | Complete ✅ |
-| US-04 | As a researcher, I want to click a paper for details | Detail panel shows: title, abstract/TLDR, authors, venue, year, citation count, OA link, fields, topics | P0 | Complete ✅ |
-| US-05 | As a researcher, I want to expand citation networks | Double-click a node -> load references + citations from S2 -> new nodes appear in graph with citation edges | P0 | Complete ✅ |
-| US-06 | As a researcher, I want to save my exploration | Supabase Auth (email/password); save/load graph state including papers, layout positions, camera angle | P0 | Complete ✅ |
-| US-07 | As a researcher, I want citation edges visible | Solid directional arrows from citing paper to cited paper; arrow size proportional to edge weight | P1 | Complete ✅ |
-| US-08 | As a researcher, I want similarity edges | Dashed lines connecting papers with cosine similarity > threshold (default 0.7); configurable threshold | P1 | Complete ✅ |
-| US-09 | As a researcher, I want to filter by year/field | Year range slider in search bar; field-of-study dropdown; filters apply to both OA and S2 queries | P1 | Complete ✅ |
-| US-10 | As a researcher, I want graph controls | Toggle buttons: citation edges, similarity edges, cluster hulls, node labels; reset camera button | P2 | Complete ✅ |
-
-> **Implementation detail:** See [SPEC.md SS4 API Specification](./SPEC.md#4-api-specification) for endpoint contracts and [ARCHITECTURE.md SS4 Frontend Architecture](./ARCHITECTURE.md#4-frontend-architecture) for component design.
-
-### Phase 2 (AI Premium) — v0.6.0 ~ v0.9.0
-
-AI-powered analysis features. Requires user's own LLM API key.
-
-| ID | User Story | Acceptance Criteria | Priority | Status |
-|----|-----------|-------------------|----------|--------|
-| US-11 | As a researcher, I want AI chat about my graph | GraphRAG pipeline: question -> retrieve relevant papers from graph -> LLM generates cited answer -> citations link to nodes | P0 | Complete ✅ |
-| US-12 | As a researcher, I want trend analysis | Year-by-year cluster growth visualization; classify clusters as Emerging (>50% growth), Stable, or Declining | P1 | Complete ✅ |
-| US-13 | As a researcher, I want gap analysis | Inter-cluster citation density matrix; identify low-density pairs as research opportunities; visual overlay on graph | P1 | Complete ✅ |
-| US-14 | As a researcher, I want to use my own LLM key | Settings panel: select provider (Groq/OpenAI/Anthropic/Google); enter API key; key stored client-side only (never sent to our backend) | P0 | Complete ✅ |
-| US-15 | As a researcher, I want literature review drafts | Select clusters + trends + gaps -> generate structured Markdown with APA citations; export as .md or .docx | P2 | Complete ✅ |
-
-> **Architecture:** See [ARCHITECTURE.md SS10 Phase 2 Architecture Extensions](./ARCHITECTURE.md#10-phase-2-architecture-extensions) for LLM integration design and [SPEC.md SS7 Search Pipeline Spec](./SPEC.md#7-search-pipeline-spec) for GraphRAG pipeline details.
-
-### Phase 3 (Real-time & Advanced) — v0.10.0+
-
-Real-time monitoring and advanced analytics.
-
-| ID | User Story | Acceptance Criteria | Priority | Status |
-|----|-----------|-------------------|----------|--------|
-| US-16 | As a researcher, I want watch query alerts | Weekly cron checks for new papers matching saved queries; email + in-app notification with count and top papers | P1 | Complete ✅ |
-| US-17 | As a researcher, I want citation intent visualization | Edge colors encode intent: supports=green, contradicts=red, methodology=purple, background=gray, result_comparison=blue | P2 | Complete ✅ |
-| US-18 | As a researcher, I want ScholaRAG_Graph export | Select papers -> export to ScholaRAG for deep RAG-based analysis; share format compatible with ScholaRAG_Graph import | P2 | Complete ✅ |
-
-### Phase 4 (Seed UX & Bookmarks) — v3.2.0
-
-User experience enhancements and personal research workflow features.
-
-| ID | User Story | Acceptance Criteria | Priority | Status |
-|----|-----------|-------------------|----------|--------|
-| US-19 | As a researcher, I want to bookmark papers with tags and memos | Toggle bookmark from paper detail; add/remove tags; write memo; filter bookmarks by tag; persists across sessions | P1 | Complete ✅ |
-| US-20 | As a researcher, I want chat to control the graph | Chat responses include action buttons (highlight, select, cluster, edge mode, path); clicking executes the action on 3D graph | P2 | Complete ✅ |
+| ID | User Story | Acceptance Criteria | Status |
+|----|-----------|---------------------|--------|
+| US-01 | Search papers by NL query | POST /api/paper-search returns ranked results in < 3s | Done |
+| US-02 | Search papers by DOI | GET /api/papers/by-doi resolves DOI with Crossref fallback | Done |
+| US-03 | Explore seed paper in 3D | POST /api/seed-explore builds graph with nodes, edges, clusters, gaps | Done |
+| US-04 | See auto-detected clusters | Leiden/HDBSCAN clusters with TF-IDF labels, rendered as nebula clouds | Done |
+| US-05 | Click paper for details | Detail panel: title, abstract/TLDR, authors, venue, year, citations, OA link | Done |
+| US-06 | Expand from any node | expand-stable adds papers with stable positioning | Done |
+| US-07 | See citation edges | Directed citation edges with intent colors and influential markers | Done |
+| US-08 | See similarity edges | Dashed lines for papers with cosine similarity > 0.7 | Done |
+| US-09 | Detect research gaps | Gap Spotter panel with 3-dim scoring, bridge papers, research questions | Done |
+| US-10 | Find citation paths | BFS path finder between any two papers | Done |
+| US-11 | Export papers | BibTeX/RIS export for selected papers | Done |
+| US-12 | Save/load graphs | Auth + graph CRUD with JSONB state persistence | Done |
+| US-13 | See frontier papers | Papers with many unexplored connections highlighted | Done |
 
 ---
 
-## 4. Business Model — Freemium
+## 4. Core Workflow
 
-| Tier | Features | Cost | Revenue Model |
-|------|---------|------|---------------|
-| **Free** | Search, 3D visualization, clustering, detail panel, citation expansion, graph saving | $0 | API costs only (OA=free, S2=free tier) |
-| **Premium** | AI chat (GraphRAG), trend analysis, gap detection, literature review drafts | User's own LLM API key | Zero marginal cost to us |
+```
+Search -> Seed -> Explore (with Gap Spotter) -> Save
+```
 
-### Why "Bring Your Own Key"
-
-1. **No billing infrastructure needed** — Users pay their LLM provider directly.
-2. **Provider choice** — Researchers may have institutional API keys or preferences.
-3. **Privacy** — Paper data stays between user's browser and their chosen LLM.
-4. **Scalability** — Our costs don't grow with AI usage.
-
----
-
-## 5. Success Metrics
-
-| Metric | Target (6 months) | Measurement |
-|--------|-------------------|-------------|
-| Monthly Active Users | 500+ | Unique users with >= 1 search/month |
-| Search queries/day | 100+ | POST /api/search count |
-| Saved graphs/user | 3+ average | user_graphs table count per user |
-| Premium conversion | 15% | Users who configure LLM key / total users |
-| Graph render time | <3s for 200 papers | Client-side performance measurement |
-| 3D FPS at 500 papers | 30+ | requestAnimationFrame timing |
-| API latency (search) | <5s p95 | Server-side timing in response meta |
-| Cache hit rate | >40% | search_cache hits / total searches |
-
-> **Performance budgets:** See [SPEC.md SS10 Performance Requirements](./SPEC.md#10-performance-requirements) for detailed latency and rendering targets.
+1. **Search**: Enter NL query or DOI on landing page
+2. **Seed**: Select a paper from search results
+3. **Explore**: 3D graph renders with clusters, gaps, and frontier indicators
+   - Click nodes to view details and expand
+   - Left panel: Clusters tab (list, visibility) | Gaps tab (analysis, bridge papers)
+   - Right panel: Paper detail + citation path + export
+4. **Save**: Save graph to dashboard for later access
 
 ---
 
-## 6. Competitive Advantage
+## 5. Scope Boundaries (v4.0.0 MVP)
 
-> Full comparison table in [SPEC.md SS2 Market Analysis](./SPEC.md#2-market-analysis).
+### In Scope
+- NL search and DOI lookup via Semantic Scholar
+- Single seed paper exploration (depth 1, max 200 papers)
+- SPECTER2 embeddings + UMAP 3D + Leiden/HDBSCAN clustering
+- Gap detection with 3-dimensional scoring (structural, relatedness, temporal)
+- Template-generated research questions (no LLM)
+- Citation intents from S2
+- Graph save/load (authenticated)
+- BibTeX/RIS export
+- Cosmic Universe visual theme
 
-ScholarGraph3D fills **8 market gaps** not addressed by existing tools:
-
-| Gap | Existing Tools | ScholarGraph3D |
-|-----|---------------|----------------|
-| 3D visualization | Connected Papers (2D), VOSviewer (2D) | True 3D with Three.js, depth encodes temporal dimension |
-| Semantic + citation hybrid | Tools show one or the other | Both edge types on same graph with toggles |
-| Paper-level GraphRAG | No tool offers this | Question -> relevant papers -> LLM -> cited answer |
-| Citation intent coloring | S2 has data but no viz tool uses it | Edge colors: supports, contradicts, methodology, background |
-| Real-time growth tracking | Static snapshots only | Weekly watch queries with notification |
-| Multi-API fusion | Single source (OA or S2) | OA metadata + S2 embeddings/TLDR, DOI dedup |
-| Scale + interactivity | VOSviewer (static), CiteSpace (desktop) | 500+ papers at 30 FPS in browser with drag, zoom, expand |
-| SPECTER2 embeddings | No viz tool uses SPECTER2 | 768-dim SPECTER2 -> UMAP 3D -> semantic proximity |
-
----
-
-## 7. Risks & Mitigations
-
-> Technical risk details in [ARCHITECTURE.md SS6 Risk Management](./ARCHITECTURE.md#6-risk-management).
-
-| Risk | Impact | Likelihood | Mitigation |
-|------|--------|-----------|-----------|
-| S2 commercial license restrictions | High — embedding access could be limited | Medium | OA-first strategy; self-host SPECTER2 model as fallback; negotiate S2 Expanded License if needed |
-| OA credit limits (100K/day premium) | Medium — could throttle high-usage periods | Low | Aggressive 24h caching; credit tracker with cache-first mode at 95%; free tier has no credits |
-| Abstract coverage gaps | Medium — some papers lack abstracts | Medium | OA abstract -> S2 abstract -> S2 TLDR fallback chain; display "No abstract available" gracefully |
-| 3D performance at scale (>500 papers) | Medium — FPS drops, user frustration | Medium | LOD rendering; node culling outside viewport; WebWorker for UMAP computation; progressive loading |
-| Supabase vendor lock-in | Low — auth and DB on single provider | Low | Standard JWT auth; PostgreSQL is portable; can self-host Supabase |
-| UMAP non-determinism | Low — same query gives slightly different layouts | Low | Fixed random_state=42; cache UMAP results with search results |
+### Out of Scope (removed from v3.x)
+- LLM chat (Groq seed chat)
+- LLM-generated gap reports
+- Academic analysis reports (APA 7th)
+- SNA metrics (PageRank, betweenness centrality)
+- Paper bookmarks with tags/memos
+- Multi-seed merge
+- View toggle (semantic/network layout)
+- OpenAlex integration
+- Watch queries and email alerts
+- Literature review generation
 
 ---
 
-## 8. Release Plan
-
-| Version | Scope | User Stories | Target | Status |
-|---------|-------|-------------|--------|--------|
-| **v0.1.0** | Scaffold: project structure, search endpoint, 3D viz, data fusion | US-01, US-02 | 2026-02-19 | Complete ✅ |
-| **v0.2.0** | Clustering + detail panel + cluster panel | US-03, US-04 | — | Complete ✅ |
-| **v0.3.0** | Citation expansion + graph growth + citation edges | US-05, US-07 | — | Complete ✅ |
-| **v0.4.0** | Auth + graph saving/loading + dashboard | US-06 | — | Complete ✅ |
-| **v0.5.0** | Polish: filters, controls, similarity edges, testing, Phase 1 complete | US-08, US-09, US-10 | — | Complete ✅ |
-| **v0.6.0** | AI chat (GraphRAG) + LLM key settings + seed paper mode + viz enhancements | US-11, US-14 | — | Complete ✅ |
-| **v0.7.0** | Trend analysis + search redesign (RRF, SPECTER2 ANN, temporal Z-axis) | US-12 | — | Complete ✅ |
-| **v0.8.0** | Gap analysis + expand animation + citation intents | US-13 | — | Complete ✅ |
-| **v0.9.0** | Literature review drafts + node ID fix + UX polish | US-15 | — | Complete ✅ |
-| **v0.10.0 / v0.3.0** | Watch queries, citation intent viz, SSE progress, rate limiting, SEO | US-16, US-17, US-18 | — | Complete ✅ |
-| **v1.0.0** | Cosmic Universe Theme: stars, nebulae, light streams, HUD panels, warp transition | — | — | Complete ✅ |
-| **v1.0.1** | Visibility Enhancement: STAR_COLOR_MAP, sqrt node sizing, glow/nebula opacity boost | — | — | Complete ✅ |
-| **v1.1.0** | Legend, expand visual effects, error resilience, DOI fallback expand, API retry | — | — | Complete ✅ |
-| **v2.0.0** | Seed Paper mode: remove keyword search, single seed entry point, Groq chat | — | — | Complete ✅ |
-| **v3.0.0** | Cosmic Universe theme overhaul: star nodes, nebula clusters, light streams | — | — | Complete ✅ |
-| **v3.1.0** | UX Overhaul: push layout, edge vis modes, interactive Gap Spotter, cluster stats | — | 2026-02-23 | Complete ✅ |
-| **v3.2.0** | Gap Spotter UX, Paper Bookmarks (P10), Chat Graph Actions (P13) | US-19, US-20 | 2026-02-24 | Complete ✅ |
-
-> **Testing strategy for each version:** See [SDD/TDD Plan](./SDD_TDD_PLAN.md) for test-driven development cycles aligned with this release plan.
-
----
-
-## 9. Non-Functional Requirements
+## 6. Non-Functional Requirements
 
 | Category | Requirement | Target |
 |----------|------------|--------|
-| **Performance** | Search-to-render latency | <5s for 200 papers |
-| **Performance** | 3D rendering FPS | 30+ at 500 nodes |
-| **Availability** | Uptime | 99.5% (Vercel + Render SLA) |
-| **Security** | Auth | Supabase JWT with RLS policies |
-| **Security** | API keys | Never stored server-side; client-side only for LLM keys |
-| **Accessibility** | Keyboard navigation | Tab through panels; Enter to select; Escape to deselect |
-| **Accessibility** | Screen readers | ARIA labels on all interactive elements |
-| **Internationalization** | Interface language | English (v1); i18n-ready structure |
-| **Data privacy** | User data | Graph saves tied to user_id; RLS enforced; no analytics tracking |
-| **Browser support** | WebGL 2.0 | Chrome 90+, Firefox 90+, Edge 90+, Safari 15+ |
-
-> **Detailed performance budgets and testing requirements:** See [SPEC.md SS10](./SPEC.md#10-performance-requirements) and [SPEC.md SS11](./SPEC.md#11-testing-requirements).
+| Performance | Seed explore (50 papers) | < 15s |
+| Performance | 3D rendering FPS | 30+ at 200 nodes |
+| Availability | Uptime | 99.5% (Vercel + Render) |
+| Security | Auth | Supabase JWT with RLS |
+| Browser | WebGL 2.0 | Chrome 90+, Firefox 90+, Edge 90+, Safari 15+ |
 
 ---
 
-## 10. Glossary
+## 7. Data Source
+
+Semantic Scholar is the sole academic data provider. All paper metadata, SPECTER2 embeddings, TLDRs, citation intents, and citation graphs come from S2. Rate-limited to 1 RPS (authenticated). Non-commercial license.
+
+Crossref is used only as a DOI fallback for the by-doi endpoint.
+
+---
+
+## 8. Success Metrics
+
+| Metric | Target |
+|--------|--------|
+| Seed explore success rate | > 95% (non-timeout) |
+| Graph render time (50 papers) | < 3s client-side |
+| Meaningful clusters detected | >= 2 for graphs with > 20 papers |
+| Gap detection coverage | Gaps found in > 60% of graphs with >= 3 clusters |
+
+---
+
+## 9. Glossary
 
 | Term | Definition |
 |------|-----------|
-| **OA** | OpenAlex — free, open catalog of 250M+ academic works (CC0 license) |
-| **S2** | Semantic Scholar — academic search engine by AI2 with SPECTER2 embeddings and TLDRs |
-| **SPECTER2** | 768-dimensional document embedding model trained on scientific papers (AI2) |
-| **UMAP** | Uniform Manifold Approximation and Projection — dimensionality reduction algorithm |
-| **HDBSCAN** | Hierarchical Density-Based Spatial Clustering of Applications with Noise |
-| **GraphRAG** | Retrieval-Augmented Generation using graph structure to select relevant context |
-| **DOI** | Digital Object Identifier — unique persistent identifier for academic publications |
-| **TLDR** | Too Long; Didn't Read — S2's auto-generated one-sentence paper summary |
-| **RLS** | Row-Level Security — PostgreSQL feature enforcing per-user data access |
-| **pgvector** | PostgreSQL extension for vector similarity search |
-
----
-
-*This document is the authoritative source for product requirements. For technical implementation details, see [SPEC.md](./SPEC.md). For system design, see [ARCHITECTURE.md](./ARCHITECTURE.md). For test strategy, see [SDD/TDD Plan](./SDD_TDD_PLAN.md).*
+| S2 | Semantic Scholar -- academic search engine by AI2 |
+| SPECTER2 | 768-dim document embedding model for scientific papers |
+| UMAP | Uniform Manifold Approximation and Projection |
+| Leiden | Community detection algorithm (graph partitioning) |
+| HDBSCAN | Hierarchical Density-Based Spatial Clustering |
+| TF-IDF | Term Frequency-Inverse Document Frequency (cluster labeling) |
+| DOI | Digital Object Identifier for academic publications |
+| TLDR | S2's auto-generated one-sentence paper summary |
+| pgvector | PostgreSQL extension for vector similarity search |
+| RLS | Row-Level Security in PostgreSQL |

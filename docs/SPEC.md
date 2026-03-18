@@ -1,1758 +1,269 @@
-# ScholarGraph3D — Technical Specification
+# ScholarGraph3D -- Technical Specification
 
-> **Version:** 1.6 | **Last Updated:** 2026-02-24
-> **Related:** [PRD.md](./PRD.md) | [ARCHITECTURE.md](./ARCHITECTURE.md) | [SDD/TDD Plan](./SDD_TDD_PLAN.md)
-
----
-
-## Document Map
-
-```
-PRD.md                      — What we build and why (user stories, acceptance criteria)
-  |
-  +-- SPEC.md (this file)   — How it works technically
-  |     |
-  |     +-- SS1  System Overview
-  |     +-- SS2  Market Analysis
-  |     +-- SS3  Data Sources
-  |     +-- SS4  API Specification
-  |     +-- SS5  Database Schema
-  |     +-- SS6  3D Visualization Spec
-  |     +-- SS7  Search Pipeline Spec
-  |     +-- SS8  Caching Strategy
-  |     +-- SS9  Authentication & Authorization
-  |     +-- SS10 Performance Requirements
-  |     +-- SS11 Testing Requirements
-  |
-  +-- ARCHITECTURE.md       — How the system is structured
-  +-- SDD_TDD_PLAN.md       — How we verify correctness
-```
+> **Version:** 4.0.0 | **Last Updated:** 2026-03-18
+> **Related:** [PRD.md](./PRD.md) | [ARCHITECTURE.md](./ARCHITECTURE.md)
 
 ---
 
 ## 1. System Overview
 
-ScholarGraph3D is a full-stack web application that transforms keyword searches into interactive 3D knowledge graphs of academic papers. The system ingests data from two academic APIs (OpenAlex and Semantic Scholar), fuses them via DOI deduplication, computes SPECTER2 embeddings, reduces to 3D coordinates, clusters papers, and renders an interactive WebGL visualization.
+ScholarGraph3D is a seed-paper exploration platform that transforms a single paper into an interactive 3D citation graph. The system fetches data from Semantic Scholar, computes SPECTER2 embeddings, reduces to 3D coordinates, clusters papers, detects research gaps, and renders a WebGL visualization.
 
 ### Core Data Flow
 
 ```
-User Query
+User NL Query / DOI
     |
     v
-[FastAPI Backend]
-    |
-    +-- OpenAlex API (CC0 metadata, abstracts, topics)
-    +-- Semantic Scholar API (TLDR, SPECTER2 embeddings, citation intents)
+POST /api/paper-search -> Semantic Scholar relevance search
     |
     v
-[DataFusionService] -- DOI dedup + abstract fallback
+User selects seed paper
     |
     v
-[SPECTER2 Embeddings] -- 768-dim vectors per paper
+POST /api/seed-explore
+    |
+    +-- S2: seed paper + embedding
+    +-- S2: references + citations (parallel)
+    +-- S2: batch embeddings for missing papers
+    +-- PCA 768->100D + UMAP 100->50D->3D
+    +-- Leiden hybrid clustering + HDBSCAN fallback
+    +-- TF-IDF cluster labeling
+    +-- Cosine similarity edges (>0.7)
+    +-- Bridge detection + citation intents + gap detection
     |
     v
-[UMAP Reducer] -- 768D -> 3D coordinates
-    |
-    v
-[HDBSCAN Clusterer] -- auto-detect research communities
-    |
-    v
-[SimilarityComputer] -- cosine similarity edges (threshold > 0.7)
-    |
-    v
-[GraphResponse JSON] -- nodes + edges + clusters + meta
-    |
-    v
-[Next.js Frontend]
-    |
-    v
-[react-force-graph-3d + Three.js] -- interactive 3D rendering
+GraphData JSON -> 3D Cosmic Visualization
 ```
-
-> **Architecture details:** See [ARCHITECTURE.md SS1](./ARCHITECTURE.md#1-high-level-architecture) for the full system diagram and [ARCHITECTURE.md SS5](./ARCHITECTURE.md#5-data-pipeline) for step-by-step data transformations.
 
 ---
 
-## 2. Market Analysis
+## 2. Data Sources
 
-### Competitive Landscape
+### Semantic Scholar (Primary)
 
-| Feature | Connected Papers | VOSviewer | CiteSpace | Litmaps | Inciteful | ResearchRabbit | **ScholarGraph3D** |
-|---------|-----------------|-----------|-----------|---------|-----------|---------------|-------------------|
-| Visualization | 2D graph | 2D network | 2D timeline | 2D graph | 2D graph | 2D list+graph | **3D interactive** |
-| Data source | S2 only | WoS/Scopus | WoS/Scopus | S2+OA | OA only | S2 only | **OA+S2 fusion** |
-| Embeddings | None | Co-citation | Co-citation | None | None | None | **SPECTER2 768D** |
-| Clustering | None | Modularity | Timeline | None | None | None | **HDBSCAN + OA Topics** |
-| AI chat | None | None | None | None | None | None | **GraphRAG (Phase 2)** |
-| Citation intent | None | None | None | None | None | None | **S2 intents (Phase 3)** |
-| Max papers | ~50 | 10K+ (desktop) | 10K+ (desktop) | ~200 | Unlimited | Unlimited | **500+ at 30 FPS** |
-| Cost | Free (limited) | Free (desktop) | License | Freemium | Free | Free | **Freemium (BYOK)** |
-| Real-time alerts | None | None | None | Yes | None | Yes | **Phase 3** |
+- Paper metadata: title, authors, year, venue, DOI, abstract, TLDR, fields, citation count
+- SPECTER2 embeddings: 768-dim document vectors via `embedding.specter_v2` field
+- Citation graph: references and citations per paper
+- Citation intents: methodology, background, result_comparison
+- Influential citations: boolean flag per citation relationship
+- Rate limits: 1 RPS authenticated (API key), 0.3 RPS unauthenticated
+- License: non-commercial
 
-### 8 Market Gaps Addressed
+### Crossref (DOI Fallback)
 
-> Referenced by [PRD.md SS6](./PRD.md#6-competitive-advantage).
-
-1. **3D Visualization** — No existing tool renders papers in true 3D space. Depth dimension encodes temporal or semantic information that 2D layouts collapse.
-
-2. **Semantic + Citation Hybrid Edges** — Existing tools show either citation links OR co-citation clustering. ScholarGraph3D shows both simultaneously with toggleable visibility.
-
-3. **Paper-Level GraphRAG** — No literature discovery tool offers question-answering grounded in the visible graph. Our GraphRAG retrieves papers from the user's current graph context, not a generic corpus.
-
-4. **Citation Intent Visualization** — Semantic Scholar provides citation intent data (supports, contradicts, methodology, background) but no visualization tool renders this. Edge coloring makes scientific discourse structure visible.
-
-5. **Real-time Growth Tracking** — Existing tools provide static snapshots. Watch queries with weekly notifications detect emerging research before it becomes mainstream.
-
-6. **Multi-API Data Fusion** — Single-source tools miss coverage. OA provides CC0 metadata + abstracts + topics; S2 provides TLDR + SPECTER2 embeddings. DOI dedup merges without duplication.
-
-7. **Scale + Interactivity in Browser** — Desktop tools (VOSviewer, CiteSpace) handle scale but lack web accessibility. Web tools (Connected Papers, Litmaps) are limited to ~50-200 papers. ScholarGraph3D targets 500+ papers at 30 FPS in any modern browser.
-
-8. **SPECTER2 Embeddings for Layout** — No existing visualization tool uses SPECTER2 (the state-of-the-art scientific document embedding model) for spatial layout. This ensures papers that are semantically similar appear physically close in 3D space.
+- DOI-to-metadata resolution for papers not in S2 index
+- Used only in the by-doi endpoint fallback chain
 
 ---
 
-## 3. Data Sources
+## 3. API Specification
 
-### 3.1 OpenAlex (Primary Metadata)
+### POST /api/paper-search
 
-| Property | Details |
-|----------|---------|
-| **License** | CC0 (public domain) — no restrictions on commercial use |
-| **Coverage** | 250M+ works, 100K+ sources, 40K+ institutions |
-| **API Base URL** | `https://api.openalex.org` |
-| **Rate Limits (Free)** | 10 req/sec with polite pool (`mailto` parameter) |
-| **Rate Limits (Premium)** | 100K credits/day with API key; ~10 credits per search page |
-| **Key Data** | Title, abstract (inverted index), publication year, DOI, authors with affiliations, concepts (hierarchical), topics (new), venue, citation count, open access status + URL |
-| **Abstract Format** | Inverted index — must be reconstructed at parse time (see `OpenAlexWork._reconstruct_abstract()`) |
-| **Topics** | Hierarchical: domain -> field -> subfield -> topic (e.g., Physical Sciences -> Physics -> Condensed Matter -> Superconductivity) |
+NL query to paper selection.
 
-**Credit Tracking:** The `CreditTracker` class monitors daily usage against the 100K limit. At 80% usage, warnings are logged. At 95%, the system switches to cache-first mode, serving cached results preferentially and only making API calls for cache misses.
-
-> See [ARCHITECTURE.md SS3](./ARCHITECTURE.md#3-backend-architecture) for the `OpenAlexClient` implementation and [SS8 Caching Strategy](#8-caching-strategy) for cache-first mode details.
-
-### 3.2 Semantic Scholar (Embeddings & Enrichment)
-
-| Property | Details |
-|----------|---------|
-| **License** | S2 Dataset License (academic use free; commercial requires Expanded License) |
-| **Coverage** | 200M+ papers |
-| **API Base URL** | `https://api.semanticscholar.org/graph/v1` |
-| **Rate Limits (Unauthenticated)** | 100 requests per 5 minutes |
-| **Rate Limits (Authenticated)** | 1 request/second with API key (`x-api-key` header) |
-| **Key Data** | SPECTER2 embeddings (768-dim), TLDR (auto-generated summary), citation count, citation intents, fields of study, open access PDF URL |
-| **Batch API** | `/paper/batch` — up to 500 papers per request with embeddings |
-| **Embedding Model** | SPECTER2 — 768-dimensional vectors trained on scientific papers |
-
-**Rate Limiting:** The `SemanticScholarClient` enforces per-second rate limiting with an async lock. Retries on 429 responses with exponential backoff (up to 3 attempts). After exhausting retries, raises `SemanticScholarRateLimitError`.
-
-### 3.3 Crossref (DOI Fallback — v0.8.0)
-
-| Property | Details |
-|----------|---------|
-| **License** | CC BY 4.0 (metadata), CC0 (facts) |
-| **Coverage** | 150M+ DOI registrations (all publishers) |
-| **API Base URL** | `https://api.crossref.org/works` |
-| **Rate Limits** | Polite pool: ~50 req/sec with `mailto` User-Agent header |
-| **Authentication** | None required — `User-Agent: ScholarGraph3D/0.8.0 (mailto:contact@scholargraph3d.com)` |
-| **Key Data** | Title, year, authors, publisher, journal, funder info |
-| **Use Case** | Fallback when S2 `get_paper("DOI:...")` returns 404 — economics, law, humanities journals |
-
-**DOI Fallback Chain (`GET /api/papers/by-doi`):**
-```
-1. S2 get_paper("ARXIV:{id}") or get_paper("DOI:{doi}")  → paper_id (fast path)
-2. [S2 404] → CrossrefClient.get_metadata(doi)           → title
-3. [Crossref OK] → S2 search_papers(title, limit=5)       → Jaccard title match ≥ 0.3
-4. [match found] → return {paper_id, source:"crossref_fallback"}
-5. [all fail]    → 404
+**Request:**
+```json
+{ "query": "trust calibration in AI", "limit": 10 }
 ```
 
-> **File:** `backend/integrations/crossref.py`
-
-### 3.4 OpenCitations COCI (Citation Graph — v0.8.0)
-
-| Property | Details |
-|----------|---------|
-| **License** | CC0 (fully open) |
-| **Coverage** | 1.8B+ DOI-to-DOI citation pairs |
-| **API Base URL** | `https://opencitations.net/index/coci/api/v1` |
-| **Rate Limits** | 180 req/min; bulk data dump available (~50-100 GB CSV) |
-| **Authentication** | None required |
-| **Key Data** | `citing_doi`, `cited_doi`, `creation` (publication date), `timespan` |
-| **Use Case** | DOI-based citation lookup — does NOT require S2 `paper_id`; enables Co-citation and Bibliographic Coupling edges (v0.9.0) |
-
-**PostgreSQL cache:** `oc_citation_cache(citing_doi, cited_doi, fetched_at)` — PRIMARY KEY (citing_doi, cited_doi), TTL 30 days.
-
-> **File:** `backend/integrations/opencitations.py`, `backend/database/003_opencitations_cache.sql`
-
-### 3.5 SPECTER2 Embeddings
-
-| Property | Details |
-|----------|---------|
-| **Dimensions** | 768 |
-| **Model** | allenai/specter2 (based on SciBERT) |
-| **Source** | Retrieved via S2 batch API (`embedding` field) |
-| **Similarity Metric** | Cosine similarity |
-| **Fallback** | If S2 batch fails, papers without embeddings are placed at graph periphery (y=10.0, cluster_id=-1) |
-| **Redis Cache** | `emb:{s2_paper_id}` TTL 30 days — skips S2 API on repeat requests |
-
-### 3.6 Data Fusion Strategy
-
-The `DataFusionService` implements OA-first search with S2 enrichment:
-
-1. **OA keyword search** (primary) — best metadata coverage, CC0 license
-2. **S2 keyword search** (supplementary) — provides TLDR + initial embeddings
-3. **DOI-based dedup** — normalize DOIs (strip URL prefix, lowercase), merge by DOI then by title
-4. **Merge priority:** OA metadata wins for title/abstract/authors/topics; S2 wins for TLDR/embeddings
-5. **Abstract fallback chain:** OA abstract -> S2 abstract -> S2 TLDR -> "No abstract available"
-6. **Embedding fetch:** Papers missing embeddings after merge get SPECTER2 vectors via S2 batch API
-
-> Implementation: `backend/integrations/data_fusion.py` — see [ARCHITECTURE.md SS5](./ARCHITECTURE.md#5-data-pipeline) for the complete pipeline flow.
-
----
-
-## 4. API Specification
-
-### Base URL
-
-- **Development:** `http://localhost:8000`
-- **Production:** `https://api.scholargraph3d.com` (Render)
-
-### Common Headers
-
-| Header | Value | Required |
-|--------|-------|----------|
-| `Content-Type` | `application/json` | All requests with body |
-| `Authorization` | `Bearer <jwt_token>` | Auth-required endpoints only |
-
-### 4.1 Health Endpoints
-
-#### `GET /`
-
-Root health check. Always public.
-
-**Response 200:**
+**Response:**
 ```json
 {
-  "status": "healthy",
-  "service": "ScholarGraph3D",
-  "version": "0.1.0"
+  "papers": [{
+    "paper_id": "abc123",
+    "title": "Trust Calibration in AI...",
+    "authors": [{ "name": "Author Name" }],
+    "year": 2024,
+    "citation_count": 42,
+    "abstract_snippet": "This paper...",
+    "fields": ["Computer Science"],
+    "doi": "10.1234/...",
+    "venue": "CHI"
+  }],
+  "refined_query": null
 }
 ```
 
-#### `GET /health`
+### POST /api/seed-explore
 
-Detailed health check with subsystem status.
+Build citation graph from seed paper.
 
-**Response 200:**
+**Request:**
 ```json
 {
-  "status": "healthy",
-  "database": "connected",
-  "pgvector": "available",
-  "auth": "configured",
-  "environment": "production",
-  "s2_api": "authenticated",
-  "oa_api": "premium"
-}
-```
-
-**Response 503:** Returns same structure with `"status": "unhealthy"` when database is disconnected.
-
-### 4.2 Search Endpoints
-
-> Implements [PRD.md US-01](./PRD.md#phase-1-mvp--v010--v050) (search), [US-02](./PRD.md#phase-1-mvp--v010--v050) (3D viz), [US-03](./PRD.md#phase-1-mvp--v050) (clustering), [US-XX](./PRD.md) (natural language, v0.3.0).
-
-#### `POST /api/search`
-
-**Auth:** None required (public)
-
-**Request Body:**
-```json
-{
-  "query": "transformer attention mechanism",
-  "limit": 200,
-  "year_start": 2018,
-  "year_end": 2026,
-  "fields_of_study": ["Computer Science"],
-  "similarity_threshold": 0.7,
-  "min_cluster_size": 5
-}
-```
-
-| Field | Type | Default | Constraints | Description |
-|-------|------|---------|-------------|-------------|
-| `query` | string | required | 1-500 chars | Search keywords |
-| `limit` | int | 200 | 1-500 | Max papers to return |
-| `year_start` | int | null | | Filter: earliest publication year |
-| `year_end` | int | null | | Filter: latest publication year |
-| `fields_of_study` | string[] | null | | Filter: fields (e.g., "Computer Science") |
-| `similarity_threshold` | float | 0.7 | 0.0-1.0 | Min cosine similarity for edges |
-| `min_cluster_size` | int | 5 | 2-50 | HDBSCAN min_cluster_size parameter |
-
-**Response 200 (GraphResponse):**
-```json
-{
-  "nodes": [
-    {
-      "id": "0",
-      "title": "Attention Is All You Need",
-      "abstract": "The dominant sequence transduction models...",
-      "year": 2017,
-      "venue": "NeurIPS",
-      "citation_count": 95000,
-      "fields": ["Computer Science"],
-      "tldr": "A new simple network architecture based solely on attention mechanisms.",
-      "is_open_access": true,
-      "oa_url": "https://arxiv.org/pdf/1706.03762",
-      "authors": [{"name": "Ashish Vaswani", "affiliations": ["Google Brain"]}],
-      "doi": "10.48550/arxiv.1706.03762",
-      "s2_paper_id": "204e3073870fae3d05bcbc2f6a8e263d9b72e776",
-      "oa_work_id": "W2741809807",
-      "topics": [{"id": "T123", "display_name": "Transformers", "score": 0.95}],
-      "x": 12.5,
-      "y": -3.2,
-      "z": 8.1,
-      "cluster_id": 0,
-      "cluster_label": "Transformers / Self-Attention"
-    }
-  ],
-  "edges": [
-    {
-      "source": "0",
-      "target": "5",
-      "type": "similarity",
-      "weight": 0.85
-    }
-  ],
-  "clusters": [
-    {
-      "id": 0,
-      "label": "Transformers / Self-Attention",
-      "topics": ["Transformers", "Self-Attention", "Neural Machine Translation"],
-      "paper_count": 42,
-      "color": "#E63946",
-      "hull_points": [[12.5, -3.2, 8.1], [14.0, -1.5, 7.3]]
-    }
-  ],
-  "meta": {
-    "query": "transformer attention mechanism",
-    "total": 187,
-    "with_embeddings": 165,
-    "clusters": 6,
-    "similarity_edges": 234,
-    "citation_edges": 78,
-    "elapsed_seconds": 3.42
-  }
-}
-```
-
-#### `POST /api/search/natural` (v0.3.0)
-
-**Auth:** None required (public)
-
-Natural language search with Groq LLaMA 3.3-70b query parsing. User writes freeform query; backend extracts structure and generates expanded queries.
-
-**Request Body:**
-```json
-{
-  "query": "What are the latest advances in making transformers more efficient?",
-  "groq_api_key": "gsk_... (optional; uses backend key if not provided)",
-  "limit": 200
-}
-```
-
-| Field | Type | Default | Constraints | Description |
-|-------|------|---------|-------------|-------------|
-| `query` | string | required | 1-500 chars | Natural language question or topic |
-| `groq_api_key` | string | null | | Optional user Groq API key (override) |
-| `limit` | int | 200 | 1-500 | Max papers to return |
-
-**Response 200 (GraphResponse):**
-Same as `POST /api/search` with enhanced `meta`:
-```json
-{
-  "nodes": [...],
-  "edges": [...],
-  "clusters": [...],
-  "meta": {
-    "query": "What are the latest advances in making transformers more efficient?",
-    "query_type": "natural",
-    "normalized_keywords": ["transformers", "efficiency", "optimization"],
-    "expanded_queries": [
-      "transformer efficiency",
-      "efficient attention mechanisms",
-      "lightweight transformers"
-    ],
-    "total": 187,
-    "with_embeddings": 165,
-    "clusters": 6,
-    "similarity_edges": 234,
-    "elapsed_seconds": 4.2
-  }
-}
-```
-
-#### `GET /api/search/stream?q=...` (v0.3.0)
-
-**Auth:** None required (public)
-
-Stream search progress via Server-Sent Events. Frontend receives real-time updates at each pipeline stage.
-
-**Query Parameters:**
-
-| Param | Type | Required | Description |
-|-------|------|----------|-------------|
-| `q` | string | Yes | Search query (same as `POST /api/search`) |
-| `limit` | int | No | Max papers (default 200) |
-| `year_start` | int | No | Filter: earliest year |
-| `year_end` | int | No | Filter: latest year |
-
-**Response: 200 text/event-stream**
-
-Event stream with 8 stages:
-
-```
-event: start
-data: {"stage": "init", "progress": 0.0, "message": "Initializing search..."}
-
-event: stage
-data: {"stage": "fetch", "progress": 0.3, "message": "Fetching from OpenAlex and Semantic Scholar"}
-
-event: stage
-data: {"stage": "embed", "progress": 0.6, "message": "Computing SPECTER2 embeddings..."}
-
-event: stage
-data: {"stage": "layout", "progress": 0.75, "message": "Reducing to 3D space with UMAP..."}
-
-event: stage
-data: {"stage": "cluster", "progress": 0.85, "message": "Clustering with HDBSCAN..."}
-
-event: stage
-data: {"stage": "edges", "progress": 0.92, "message": "Computing similarity edges..."}
-
-event: complete
-data: {
-  "stage": "done",
-  "progress": 1.0,
-  "message": "Complete",
-  "data": {
-    "nodes": [...],
-    "edges": [...],
-    "clusters": [...],
-    "meta": {...}
-  }
-}
-```
-
-**Error event:**
-```
-event: error
-data: {"error": "Rate limit exceeded", "retry_after_seconds": 3600}
-```
-
-**Frontend consumption (TypeScript):**
-```typescript
-async function* searchStream(query: string) {
-  const response = await fetch(`/api/search/stream?q=${encodeURIComponent(query)}`);
-  const reader = response.body!.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value);
-    const lines = buffer.split('\n\n');
-    buffer = lines.pop() || '';
-
-    for (const line of lines) {
-      if (line.startsWith('event:')) {
-        const event = line.match(/event: (\w+)/)?.[1];
-        const data = JSON.parse(line.match(/data: (.+)/)?.[1] || '{}');
-        yield { event, data };
-      }
-    }
-  }
-}
-
-// Usage
-for await (const { event, data } of searchStream('transformers')) {
-  if (event === 'stage') console.log(`${data.progress * 100}% — ${data.message}`);
-  if (event === 'complete') console.log('Graph ready:', data.data);
-}
-```
-
-### 4.3 Phase 6: Seed Paper Exploration
-
-#### `POST /api/seed-explore` (v0.6.0)
-
-**Auth:** None required (public)
-
-Build a citation-graph seeded from a single known paper. Expands outward via BFS through S2 citations and references, then runs the standard UMAP + HDBSCAN + similarity pipeline on the collected papers.
-
-**Request Body:**
-```json
-{
-  "paper_id": "204e3073870fae3d05bcbc2f6a8e263d9b72e776",
-  "depth": 2,
-  "max_papers": 150,
+  "paper_id": "abc123",
+  "depth": 1,
+  "max_papers": 50,
   "include_references": true,
   "include_citations": true
 }
 ```
 
-| Field | Type | Default | Constraints | Description |
-|-------|------|---------|-------------|-------------|
-| `paper_id` | string | required | | S2 paper ID or DOI of seed paper |
-| `depth` | int | 2 | 1-3 | BFS hop depth from seed paper |
-| `max_papers` | int | 150 | 10-500 | Maximum papers to include |
-| `include_references` | bool | true | | Traverse reference edges |
-| `include_citations` | bool | true | | Traverse citation edges |
+**Response:** GraphData with nodes, edges, clusters, gaps, frontier_ids, meta.
 
-**Response 200 (GraphResponse):**
+### GET /api/papers/{id}
 
-Same structure as `POST /api/search`. The seed paper node has an additional field:
+Paper detail (DB lookup with S2 fallback).
 
+### GET /api/papers/by-doi?doi=...
+
+DOI resolution. Fallback chain: S2 DOI -> S2 ArXiv ID -> Crossref title -> S2 title search.
+
+### POST /api/papers/{id}/expand-stable
+
+Incremental graph expansion with stable 3D positioning.
+
+**Request:**
 ```json
 {
-  "nodes": [
-    {
-      "id": "0",
-      "title": "Attention Is All You Need",
-      "is_seed": true,
-      ...
-    }
-  ],
-  "edges": [...],
-  "clusters": [...],
-  "meta": {
-    "seed_paper_id": "204e3073870fae3d05bcbc2f6a8e263d9b72e776",
-    "depth": 2,
-    "total": 143,
-    "with_embeddings": 138,
-    "citation_edges": 89,
-    "clusters": 5,
-    "similarity_edges": 201,
-    "elapsed_seconds": 4.1
-  }
+  "existing_nodes": [{ "id": "...", "x": 0, "y": 0, "z": 0, "cluster_id": 0 }],
+  "limit": 20
 }
 ```
 
-**Response 404:** `{"detail": "Seed paper not found"}`
+**Response:** `{ nodes, edges, total, meta }` with initial_x/y/z positions and cluster assignments.
 
-**Implementation:** `backend/routers/seed_explore.py`
+### GET /api/papers/{id}/intents
+
+S2 citation intent classification for a paper's citations.
+
+### Graph CRUD (all require auth)
+
+- `GET /api/graphs` -- list user's saved graphs
+- `POST /api/graphs` -- save graph (name, seed_query, graph_data as JSONB)
+- `GET /api/graphs/{id}` -- load graph
+- `PUT /api/graphs/{id}` -- update graph
+- `DELETE /api/graphs/{id}` -- delete graph
 
 ---
 
-### 4.4 Phase 4: Conceptual Relationships
+## 4. Database Schema
 
-#### GET /api/analysis/conceptual-edges/stream
-SSE endpoint for streaming conceptual relationship edges.
-
-**Query params:** `paper_ids` (comma-separated paper IDs)
-
-**SSE Event types:**
-| Type | Payload | Description |
-|------|---------|-------------|
-| `progress` | `{stage, message}` | Processing stage update |
-| `edge` | `{source, target, relation_type, weight, explanation, color}` | Discovered relationship |
-| `complete` | `{total_edges}` | All edges found |
-| `error` | `{message}` | Error occurred |
-
-**Relation types:**
-| Type | Color | Trigger |
-|------|-------|---------|
-| `methodology_shared` | `#9B59B6` | Shared research methods |
-| `theory_shared` | `#4A90D9` | Shared theoretical frameworks |
-| `similarity_shared` | `#95A5A6` | High SPECTER2 cosine similarity |
-
-#### POST /api/analysis/scaffold-angles
-**Body:** `{ "question": "research question string" }`
-**Returns:** `{ "angles": [{ "label", "query", "type" }] }` — 5 exploration angles
-
-#### GET /api/papers/by-doi
-
-**Query:** `doi` — DOI string or full URL (e.g. `https://doi.org/10.xxx`)
-
-**Fallback Chain (v0.8.0):**
-
-| Step | Action | Source |
-|------|--------|--------|
-| 1a | `get_paper("ARXIV:{id}")` if arXiv pattern detected | S2 API |
-| 1b | `get_paper("DOI:{doi}")` | S2 API |
-| 2 | `CrossrefClient.get_metadata(doi)` → extract title | Crossref API |
-| 3 | `search_papers(title, limit=5)` + Jaccard title match ≥ 0.3 | S2 API |
-| 4 | 404 | — |
-
-**Response 200:**
-```json
-{
-  "paper_id": "204e3073870fae3d05bcbc2f6a8e263d9b72e776",
-  "title": "Attention Is All You Need",
-  "doi": "10.48550/arxiv.1706.03762",
-  "source": "s2_direct"
-}
-```
-`source` field values: `"s2_direct"` | `"s2_arxiv"` | `"crossref_fallback"`
-
-**Response 404:** `{"detail": "Paper not found for DOI: ..."}`
-
----
-
-### 4.5 Paper Endpoints
-
-> Implements [PRD.md US-04](./PRD.md#phase-1-mvp--v010--v050) (detail), [US-05](./PRD.md#phase-1-mvp--v010--v050) (expansion).
-
-#### `GET /api/papers/{paper_id}`
-
-**Auth:** None required
-
-Get paper detail by internal ID, S2 paper ID, or OA work ID. Checks database first, falls back to S2 API.
-
-**Response 200 (PaperDetail):**
-```json
-{
-  "id": "42",
-  "s2_paper_id": "204e3073870fae3d05bcbc2f6a8e263d9b72e776",
-  "oa_work_id": "W2741809807",
-  "doi": "10.48550/arxiv.1706.03762",
-  "title": "Attention Is All You Need",
-  "abstract": "The dominant sequence transduction models...",
-  "year": 2017,
-  "venue": "NeurIPS",
-  "citation_count": 95000,
-  "fields_of_study": ["Computer Science"],
-  "tldr": "A new simple network architecture based solely on attention mechanisms.",
-  "is_open_access": true,
-  "oa_url": "https://arxiv.org/pdf/1706.03762",
-  "authors": [{"name": "Ashish Vaswani", "affiliations": ["Google Brain"]}]
-}
-```
-
-**Response 404:** `{"detail": "Paper not found"}`
-
-#### `GET /api/papers/{paper_id}/citations?limit=50`
-
-**Auth:** None required
-
-Get papers that cite this paper. Uses S2 citations API.
-
-| Param | Type | Default | Constraints |
-|-------|------|---------|-------------|
-| `limit` | int | 50 | 1-500 |
-
-**Response 200:** Array of `CitationPaper` objects:
-```json
-[
-  {
-    "paper_id": "abc123",
-    "title": "BERT: Pre-training of Deep Bidirectional Transformers",
-    "year": 2019,
-    "citation_count": 65000,
-    "venue": "NAACL",
-    "is_open_access": true,
-    "doi": "10.18653/v1/N19-1423"
-  }
-]
-```
-
-#### `GET /api/papers/{paper_id}/references?limit=50`
-
-**Auth:** None required
-
-Get papers referenced by this paper. Same response format as citations.
-
-#### `POST /api/papers/{paper_id}/expand?limit=20`
-
-**Auth:** None required
-
-Expand graph around a paper by loading both citations and references.
-
-| Param | Type | Default | Constraints |
-|-------|------|---------|-------------|
-| `limit` | int | 20 | 1-100 |
-
-**Response 200 (ExpandResponse):**
-```json
-{
-  "references": [{"paper_id": "...", "title": "...", ...}],
-  "citations": [{"paper_id": "...", "title": "...", ...}],
-  "total_references": 15,
-  "total_citations": 23
-}
-```
-
-### 4.6 Graph Endpoints (Auth Required)
-
-> Implements [PRD.md US-06](./PRD.md#phase-1-mvp--v010--v050) (save/load).
-
-All graph endpoints require a valid JWT in the `Authorization` header. See [SS9 Authentication](#9-authentication--authorization) for details.
-
-#### `GET /api/graphs`
-
-List all saved graphs for the authenticated user, ordered by most recently updated.
-
-**Response 200:** Array of `GraphSummary`:
-```json
-[
-  {
-    "id": "a1b2c3d4-...",
-    "name": "Transformer Research 2024",
-    "seed_query": "transformer attention mechanism",
-    "paper_count": 187,
-    "created_at": "2026-02-19T10:30:00Z",
-    "updated_at": "2026-02-19T14:15:00Z"
-  }
-]
-```
-
-#### `POST /api/graphs`
-
-Create a new saved graph.
-
-**Request Body (GraphCreate):**
-```json
-{
-  "name": "Transformer Research 2024",
-  "seed_query": "transformer attention mechanism",
-  "paper_ids": ["0", "1", "2", "5"],
-  "layout_state": {
-    "camera": {"x": 0, "y": 0, "z": 500},
-    "selected_paper_id": null
-  }
-}
-```
-
-**Response 201 (GraphDetail):** Same as GET single graph.
-
-#### `GET /api/graphs/{graph_id}`
-
-Load a specific saved graph. Enforces ownership via `user_id` match.
-
-**Response 200 (GraphDetail):**
-```json
-{
-  "id": "a1b2c3d4-...",
-  "name": "Transformer Research 2024",
-  "seed_query": "transformer attention mechanism",
-  "paper_ids": ["0", "1", "2", "5"],
-  "paper_count": 4,
-  "layout_state": {"camera": {"x": 0, "y": 0, "z": 500}},
-  "created_at": "2026-02-19T10:30:00Z",
-  "updated_at": "2026-02-19T14:15:00Z"
-}
-```
-
-**Response 404:** `{"detail": "Graph not found"}` (also returned for unauthorized access to prevent enumeration).
-
-#### `PUT /api/graphs/{graph_id}`
-
-Update a saved graph. Only provided fields are updated.
-
-**Request Body (GraphUpdate):**
-```json
-{
-  "name": "Transformer Research 2024 (expanded)",
-  "paper_ids": ["0", "1", "2", "5", "10", "11"]
-}
-```
-
-**Response 200:** Updated `GraphDetail`.
-
-#### `DELETE /api/graphs/{graph_id}`
-
-Delete a saved graph.
-
-**Response 204:** No content (success).
-**Response 404:** `{"detail": "Graph not found"}`
-
-### 4.7 Bookmark Endpoints (Auth Required) — v3.2.0
-
-All bookmark endpoints require a valid JWT. Bookmarks allow users to save papers with freeform tags and memos.
-
-#### `POST /api/bookmarks`
-
-Create or upsert a paper bookmark. If the user already has a bookmark for the given `paper_id`, tags and memo are updated.
-
-**Request Body (BookmarkCreate):**
-```json
-{
-  "paper_id": "649def34f8be52c8b66281af98ae884c09aef38b",
-  "tags": ["transformer", "attention"],
-  "memo": "Key paper for literature review"
-}
-```
-
-**Response 201 (BookmarkResponse):**
-```json
-{
-  "id": "53d57a28-...",
-  "paper_id": "649def34f8be52c8b66281af98ae884c09aef38b",
-  "tags": ["transformer", "attention"],
-  "memo": "Key paper for literature review",
-  "created_at": "2026-02-24T05:00:00Z",
-  "updated_at": "2026-02-24T05:00:00Z"
-}
-```
-
-#### `GET /api/bookmarks`
-
-List all bookmarks for the authenticated user.
-
-**Query Parameters:**
-
-| Param | Type | Description |
-|-------|------|-------------|
-| `tag` | string | Optional — filter bookmarks containing this tag |
-
-**Response 200:** Array of `BookmarkResponse`.
-
-#### `GET /api/bookmarks/paper/{paper_id}`
-
-Get bookmark for a specific paper (by S2 paper ID).
-
-**Response 200:** `BookmarkResponse`
-**Response 404:** `{"detail": "Bookmark not found"}`
-
-#### `PUT /api/bookmarks/{id}`
-
-Update tags and/or memo on an existing bookmark. Only provided fields are updated.
-
-**Request Body (BookmarkUpdate):**
-```json
-{
-  "tags": ["transformer", "attention", "nlp"],
-  "memo": "Updated memo text"
-}
-```
-
-**Response 200:** Updated `BookmarkResponse`.
-
-#### `DELETE /api/bookmarks/{id}`
-
-Delete a bookmark.
-
-**Response 204:** No content (success).
-**Response 404:** `{"detail": "Bookmark not found"}`
-
-**Implementation:** `backend/routers/bookmarks.py`, `backend/database/005_paper_bookmarks.sql`
-
-### 4.8 Seed Chat Endpoint Update — v3.2.0
-
-#### `POST /api/seed-chat` (updated response)
-
-The seed chat response now includes an optional `actions` array for interactive graph manipulation:
-
-```json
-{
-  "reply": "The most influential paper in this graph is...",
-  "suggested_followups": ["What are the key methods?"],
-  "actions": [
-    {
-      "type": "highlight_papers",
-      "paper_ids": ["abc123", "def456"],
-      "label": "Highlight 2 papers"
-    },
-    {
-      "type": "select_paper",
-      "paper_id": "abc123",
-      "label": "Focus on paper"
-    }
-  ]
-}
-```
-
-**ChatAction types:**
-
-| Type | Parameters | Description |
-|------|-----------|-------------|
-| `highlight_papers` | `paper_ids: string[]` | Highlight specific nodes in the graph |
-| `select_paper` | `paper_id: string` | Focus camera and open detail panel |
-| `show_cluster` | `cluster_id: number` | Navigate to a cluster |
-| `set_edge_mode` | `mode: string` | Switch visualization mode (similarity/temporal/crossCluster) |
-| `find_path` | `start: string, end: string` | Trace citation path between two papers |
-
-### 4.9 Gap Report Endpoint — v3.3.0
-
-#### `POST /api/gaps/report`
-
-Generate a structured gap analysis report with evidence assembly and LLM narrative synthesis.
-
-**Request Body:**
-```json
-{
-  "gap": {
-    "gap_id": "abc123...",
-    "cluster_a": { "id": 0, "label": "Deep Learning", "paper_count": 12 },
-    "cluster_b": { "id": 1, "label": "Optimization", "paper_count": 8 },
-    "gap_strength": 0.87,
-    "bridge_papers": [...],
-    "potential_edges": [...],
-    "research_questions": [...],
-    "gap_score_breakdown": {
-      "structural": 0.92,
-      "relatedness": 0.71,
-      "temporal": 0.85,
-      "intent": 0.90,
-      "directional": 0.78,
-      "composite": 0.87
-    },
-    "key_papers_a": [{ "paper_id": "...", "title": "...", "tldr": "...", "citation_count": 42 }],
-    "key_papers_b": [...],
-    "temporal_context": { "year_range_a": [2018, 2024], "year_range_b": [2020, 2025], "overlap_years": 4 },
-    "intent_summary": { "background": 3, "methodology": 1, "result": 2 }
-  },
-  "graph_context": {
-    "papers": [{ "id": "...", "title": "...", "year": 2023, "citation_count": 10, "cluster": 0 }],
-    "clusters": [{ "id": 0, "label": "Deep Learning", "paper_count": 12 }],
-    "total_papers": 45
-  },
-  "snapshot_data_url": "data:image/png;base64,..."
-}
-```
-
-**Response 200:**
-```json
-{
-  "gap_id": "abc123...",
-  "title": "Gap Analysis: Deep Learning ↔ Optimization",
-  "generated_at": "2026-02-24T12:00:00Z",
-  "executive_summary": "This gap analysis reveals...",
-  "sections": [
-    { "id": "narrative", "title": "Narrative Synthesis", "content": "..." },
-    { "id": "evidence", "title": "Evidence Summary", "content": "..." }
-  ],
-  "research_questions": [
-    {
-      "question": "How can X bridge Y?",
-      "justification": "The gap score indicates...",
-      "methodology_hint": "Mixed methods approach..."
-    }
-  ],
-  "cited_papers": [
-    { "paper_id": "...", "title": "...", "tldr": "...", "citation_count": 42 }
-  ],
-  "bibtex": "@article{Author2023, ...}",
-  "raw_metrics": {
-    "structural": 0.92,
-    "relatedness": 0.71,
-    "temporal": 0.85,
-    "intent": 0.90,
-    "directional": 0.78,
-    "composite": 0.87
-  },
-  "llm_status": "success",
-  "significance_statement": "This research direction...",
-  "limitations": "This analysis is based on...",
-  "snapshot_data_url": "data:image/png;base64,..."
-}
-```
-
-**Score note (v3.3.1):** The `relatedness` dimension (formerly `semantic`) is the cosine similarity between cluster centroids. Higher values mean the clusters are more semantically similar, making the gap more actionable. This is the inverse of the prior "semantic distance" scoring.
-
-**`llm_status`** field: `"success"` when the Groq LLM narrative was generated successfully, `"failed"` when LLM was unavailable or errored (report contains evidence-only content in that case).
-
-**`research_questions`** field: `List[Dict]` — each item has `question` (string), `justification` (string), and `methodology_hint` (string). Questions are grounded in paper TLDRs, temporal context, intent distribution, and directional asymmetry — not generated from fixed templates.
-
-**Graceful degradation:** If Groq LLM fails, the response omits narrative sections and returns evidence-only content with `sections` containing structured evidence.
-
-**Cache:** `gap_report:{gap_id_hash}` with 24-hour TTL.
-
-**Implementation:** `backend/routers/gap_report.py`, `backend/services/gap_report_service.py`
-
----
-
-### 4.10 Academic Report Endpoints — v3.4.0
-
-#### `POST /api/academic-report`
-
-Generate APA 7th formatted academic analysis report.
-
-**Request Body:**
-```json
-{
-  "graph_context": {
-    "papers": [{ "id": "...", "title": "...", "year": 2023, "citation_count": 10, "cluster_id": 0, "cluster_label": "...", "authors": [...], "fields": [...] }],
-    "edges": [{ "source": "...", "target": "...", "type": "citation", "weight": 1.0 }],
-    "clusters": [{ "id": 0, "label": "...", "paper_count": 12 }]
-  },
-  "gap_ids": ["optional-gap-id"],
-  "analysis_parameters": { "n_neighbors": 15, "min_cluster_size": 5 }
-}
-```
-
-**Response 200:**
-```json
-{
-  "methods_section": "2.1 Data Collection...",
-  "tables": {
-    "table_1": { "title": "Table 1\nNetwork Statistics Summary", "headers": [...], "rows": [...], "note": "..." },
-    "table_2": { ... },
-    "table_3": { ... },
-    "table_4": { ... },
-    "table_5": { ... }
-  },
-  "figure_captions": {
-    "figure_1": "Figure 1. Citation Network...",
-    "figure_2": "Figure 2. Structural Gap...",
-    "figure_3": "Figure 3. Betweenness Centrality..."
-  },
-  "reference_list": {
-    "methodology_refs": ["Bonacich, P. (1987)...", ...],
-    "analysis_refs": [{ "paper_id": "...", "apa_citation": "..." }]
-  },
-  "network_metrics": { ... },
-  "parameters": { ... },
-  "generated_at": "2026-02-24T12:00:00Z",
-  "feasibility": "full",
-  "warnings": []
-}
-```
-
-#### `POST /api/network-overview`
-
-Lightweight network statistics (no full report).
-
-**Request Body:** Same `graph_context` structure.
-
-**Response 200:**
-```json
-{
-  "node_count": 110,
-  "edge_count": 423,
-  "density": 0.039,
-  "cluster_count": 7,
-  "modularity": 0.68
-}
-```
-
----
-
-## 5. Database Schema
-
-PostgreSQL with pgvector extension, hosted on Supabase.
-
-> See [ARCHITECTURE.md SS2](./ARCHITECTURE.md#2-technology-stack) for database technology rationale.
-
-### 5.1 Papers Table
-
-Stores unified paper metadata from both OpenAlex and Semantic Scholar. Source: `backend/database/001_initial_schema.sql`.
-
+### papers table
 ```sql
-CREATE EXTENSION IF NOT EXISTS vector;
-
 CREATE TABLE papers (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    s2_paper_id     TEXT UNIQUE,                    -- Semantic Scholar paper ID
-    oa_work_id      TEXT UNIQUE,                    -- OpenAlex work ID (e.g., "W2741809807")
-    doi             TEXT,                            -- Digital Object Identifier
-    title           TEXT NOT NULL,
-    abstract        TEXT,
-    year            INT,
-    venue           TEXT,
-    citation_count  INT DEFAULT 0,
-    fields_of_study TEXT[],                          -- Array of field names
-    oa_topics       JSONB,                           -- OpenAlex topics with scores
-    tldr            TEXT,                            -- S2 auto-generated summary
-    embedding       vector(768),                     -- SPECTER2 embedding (pgvector)
-    is_open_access  BOOLEAN,
-    oa_url          TEXT,                            -- Open access PDF URL
-    authors         JSONB,                           -- Author list with affiliations
-    created_at      TIMESTAMPTZ DEFAULT NOW(),
-    last_api_sync   TIMESTAMPTZ                      -- Last sync from external APIs
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  s2_paper_id TEXT UNIQUE,
+  doi TEXT,
+  title TEXT NOT NULL,
+  abstract TEXT,
+  year INTEGER,
+  venue TEXT,
+  citation_count INTEGER DEFAULT 0,
+  fields_of_study TEXT[],
+  tldr TEXT,
+  is_open_access BOOLEAN DEFAULT FALSE,
+  oa_url TEXT,
+  authors JSONB,
+  embedding VECTOR(768),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
-
--- Partial indexes for efficient lookup by external IDs
-CREATE INDEX idx_papers_doi ON papers(doi) WHERE doi IS NOT NULL;
-CREATE INDEX idx_papers_s2_id ON papers(s2_paper_id) WHERE s2_paper_id IS NOT NULL;
-CREATE INDEX idx_papers_oa_id ON papers(oa_work_id) WHERE oa_work_id IS NOT NULL;
-
--- IVFFlat index for pgvector cosine similarity search (100 lists for up to ~100K papers)
-CREATE INDEX idx_papers_embedding ON papers USING ivfflat (embedding vector_cosine_ops)
-    WITH (lists = 100);
 ```
 
-### 5.2 Citations Table
-
-Stores citation relationships between papers with optional intent and influence metadata.
-
-```sql
-CREATE TABLE citations (
-    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    citing_paper_id   UUID REFERENCES papers(id) ON DELETE CASCADE,
-    cited_paper_id    UUID REFERENCES papers(id) ON DELETE CASCADE,
-    intent            TEXT,                           -- 'methodology', 'background', 'result_comparison', etc.
-    is_influential    BOOLEAN DEFAULT FALSE,          -- S2 influential citation flag
-    context           TEXT,                           -- Citation context sentence
-    UNIQUE(citing_paper_id, cited_paper_id)
-);
-
-CREATE INDEX idx_citations_citing ON citations(citing_paper_id);
-CREATE INDEX idx_citations_cited ON citations(cited_paper_id);
-```
-
-### 5.3 User Graphs Table
-
-Stores user-saved graph explorations. Ownership enforced in application code via `WHERE user_id = $1`.
-
+### user_graphs table
 ```sql
 CREATE TABLE user_graphs (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id         UUID NOT NULL,
-    name            TEXT NOT NULL,
-    seed_query      TEXT,                            -- Original search query
-    paper_ids       UUID[],                          -- Array of paper UUIDs in this graph
-    layout_state    JSONB,                           -- Camera position, node positions, UI state
-    created_at      TIMESTAMPTZ DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ DEFAULT NOW()
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  seed_query TEXT,
+  paper_ids TEXT[],
+  layout_state JSONB,
+  graph_data JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
-
-CREATE INDEX idx_user_graphs_user ON user_graphs(user_id);
-```
-
-### 5.4 Paper Bookmarks Table (v3.2.0)
-
-Stores per-user paper bookmarks with freeform tags and memos. Source: `backend/database/005_paper_bookmarks.sql`.
-
-```sql
-CREATE TABLE paper_bookmarks (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id     UUID NOT NULL,
-    paper_id    TEXT NOT NULL,                       -- S2 paper ID (not FK to papers)
-    tags        TEXT[] DEFAULT '{}',
-    memo        TEXT DEFAULT '',
-    created_at  TIMESTAMPTZ DEFAULT NOW(),
-    updated_at  TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE(user_id, paper_id)                        -- Enables upsert behavior
-);
-
-CREATE INDEX idx_paper_bookmarks_user ON paper_bookmarks(user_id);
-CREATE INDEX idx_paper_bookmarks_tags ON paper_bookmarks USING GIN(tags);
-```
-
-`paper_id` is TEXT rather than a FK to `papers.s2_paper_id` because users may bookmark papers not yet cached locally. The GIN index on `tags` enables efficient `$2 = ANY(tags)` filtering.
-
-### 5.5 Search Cache Table
-
-Caches full search results (nodes, edges, clusters) for 24-hour TTL.
-
-```sql
-CREATE TABLE search_cache (
-    cache_key   TEXT PRIMARY KEY,                   -- SHA-256 of normalized query params
-    nodes       JSONB NOT NULL,                     -- Array of GraphNode objects
-    edges       JSONB NOT NULL,                     -- Array of GraphEdge objects
-    clusters    JSONB NOT NULL,                     -- Array of ClusterInfo objects
-    meta        JSONB NOT NULL,                     -- Search metadata (timing, counts)
-    created_at  TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX idx_search_cache_created ON search_cache(created_at);
--- TTL enforced at query time: WHERE created_at > NOW() - INTERVAL '24 hours'
--- Upsert: ON CONFLICT (cache_key) DO UPDATE refreshes all columns and resets created_at
-```
-
-### 5.5 Watch Queries Table (Phase 3)
-
-Stores saved search alerts for periodic monitoring.
-
-```sql
-CREATE TABLE watch_queries (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id         UUID NOT NULL,
-    query           TEXT NOT NULL,
-    filters         JSONB,                           -- Year range, field filters
-    last_checked    TIMESTAMPTZ,
-    notify_email    BOOLEAN DEFAULT TRUE,
-    created_at      TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX idx_watch_queries_user ON watch_queries(user_id);
-```
-
-### 5.6 pgvector Configuration
-
-| Property | Value | Rationale |
-|----------|-------|-----------|
-| **Dimensions** | 768 | SPECTER2 embedding size |
-| **Index type** | IVFFlat | Approximate nearest neighbor; good for 10K-1M vectors |
-| **Lists** | 100 | Optimal for datasets up to ~100K papers |
-| **Distance metric** | Cosine (`vector_cosine_ops`) | Standard for document embeddings |
-| **Query pattern** | `ORDER BY embedding <=> $1 LIMIT k` | k-NN search for Phase 2 GraphRAG |
-
-### 5.7 Future Tables (Phase 2+)
-
-```sql
--- LLM API key settings (Phase 2, US-14) — provider preference only
-CREATE TABLE user_settings (
-    user_id         UUID PRIMARY KEY,
-    llm_provider    TEXT,                            -- 'openai', 'anthropic', 'groq', 'google'
-    preferences     JSONB DEFAULT '{}',
-    updated_at      TIMESTAMPTZ DEFAULT NOW()
-);
--- Note: LLM API keys are stored CLIENT-SIDE ONLY, never in this table.
 ```
 
 ---
 
-## 6. 3D Visualization Spec
+## 5. 3D Visualization Spec
 
-> Implements [PRD.md US-02](./PRD.md#phase-1-mvp--v010--v050), [US-07](./PRD.md#phase-1-mvp--v010--v050), [US-08](./PRD.md#phase-1-mvp--v010--v050), [US-10](./PRD.md#phase-1-mvp--v010--v050).
+### Coordinate System
+- X, Y: UMAP semantic topology (similar papers are near each other)
+- Z: publication year (temporal depth)
+- Coordinate generation: PCA 768->100D + UMAP 100->50D->3D with temporal Z-axis weighting
 
-### 6.1 Node Mapping
+### Node Rendering (Star Nodes)
+- Size: `sqrt(citation_count + 1) * 1.5`, clamped to [4, 30]
+- Color: STAR_COLOR_MAP with 26 academic fields mapped to maximally separated hues
+- Layers: glow sprite (additive blend), corona (OA papers), supernova (top 10% citations), binary (bridge nodes)
+- Frontier: red ring (#FF4444) for frontier_score > 0.7
+- Selection: gold pulsing ring with sin-wave opacity
 
-Each paper becomes a 3D sphere node in the force graph.
+### Edge Rendering (Light Streams)
+- Citation edges: cyan animated particles, intent-colored when loaded
+- Similarity edges: dashed lines (#4a90d9)
+- Citation path: gold (#FFD700) highlighted chain
+- Influential: 1.5x wider with glow effect
 
-| Visual Property | Data Mapping | Formula/Logic |
-|----------------|-------------|---------------|
-| **Position (x, y, z)** | UMAP 3D coordinates | `EmbeddingReducer.reduce_to_3d()` output |
-| **Color** | Primary field of study | `FIELD_COLOR_MAP` lookup (6 categories + "Other") |
-| **Size** | Citation count | `Math.min(30, Math.max(4, Math.sqrt(citation_count + 1) * 1.5))` (sqrt-based since v1.0.1) |
-| **Opacity** | Publication year | `0.3 + 0.7 * ((year - min_year) / year_span)` — newer = more opaque |
-| **Selected highlight** | User selection | Gold (#FFD700) color + ring geometry + emissive intensity 0.6 |
-| **Connected highlight** | Edge adjacency | Teal (#4ECDC4) + emissive intensity 0.4 |
-| **Dimmed** | Not connected to selection | Opacity reduced to 0.15 |
-| **Label** | Author surname + year | Canvas texture sprite above node; truncated at 18 chars |
-
-**Field Color Map (v1.0.1 STAR_COLOR_MAP):**
-| Field | Color |
-|-------|-------|
-| Computer Science | `#4DA6FF` (blue) |
-| Biology / Life Sciences | `#69F0AE` (green) |
-| Medicine / Health | `#FF5252` (red) |
-| Physics | `#EA80FC` (magenta) |
-| Engineering | `#B388FF` (purple) |
-| Business | `#FF9100` (orange) |
-| Economics | `#FFD740` (gold) |
-| Other | `#95A5A6` (gray) |
-
-### 6.2 Edge Mapping
-
-| Edge Type | Visual Style | Color | Width | Directionality |
-|-----------|-------------|-------|-------|----------------|
-| **Citation** | Solid line | `#8890a5` (default) or intent color | `1 + weight * 2` | Directional arrow (3px, at target end) |
-| **Similarity** | Dashed line | `#4A90D9` (blue) | 0.5 | Undirectional |
-
-**Citation Intent Colors** (Phase 3, [PRD.md US-17](./PRD.md#phase-3-real-time--advanced--v0100)):
-| Intent | Color |
-|--------|-------|
-| methodology | `#9B59B6` (purple) |
-| background | `#95A5A6` (gray) |
-| result_comparison | `#4A90D9` (blue) |
-| supports | `#2ECC71` (green) |
-| contradicts | `#E74C3C` (red) |
-
-**Edge Visibility Rules:**
-- When no paper is selected: similarity edges at 15% opacity, citation edges at `0.2 + width * 0.1` opacity
-- When a paper is selected: edges connected to the selected paper or its neighbors render at 80% opacity (`CC` hex suffix); all other edges at 3% opacity
-- Toggleable via `showCitationEdges` and `showSimilarityEdges` store flags
-
-### 6.3 Cluster Visualization
-
-| Visual Element | Implementation |
-|---------------|---------------|
-| **Hull shape** | Convex hull of cluster node positions projected to XY plane, smoothed with CatmullRom curve |
-| **Fill** | `ShapeGeometry` with cluster color at 6% opacity, double-sided |
-| **Z position** | Cluster centroid Z minus 5 units (slightly behind nodes) |
-| **Update frequency** | Every 1000ms (tracks node positions as force layout settles) |
-| **Color palette** | 15-color cycle: `#E63946, #457B9D, #2A9D8F, #E9C46A, #F4A261, ...` |
-| **Toggle** | `showClusterHulls` store flag |
-
-### 6.4 Layout Strategy
-
-1. **Initial positions:** From UMAP 3D coordinates (server-side) — nodes start at their semantic positions.
-2. **Force simulation:** `react-force-graph-3d` with `d3-force-3d`:
-   - `warmupTicks`: 100 (pre-simulation before render)
-   - `cooldownTicks`: 0 (stops simulation after warmup — positions are UMAP-determined)
-   - `d3VelocityDecay`: 0.9 (high damping — preserves UMAP layout)
-3. **Node dragging:** Enabled. Nodes get temporary `fx/fy/fz` constraints during drag, released on drag end.
-4. **Camera:** Initial position `(0, 0, 500)` looking at origin. Animated transitions on focus (1000ms).
-
-### 6.5 Interactions
-
-| Interaction | Action | Implementation |
-|-------------|--------|---------------|
-| **Click node** | Select paper, show detail panel | `selectPaper(node.paper)` in Zustand store |
-| **Shift+Click** | Multi-select (toggle) | `toggleMultiSelect(node.paper)` |
-| **Double-click** | Focus camera on paper | Camera animates to `(x, y, z+200)` looking at `(x, y, z)` |
-| **Hover** | Show tooltip, set cursor | 50ms debounce; HTML tooltip with title, authors, venue, year, citations |
-| **Background click** | Deselect all | `selectPaper(null)` |
-| **Scroll** | Zoom in/out | Three.js OrbitControls (built into react-force-graph-3d) |
-| **Right-drag** | Pan | Three.js OrbitControls |
-| **Left-drag** | Rotate | Three.js OrbitControls |
-
-> See [ARCHITECTURE.md SS4](./ARCHITECTURE.md#4-frontend-architecture) for the component tree and state management design.
+### Cluster Rendering (Nebula Clouds)
+- Gaussian-distributed particle cloud per cluster (Box-Muller)
+- Particle count: min(120, max(30, nodeCount * 8))
+- AdditiveBlending with shimmer shader
+- Glow ring at cluster boundary with pulse animation
+- Centroid from backend (arithmetic mean)
 
 ---
 
-## 7. Search Pipeline Spec
+## 6. Graph Processing Pipeline
 
-Step-by-step pipeline from user query to rendered 3D graph. Corresponds to the `POST /api/search` endpoint implementation in `backend/routers/search.py`.
+### Embedding Reduction
+1. PCA: 768-dim -> 100-dim (instant, variance preservation)
+2. UMAP: 100-dim -> 50-dim (shared intermediate for clustering and viz)
+3. UMAP: 50-dim -> 3-dim (final coordinates with temporal Z-axis)
+4. Parameters: n_neighbors=15, min_dist=0.1, metric='cosine', random_state=42
 
-### Pipeline Steps
+### Clustering
+- Primary: Leiden algorithm on 3-layer graph (citation + bibliographic coupling + similarity)
+- Fallback: HDBSCAN when graph is too sparse (total_edges < N * 0.5)
+- Labels: TF-IDF bigram/unigram extraction from paper abstracts
+- Quality: silhouette score computed and used to gate gap detection confidence
 
-#### Step 1: Cache Check
-- Generate `cache_key` = SHA-256 of `{query, limit, year_range, fields}` (normalized, sorted)
-- Query `search_cache` table for matching key with `created_at > NOW() - 24h`
-- **Cache hit:** Return cached `GraphResponse` immediately (0 API calls)
-- **Cache miss:** Continue to Step 2
-
-#### Step 2: Data Fusion Search
-- Create `OpenAlexClient` and `SemanticScholarClient` with configured credentials
-- Execute `DataFusionService.search()`:
-
-  **2a. OA Search (primary)**
-  - `GET /works?search={query}&sort=relevance_score:desc&per_page=100`
-  - Apply year filter if specified: `filter=publication_year:{start}-{end}`
-  - Parse results via `OpenAlexWork.from_api_response()` (reconstruct abstracts from inverted index)
-  - Track API credits (10 per page)
-
-  **2b. S2 Search (supplementary)**
-  - `GET /paper/search?query={query}&limit=100`
-  - Apply year and field filters
-  - Parse results via `SemanticScholarPaper.from_api_response()`
-
-  **2c. DOI-Based Dedup + Merge**
-  - Index S2 results by normalized DOI and lowercase title
-  - Process OA results first (primary metadata source)
-  - For each OA paper: find matching S2 paper by DOI or title
-  - Enrich with S2 data: `s2_paper_id`, `tldr`, `embedding`
-  - Apply abstract fallback: OA abstract -> S2 abstract -> S2 TLDR
-  - Add remaining S2-only results (not matched by DOI or title)
-  - Return up to `limit` unified papers
-
-  **2d. Embedding Fetch**
-  - Identify papers with `embedding = None` but `s2_paper_id` present
-  - Fetch SPECTER2 embeddings via `POST /paper/batch` (up to 500/request)
-  - Map embeddings back to unified papers
-
-#### Step 3: UMAP 3D Reduction
-- Filter papers with non-null embeddings
-- Build `(N, 768)` numpy array
-- Apply UMAP: `n_components=3, n_neighbors=min(15, N-1), min_dist=0.1, metric=cosine, random_state=42`
-- Output: `(N, 3)` array of 3D coordinates
-- Papers without embeddings: placed at periphery `(offset * 0.5, 10.0, 0.0)` with `cluster_id = -1`
-
-#### Step 4: HDBSCAN Clustering
-- Apply HDBSCAN: `min_cluster_size=request.min_cluster_size, metric=euclidean, cluster_selection_method=eom`
-- Output: `(N,)` array of cluster labels (-1 = noise)
-- Label clusters using OA Topics: collect all topics from cluster papers, use top-2 most common as label
-- Compute convex hulls: `scipy.spatial.ConvexHull` on 3D coordinates per cluster
-- Assign colors from 15-color palette
-
-#### Step 5: Similarity Edge Computation
-- Normalize embeddings (L2 norm)
-- Compute pairwise cosine similarity matrix: `normalized @ normalized.T`
-- For each paper: find neighbors above `similarity_threshold` (default 0.7)
-- Keep top `max_edges_per_node` (default 10) per paper
-- Deduplicate: only emit edge where `i < j`
-
-#### Step 6: Build Response
-- Construct `GraphNode` objects with 3D coordinates, cluster assignments, and all metadata
-- Construct `GraphEdge` objects for similarity edges
-- Construct `ClusterInfo` objects with labels, topics, colors, hull vertices
-- Build `meta` dict with timing and counts
-
-#### Step 7: Cache Results
-- `INSERT INTO search_cache ... ON CONFLICT DO UPDATE` (upsert by `cache_key`)
-- Cache stores full JSON of nodes, edges, clusters, meta
-
-#### Step 8: Return `GraphResponse`
-
-> **Testing:** See [SDD/TDD Plan](./SDD_TDD_PLAN.md) for unit tests covering each pipeline step and integration tests for the full pipeline.
+### Gap Detection (3-Dimension Scoring)
+- Structural (0.40): 1 - (actual_inter_edges / max_possible_edges)
+- Relatedness (0.35): cosine similarity between cluster centroids (high = more actionable gap)
+- Temporal (0.25): year range non-overlap ratio
+- Adaptive threshold: min(0.7, 25th_percentile + 0.1)
+- Quality gating: low silhouette (< 0.25) raises threshold and caps gap count
+- Research questions: template-generated from paper TLDRs, temporal context, bridge papers (no LLM)
 
 ---
 
-## 8. Caching Strategy
+## 7. Caching Strategy
 
-### 8.1 PostgreSQL Search Cache
+| Key Pattern | TTL | Backend |
+|-------------|-----|---------|
+| `seed_explore:{paper_id}:v4.0.0` | 24h | Redis (Upstash) |
 
-| Parameter | Value |
-|-----------|-------|
-| **Storage** | `search_cache` table (JSONB columns) |
-| **Key** | SHA-256 of normalized `{query, limit, year_range, fields}` |
-| **TTL** | 24 hours (enforced at query time) |
-| **Invalidation** | Time-based only; no manual invalidation needed |
-| **Size per entry** | ~200KB for 200-paper graph (nodes + edges + clusters + meta) |
-| **Cleanup** | Periodic deletion of entries older than 48 hours |
-
-### 8.2 Cache-First Mode
-
-When OA credit usage reaches 95%, the system enters cache-first mode:
-
-1. Always check cache first (normal behavior)
-2. On cache miss: check if a stale cache entry exists (older than 24h but still in table)
-3. If stale entry exists: return stale data with `meta.cache_stale: true`
-4. If no entry at all: make API call but with reduced `per_page` to conserve credits
-
-### 8.3 Redis Cache (Active — Upstash, v0.8.0)
-
-Upstash Redis is now live in production (`REDIS_URL` env var set on Render). The `backend/cache.py` module provides lazy-init helpers with full graceful degradation — Redis failure never breaks the API.
-
-**Cache Key Registry:**
-
-| Key Pattern | Content | TTL | Helper |
-|-------------|---------|-----|--------|
-| `emb:{s2_paper_id}` | SPECTER2 768-dim embedding (JSON list) | 30 days | `get/cache_embedding()` |
-| `refs:{paper_id}:{limit}` | `get_references()` result (serialized) | 7 days | `get/cache_refs()` |
-| `cites:{paper_id}:{limit}` | `get_citations()` result (serialized) | 7 days | `get/cache_refs()` |
-| `search:{sha256}` | Full `GraphResponse` JSON | 24 hours | `get/cache_search()` |
-
-**Architecture:**
-
-```python
-# cache.py — lazy singleton pattern
-async def _get_redis() -> Optional[redis.Redis]:
-    # Returns None if REDIS_URL unset or connection fails
-    # All cache operations wrapped in try/except → no crashes
-
-async def get_cached_refs(cache_key: str) -> Optional[List[dict]]:
-    r = await _get_redis()
-    if r:
-        data = await r.get(cache_key)
-        return json.loads(data) if data else None
-    return None
-```
-
-**Integration points:**
-- `semantic_scholar.py` `get_references()` / `get_citations()`: Redis lookup before S2 API call; store after
-- Embedding cache: queried before S2 batch API in search pipeline (v0.9.0)
-
-| Parameter | Value |
-|-----------|-------|
-| **Provider** | Upstash (serverless Redis, TLS) |
-| **Connection** | `rediss://` (TLS required by Upstash) |
-| **Max memory** | 256MB (Upstash free tier) |
-| **Eviction policy** | allkeys-lru |
-
-### 8.4 Browser Cache
-
-- API responses cached via standard HTTP caching headers
-- 3D assets (Three.js, force-graph library) cached by Next.js static asset pipeline
-- Graph state persisted in Zustand store (memory) and localStorage (page reload resilience)
-
-> See [ARCHITECTURE.md SS6](./ARCHITECTURE.md#6-risk-management) for caching failure modes and mitigations.
+Redis is optional. All cache operations are wrapped in try/except with graceful no-op.
 
 ---
 
-## 9. Authentication & Authorization
+## 8. Authentication
 
-> Implements [PRD.md US-06](./PRD.md#phase-1-mvp--v010--v050) (auth + save).
-
-### 9.1 Auth Provider: Supabase Auth
-
-| Property | Value |
-|----------|-------|
-| **Provider** | Supabase GoTrue (self-hosted or cloud) |
-| **Token format** | JWT (RS256) |
-| **Token location** | `Authorization: Bearer <token>` header |
-| **Token lifetime** | 1 hour (access token); 30 days (refresh token) |
-| **User storage** | `auth.users` table (managed by Supabase) |
-
-### 9.2 Auth Levels
-
-Three levels defined in `auth/policies.py`:
-
-| Level | Meaning | Behavior |
-|-------|---------|----------|
-| `NONE` | No authentication needed | Request proceeds without token check |
-| `OPTIONAL` | Token validated if present | User info attached if valid token; request proceeds either way |
-| `REQUIRED` | Valid token mandatory | 401 returned if token missing or invalid |
-
-### 9.3 Route Policies
-
-| Route Pattern | Auth Level | Rationale |
-|--------------|------------|-----------|
-| `/ /health /docs /openapi.json /redoc` | NONE | Health and documentation — always public |
-| `/api/auth/signup /api/auth/login /api/auth/refresh` | NONE | Auth endpoints themselves |
-| `/api/auth/me /api/auth/logout` | REQUIRED | User-specific auth operations |
-| `/api/search` | NONE | Core feature — free for all |
-| `/api/papers /api/papers/*` | NONE | Paper data — free for all |
-| `/api/graphs /api/graphs/*` | REQUIRED | User-specific saved data |
-| `/api/bookmarks /api/bookmarks/*` | REQUIRED | User-specific bookmarks (v3.2.0) |
-| All other routes | OPTIONAL | Default: token validated if present |
-
-### 9.4 Middleware Flow
-
-```
-Request
-  |
-  v
-[CORS Middleware] -- handles preflight OPTIONS
-  |
-  v
-[AuthMiddleware]
-  |
-  +-- get_auth_level(path) -> NONE/OPTIONAL/REQUIRED
-  |
-  +-- if NONE: pass through
-  |
-  +-- Extract token from Authorization header
-  |
-  +-- verify_jwt(token) -> user_data
-  |
-  +-- if REQUIRED and no valid user: return 401
-  |
-  +-- Attach user to request.state
-  |
-  v
-[Route Handler]
-```
-
-### 9.5 Row-Level Security
-
-PostgreSQL RLS policies on `user_graphs` table ensure users can only access their own saved graphs. Even if the middleware is bypassed, RLS prevents cross-user data access at the database level.
-
-> See [ARCHITECTURE.md SS3](./ARCHITECTURE.md#3-backend-architecture) for the full middleware stack.
+- Provider: Supabase Auth (GoTrue)
+- Token: JWT (RS256)
+- Methods: email/password, Google OAuth, GitHub OAuth
+- Protected endpoints: /api/graphs/* (all CRUD)
+- Public endpoints: search, explore, paper detail, intents
 
 ---
 
-## 10. Performance Requirements
+## 9. Performance Requirements
 
-> Referenced by [PRD.md SS5 Success Metrics](./PRD.md#5-success-metrics) and [PRD.md SS9 Non-Functional Requirements](./PRD.md#9-non-functional-requirements).
+| Metric | Target |
+|--------|--------|
+| Seed explore (50 papers) | < 15s |
+| Paper search | < 3s |
+| 3D FPS at 200 nodes | 30+ |
+| Expand-stable | < 5s |
+| Graph save/load | < 1s |
 
-### 10.1 API Latency Targets
-
-| Endpoint | Target (p50) | Target (p95) | Bottleneck |
-|----------|-------------|-------------|------------|
-| `POST /api/search` (cache hit) | <100ms | <300ms | DB read |
-| `POST /api/search` (cache miss) | <3s | <5s | OA+S2 API calls + UMAP |
-| `GET /api/papers/{id}` (DB hit) | <50ms | <100ms | DB read |
-| `GET /api/papers/{id}` (API fallback) | <1s | <2s | S2 API call |
-| `POST /api/papers/{id}/expand` | <2s | <4s | S2 citations + references |
-| `GET /api/graphs` | <100ms | <200ms | DB read |
-| `POST /api/graphs` | <100ms | <200ms | DB write |
-| `GET /api/bookmarks` | <100ms | <200ms | DB read |
-| `POST /api/bookmarks` | <100ms | <200ms | DB write (upsert) |
-| `GET /health` | <50ms | <100ms | DB ping (cached 15s) |
-
-### 10.2 Frontend Rendering Targets
-
-| Metric | Target | Measurement Method |
-|--------|--------|-------------------|
-| Initial render (200 papers) | <3s from data received | `performance.mark()` timing |
-| Steady-state FPS (200 papers) | 60 FPS | `requestAnimationFrame` delta |
-| Steady-state FPS (500 papers) | 30+ FPS | `requestAnimationFrame` delta |
-| Node click response | <100ms | Time from click to panel update |
-| Camera animation | 1000ms | Hardcoded transition duration |
-| Tooltip appearance | <50ms | Hover debounce timeout |
-
-### 10.3 Scalability Limits
-
-| Dimension | Current Limit | Mitigation |
-|-----------|-------------|-----------|
-| Papers per search | 500 (API limit) | Pagination in future; LOD rendering |
-| Similarity edges | ~2500 (500 papers x max 10 edges) | Threshold filtering; toggle off |
-| Concurrent users | ~50 (Render free tier) | Scale to Render paid; horizontal scaling |
-| DB connections | 3 (pool max) | Increase pool; read replicas |
-| S2 API calls/sec | 1 (authenticated) | Request queuing; aggressive caching |
-
-### 10.4 Memory Budgets
-
-| Component | Budget |
-|-----------|--------|
-| Backend process (per request) | <512MB |
-| UMAP computation (500 papers x 768 dims) | ~50MB |
-| Frontend JS heap | <200MB |
-| Three.js GPU memory (500 nodes) | <100MB |
-| Zustand store (500-paper graph) | <10MB |
-
----
-
-## Phase Status
-
-| Phase | Version | Status | Features |
-|-------|---------|--------|----------|
-| **Phase 1 (MVP)** | v0.1.0–v0.1.4 | ✅ Complete | Keyword search, 3D visualization, HDBSCAN clustering, paper details, citation expansion, graph save/load |
-| **Phase 1.5 (Viz)** | v0.1.5 | ✅ Complete | 3-tier dimming, centrality-based labels, bridge/OA/bloom node layers, ghost edges, gap overlay, cluster visibility, stable expand |
-| **Phase 2 (AI)** | v0.2.0 | ✅ Complete | LLM multi-provider (OpenAI/Anthropic/Google/Groq), GraphRAG chat, trend analysis, gap detection |
-| **Phase 3 (Real-time)** | v0.3.0 | ✅ Complete | Natural language search (Groq), SSE progress stream, citation context modal, rate limiting (60/hr search, 20/hr AI, 2× auth), analytics logging, SEO |
-| **Phase 4 (Relationships)** | v0.4.0 | ✅ Complete | Critical node-click bug fix, panel resize, conceptual edges SSE, 3-mode home page, timeline view |
-| **Phase 5 (Personalization)** | v0.5.0 | ✅ Complete | OAuth callback fix, user profiles, interaction logging, pgvector recommendations, dashboard recommendations, home page "Continue Exploring" |
-| **Phase 6 (Viz + Exploration)** | v0.6.0 | ✅ Complete | Field color fix, LOD/opacity fix, panel highlight, seed paper mode, citation enrichment, 2D timeline, intent toggle, research settings |
-| **Phase 7 (Stability + Philosophy)** | v0.7.x | ✅ Complete | HDBSCAN 768-dim fix, temporal Z-axis, RRF hybrid search, SPECTER2 adhoc_query ANN, PHILOSOPHY.md, TECH_PROOF.md, expand null-safety, landing page seed-paper redesign, DOI auto-detection |
-| **v0.8.x (Viz & Interaction)** | v0.8.x | ✅ Complete | Expand animation fix, intent legend, responsive seed panels, cluster panel redesign, real S2 citation intents in seed mode, 429 hotfix |
-| **v0.9.x (Node ID + UX)** | v0.9.x | ✅ Complete | Node ID fix (S2 paper IDs), right panel visibility, zoomToFit, Three.js rgba warning fix, expand data completeness, recursive expand fix |
-| **v1.0.0 (Cosmic Universe Theme)** | v1.0.0 | ✅ Complete | Full UI redesign: papers=stars (GLSL twinkle), clusters=nebulae (particle clouds), edges=light streams, Three.js starfield landing, HUD panels, warp transition |
-| **v1.0.1 (Visibility Enhancement)** | v1.0.1 | ✅ Complete | Dramatic field color differentiation (STAR_COLOR_MAP), sqrt node sizing (4–30 range), glow opacity/scale, nebula opacity, linkDirectionalParticles, GraphLegend update |
-| **v1.1.0 (Legend · Expand · Error Resilience)** | v1.1.0 | ✅ Complete | Visual Guide legend, expansion visual effects (pulse/glow/edge highlight), DOI fallback expand, API timeout+retry, ExpandMeta partial success, specific error messages |
-
----
-
-### Phase 4: UI State (useGraphStore additions)
-- `conceptualEdges: ConceptualEdge[]` — streamed relationship edges
-- `showConceptualEdges: boolean` — toggle in GraphControls
-- `showTimeline: boolean` — fixes node Y-axis by publication year
-- `isAnalyzingRelations: boolean` — SSE stream in progress
-
----
-
-### Phase 6: TimelineView Component Spec
-
-**File:** `frontend/components/analysis/TimelineView.tsx`
-
-**Purpose:** D3-based 2D scatter plot rendering papers by publication year and citation count, synchronized with the 3D graph selection state.
-
-**Props:**
-```typescript
-interface TimelineViewProps {
-  // No external props — reads entirely from useGraphStore
-}
-```
-
-**Store dependencies:**
-
-| Field | Usage |
-|-------|-------|
-| `graphData` | Source of paper nodes to render |
-| `selectedPaper` | Highlights matching circle; synced bidirectionally |
-| `yearRange` | Controlled by brush selection; filters 3D graph |
-| `show2DTimeline` | Mount/unmount gate |
-
-**Layout:**
-
-| Axis | Data | Scale |
-|------|------|-------|
-| X | `paper.year` | `d3.scaleLinear` — min/max year of current graph |
-| Y | `paper.citation_count` | `d3.scaleLog` (base 10, min clamp 1) |
-
-**Visual mapping:**
-
-| Property | Value |
-|----------|-------|
-| Circle radius | `max(3, log(citation_count + 1) * 2)` |
-| Fill color | `FIELD_COLOR_MAP[primaryField]` (same palette as 3D graph) |
-| Selected outline | Gold `#FFD700`, stroke-width 2 |
-| Unselected opacity | 0.7 |
-| Dimmed (non-selected when selection active) | 0.2 |
-
-**Interactions:**
-
-| Interaction | Behavior |
-|-------------|----------|
-| Click circle | `selectPaper(paper)` in Zustand store |
-| D3 brush drag | Sets `yearRange` in store; filters both 2D and 3D views |
-| Hover | Tooltip: title, year, citation count |
-
-**Activation:** `show2DTimeline` boolean in `useGraphStore` (default `false`). Toggled via button in `GraphControls.tsx`. When active, renders as an overlay panel below the 3D canvas in `app/explore/page.tsx`.
-
----
-
-## v3.6.0 Features
-
-**View Toggle (Layout Mode)**
-- `layoutMode: 'semantic' | 'network'` — toggle between UMAP-pinned and d3-force citation layout
-- Semantic mode: nodes pinned via `fx/fy/fz` at SPECTER2 UMAP coordinates (force sim frozen, `cooldownTicks=0`, high d3VelocityDecay=0.9)
-- Network mode: `fx/fy/fz` removed → d3-force runs freely with citation-weighted links (citation: 30u, similarity: 60u, `d3VelocityDecay=0.6`)
-- Ship Controls: layout mode dropdown (cyan highlight for network mode)
-- No backend endpoint changes — mode is client-side layout control only
-
-**Multi-seed Merge**
-- "ADD AS SECOND SEED" button in OBJECT SCAN panel (teal, below EXPAND NETWORK)
-- Fetches full citation network (depth 1, up to 80 papers) of any paper via `POST /api/papers/{id}/expand-stable?limit=80`
-- New papers positioned via k-NN interpolation on shared 50D embedding space, assigned to nearest cluster
-- Visual: teal ring (`#00E5FF`) on second-seed nodes, stored in `secondSeedIds: string[]`
-- Banner: "Gap analysis may have changed" after merge (`gapRefreshNeeded: boolean` in store)
-- `api.addPaperAsSeed()` wrapper — convenience method around `expandPaperStable` with higher limit
-
----
-
-## 11. Testing Requirements
-
-> Full test strategy in [SDD/TDD Plan](./SDD_TDD_PLAN.md).
-
-### 11.1 Unit Tests
-
-| Module | Key Tests | Coverage Target |
-|--------|-----------|----------------|
-| `DataFusionService` | DOI dedup, abstract fallback, merge priority, empty results | 90%+ |
-| `EmbeddingReducer` | 768D->3D reduction, edge cases (1 paper, 2 papers) | 85%+ |
-| `PaperClusterer` | HDBSCAN clustering, topic labeling, hull computation | 85%+ |
-| `SimilarityComputer` | Cosine similarity, threshold filtering, dedup, edge limits | 90%+ |
-| `OpenAlexClient` | Abstract reconstruction, credit tracking, rate limit handling | 85%+ |
-| `SemanticScholarClient` | Rate limiting, batch API, retry logic, error handling | 85%+ |
-| `AuthMiddleware` | Route policy enforcement, token validation, edge cases | 90%+ |
-| Zustand store | State transitions, addNodes dedup, toggle actions | 85%+ |
-
-### 11.2 Integration Tests
-
-| Test Scenario | Components | Key Assertions |
-|--------------|-----------|----------------|
-| Full search pipeline | Search router + DataFusion + UMAP + HDBSCAN + Similarity | Returns valid GraphResponse; nodes have 3D coords; clusters labeled |
-| Paper expansion | Papers router + S2 client | Returns citations and references; no duplicates |
-| Graph CRUD | Graphs router + DB + Auth | Create, read, update, delete; RLS enforced |
-| Cache behavior | Search router + DB | Cache miss populates cache; cache hit returns immediately |
-| Auth flow | Auth middleware + Supabase | Public routes accessible; protected routes require token |
-
-### 11.3 End-to-End Tests
-
-| Test Scenario | User Flow | Assertions |
-|--------------|-----------|------------|
-| Search and explore | Type query -> see 3D graph -> click paper -> see details | Graph renders; detail panel shows correct data |
-| Citation expansion | Click paper -> double-click -> see expanded graph | New nodes appear; citation edges visible |
-| Save and load | Search -> save graph -> reload page -> load saved graph | Graph state restored; camera position preserved |
-| Auth flow | Sign up -> log in -> save graph -> log out -> verify no access | Auth works end-to-end; saved data persists |
-
-### 11.4 Performance Tests
-
-| Test | Tool | Pass Criteria |
-|------|------|--------------|
-| Search latency (cache miss) | pytest + httpx | p95 < 5s for 200 papers |
-| Search latency (cache hit) | pytest + httpx | p95 < 300ms |
-| 3D render FPS | Playwright + performance API | 30+ FPS at 500 nodes |
-| Memory leak detection | Chrome DevTools protocol | No growth over 100 search cycles |
-
----
-
-*This document is the authoritative technical specification. For product requirements, see [PRD.md](./PRD.md). For system architecture, see [ARCHITECTURE.md](./ARCHITECTURE.md). For test strategy, see [SDD/TDD Plan](./SDD_TDD_PLAN.md).*
-
----
-
-## Phase 5: Personalization API
-
-### New Tables (002_personalization.sql)
-
-| Table | Purpose |
-|-------|---------|
-| `user_profiles` | User prefs + interest_embedding vector(768) + usage counters |
-| `user_search_history` | Search query log (query, mode, result_count, filters_used JSONB) |
-| `user_paper_interactions` | 5 action types: view, save_graph, expand_citations, chat_mention, lit_review |
-| `user_recommendations` | 24h cached pgvector ANN results with Groq explanation + is_dismissed |
-
-### New Endpoints
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | `/api/user/profile` | Required | Get/auto-create user profile |
-| PUT | `/api/user/profile` | Required | Partial update preferences |
-| POST | `/api/user/events` | Required | Log paper interaction (fire-and-forget) |
-| POST | `/api/user/search-history` | Required | Log search query |
-| GET | `/api/user/recommendations` | Required | pgvector ANN recommendations + Groq explanations |
-| DELETE | `/api/user/recommendations/{id}/dismiss` | Required | Soft-dismiss recommendation |
-
-### Recommendation Algorithm
-
-```
-1. Check user_recommendations cache (not expired, not dismissed) → return if hit
-2. Fetch user's viewed paper embeddings (up to 50, FROM user_paper_interactions JOIN papers)
-3. Compute numpy mean → interest_vector (768-dim)
-4. pgvector ANN: SELECT ... ORDER BY embedding <=> $interest_vector LIMIT 100
-   (exclude papers already seen or in saved graphs)
-5. Top 10 → Groq LLaMA-3.3-70b → 1-sentence explanation each (parallel asyncio.gather)
-   Fallback: no explanation if GROQ_API_KEY not set
-6. INSERT into user_recommendations (24h expires_at)
-7. Return top 20 with joined paper metadata
-```
-
-### Auth Callback Fix
-
-`/auth/callback` page now uses `supabase.auth.onAuthStateChange` to wait for `SIGNED_IN` event before redirecting to `/dashboard`. 5-second timeout fallback with manual `getSession()` check. Redirects to `/auth?error=oauth_failed` if session not established.
-
-### Frontend New Types
-
-```typescript
-UserProfile    // user_id, research_interests[], preferred_fields[], default_year_min/max, etc.
-Recommendation // id, paper_id, score, explanation, reason_tags[], + joined paper fields
-InteractionEvent // paper_id, action (5 types), session_id?
-```
+### UMAP Cold Start Mitigation
+- Numba JIT compilation takes ~30s on first call
+- `_warm_up_umap()` runs at startup (background task) to pre-compile kernels
+- Prevents first seed-explore from timing out
