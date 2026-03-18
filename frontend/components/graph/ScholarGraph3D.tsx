@@ -126,6 +126,10 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
   const selectedPaperIdRef = useRef<string | null>(null);
   const justClickedNodeRef = useRef(false);
 
+  // Similarity edge hover tooltip
+  const [hoveredSimLink, setHoveredSimLink] = useState<ForceGraphLink | null>(null);
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+
   const {
     graphData,
     selectedPaper,
@@ -655,7 +659,11 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
   if (!graphData) return null;
 
   return (
-    <div ref={containerRef} className="w-full h-full bg-background relative">
+    <div
+      ref={containerRef}
+      className="w-full h-full bg-background relative"
+      onMouseMove={(e) => setMousePos({ x: e.clientX, y: e.clientY })}
+    >
       {/* Z-axis legend — hybrid temporal+semantic */}
       <div className="absolute bottom-16 left-4 glass rounded-lg px-3 py-2 text-xs text-text-secondary pointer-events-none z-10">
         <div className="font-medium text-text-primary/60 mb-1 text-[10px] uppercase tracking-wide">
@@ -710,54 +718,6 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         linkLabel={(linkData: unknown) => {
           const link = linkData as ForceGraphLink;
 
-          // ── Similarity edge tooltip ──────────────────────────────
-          if (link.edgeType === 'similarity') {
-            const srcNode = link.source as ForceGraphNode;
-            const tgtNode = link.target as ForceGraphNode;
-            if (!srcNode?.paper || !tgtNode?.paper) return '';
-
-            const paperA = srcNode.paper;
-            const paperB = tgtNode.paper;
-
-            // Shared keywords (LLM-free: title + abstract intersection)
-            const stopwords = new Set(['the','a','an','and','or','but','in','on','at','to','for','of','with','by','from','is','are','was','were','it','this','that','these','those','have','has','had','been','do','does','did','will','would','could','should','may','not','only','than','very','also','when','where','how','which','what','who','their','they','them','can','its','our','any','all','some','each','both','used','using','data','study','results','analysis','paper','model','approach','method','methods','based','across','within','between','among','different','similar','found','effect','effects','significant','association','related','relationship','factors','factor','two','three','four','five','more','less','high','low','higher','lower','new','current','present','previous','recent','several','whether','including','however','thus','therefore','while','although','because','after','before','through','under','over','into','about','such']);
-            const tokenize = (text: string) => text.toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(w => w.length > 4 && !stopwords.has(w));
-            const textA = `${paperA.title} ${paperA.abstract || paperA.tldr || ''}`;
-            const textB = `${paperB.title} ${paperB.abstract || paperB.tldr || ''}`;
-            const wordsA = new Set(tokenize(textA));
-            const shared = tokenize(textB).filter(w => wordsA.has(w));
-            const uniqueShared = [...new Set(shared)].slice(0, 5);
-
-            // Citation direction between the two papers
-            const aToB = graphData?.edges.some(e => e.type === 'citation' && e.source === paperA.id && e.target === paperB.id);
-            const bToA = graphData?.edges.some(e => e.type === 'citation' && e.source === paperB.id && e.target === paperA.id);
-            const citDir = aToB && bToA ? '↔ mutual citation' : aToB ? '→ A cites B' : bToA ? '← B cites A' : '✗ no citation';
-            const citColor = (aToB || bToA) ? '#51CF66' : '#FF6B6B';
-
-            // Shared fields
-            const fieldsA = new Set(paperA.fields || []);
-            const sharedFields = (paperB.fields || []).filter(f => fieldsA.has(f));
-
-            const simPct = Math.round((link.weight ?? 0) * 100);
-            const truncate = (s: string, n: number) => s.length > n ? s.slice(0, n) + '...' : s;
-
-            return `
-              <div style="background: rgba(8,8,14,0.97); padding: 10px 14px; border-radius: 8px; font-family: 'JetBrains Mono', monospace; font-size: 10px; border: 1px solid rgba(255,255,255,0.1); max-width: 320px; line-height: 1.5;">
-                <div style="color: rgba(255,255,255,0.35); font-size: 9px; letter-spacing: 0.08em; margin-bottom: 6px;">SEMANTIC CONNECTION · ${simPct}% similar</div>
-                <div style="display: flex; gap: 6px; align-items: flex-start; margin-bottom: 8px;">
-                  <div style="flex: 1; color: rgba(255,255,255,0.7);">${truncate(paperA.title, 60)}</div>
-                  <div style="color: rgba(255,255,255,0.2); flex-shrink: 0;">↔</div>
-                  <div style="flex: 1; color: rgba(255,255,255,0.7); text-align: right;">${truncate(paperB.title, 60)}</div>
-                </div>
-                <div style="border-top: 1px solid rgba(255,255,255,0.06); padding-top: 6px; display: flex; flex-direction: column; gap: 4px;">
-                  ${uniqueShared.length > 0 ? `<div><span style="color: rgba(255,255,255,0.3);">shared: </span><span style="color: #D4AF37;">${uniqueShared.join(', ')}</span></div>` : ''}
-                  ${sharedFields.length > 0 ? `<div><span style="color: rgba(255,255,255,0.3);">field: </span><span style="color: #4DA6FF;">${sharedFields.slice(0,2).join(', ')}</span></div>` : ''}
-                  <div><span style="color: rgba(255,255,255,0.3);">citation: </span><span style="color: ${citColor};">${citDir}</span></div>
-                </div>
-              </div>
-            `;
-          }
-
           // ── Citation intent tooltip ──────────────────────────────
           if (!link.intentLabel) return '';
           const contextSnippet = link.intentContext
@@ -797,6 +757,10 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         onNodeClick={handleNodeClick}
         onNodeHover={handleNodeHover}
         onLinkClick={handleLinkClick}
+        onLinkHover={(link) => {
+          const l = link as ForceGraphLink | null;
+          setHoveredSimLink(l?.edgeType === 'similarity' ? l : null);
+        }}
         onBackgroundClick={handleBackgroundClick}
         warmupTicks={50}
         cooldownTicks={150}
@@ -807,6 +771,70 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       ) : (
         <ForceGraph3DLoading />
       )}
+
+      {/* Similarity edge hover tooltip */}
+      {hoveredSimLink && (() => {
+        const srcNode = hoveredSimLink.source as ForceGraphNode;
+        const tgtNode = hoveredSimLink.target as ForceGraphNode;
+        if (!srcNode?.paper || !tgtNode?.paper) return null;
+        const paperA = srcNode.paper;
+        const paperB = tgtNode.paper;
+
+        const stopwords = new Set(['the','a','an','and','or','but','in','on','at','to','for','of','with','by','from','is','are','was','were','it','this','that','these','those','have','has','had','been','do','does','did','will','would','could','should','may','not','only','than','very','also','when','where','how','which','what','who','their','they','them','can','its','our','any','all','some','each','both','used','using','data','study','results','analysis','paper','model','approach','method','methods','based','across','within','between','among','different','similar','found','effect','effects','significant','association','related','relationship','factors','factor','two','three','four','five','more','less','high','low','higher','lower','new','current','present','previous','recent','several','whether','including','however','thus','therefore','while','although','because','after','before','through','under','over','into','about','such']);
+        const tokenize = (text: string) => text.toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(w => w.length > 4 && !stopwords.has(w));
+        const wordsA = new Set(tokenize(`${paperA.title} ${paperA.abstract || paperA.tldr || ''}`));
+        const tokensB = tokenize(`${paperB.title} ${paperB.abstract || paperB.tldr || ''}`).filter(w => wordsA.has(w));
+        const shared = Array.from(new Set(tokensB)).slice(0, 5);
+
+        const aToB = graphData?.edges.some(e => e.type === 'citation' && e.source === paperA.id && e.target === paperB.id);
+        const bToA = graphData?.edges.some(e => e.type === 'citation' && e.source === paperB.id && e.target === paperA.id);
+        const citDir = aToB && bToA ? '↔ mutual' : aToB ? '→ A cites B' : bToA ? '← B cites A' : '✗ no citation';
+        const citColor = (aToB || bToA) ? '#51CF66' : '#FF6B6B';
+        const simPct = Math.round((hoveredSimLink.weight ?? 0) * 100);
+        const fieldsA = new Set(paperA.fields || []);
+        const sharedFields = (paperB.fields || []).filter(f => fieldsA.has(f));
+        const trunc = (s: string, n: number) => s.length > n ? s.slice(0, n) + '…' : s;
+
+        const pad = 16;
+        const tooltipW = 340;
+        const left = Math.min(mousePos.x + pad, window.innerWidth - tooltipW - pad);
+        const top = mousePos.y + pad;
+
+        return (
+          <div
+            key="sim-tooltip"
+            style={{ position: 'fixed', left, top, zIndex: 9999, pointerEvents: 'none', width: tooltipW }}
+            className="rounded-lg border border-white/10 bg-[rgba(6,6,14,0.97)] p-3 font-mono text-[10px] shadow-2xl"
+          >
+            <div className="text-[9px] text-white/30 tracking-widest mb-2 uppercase">
+              Semantic Connection · {simPct}% similar
+            </div>
+            <div className="flex gap-2 mb-2.5">
+              <div className="flex-1 text-white/70 leading-snug">{trunc(paperA.title, 55)}</div>
+              <div className="text-white/20 flex-shrink-0">↔</div>
+              <div className="flex-1 text-white/70 leading-snug text-right">{trunc(paperB.title, 55)}</div>
+            </div>
+            <div className="border-t border-white/[0.06] pt-2 space-y-1.5">
+              {shared.length > 0 && (
+                <div>
+                  <span className="text-white/30">shared: </span>
+                  <span className="text-[#D4AF37]">{shared.join(', ')}</span>
+                </div>
+              )}
+              {sharedFields.length > 0 && (
+                <div>
+                  <span className="text-white/30">field: </span>
+                  <span className="text-[#4DA6FF]">{sharedFields.slice(0, 2).join(', ')}</span>
+                </div>
+              )}
+              <div>
+                <span className="text-white/30">citation: </span>
+                <span style={{ color: citColor }}>{citDir}</span>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 });
