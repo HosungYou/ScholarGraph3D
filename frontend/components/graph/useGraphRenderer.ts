@@ -624,7 +624,6 @@ export function useGraphRenderer({
     if (!link.dashed) return null;
 
     const geometry = new THREE.BufferGeometry();
-    // Visible dashed line
     const material = new THREE.LineDashedMaterial({
       color: 0x555555,
       dashSize: 2,
@@ -632,24 +631,7 @@ export function useGraphRenderer({
       opacity: 0.6,
       transparent: true,
     });
-    const visibleLine = new THREE.Line(geometry, material);
-
-    // Invisible wide line for hit-area (makes hover easier)
-    const hitMaterial = new THREE.LineBasicMaterial({
-      color: 0x000000,
-      opacity: 0,
-      transparent: true,
-      depthWrite: false,
-      linewidth: 1,
-    });
-    const hitLine = new THREE.Line(geometry, hitMaterial);
-
-    const group = new THREE.Group();
-    group.add(visibleLine);
-    group.add(hitLine);
-    // Tag so linkPositionUpdate knows how to handle this
-    group.userData.isDashedGroup = true;
-    return group;
+    return new THREE.Line(geometry, material);
   }, []);
 
   // ── linkPositionUpdate ─────────────────────────────────────────
@@ -664,28 +646,14 @@ export function useGraphRenderer({
       linkData: unknown
     ) => {
       const link = linkData as ForceGraphLink;
-      if (!link.dashed) return false;
+      if (!link.dashed || !(line instanceof THREE.Line)) return false;
 
       const positions = new Float32Array([
         coords.start.x, coords.start.y, coords.start.z,
         coords.end.x, coords.end.y, coords.end.z,
       ]);
-      const attr = new THREE.BufferAttribute(positions, 3);
-
-      // Handle both Group (new) and bare Line (legacy)
-      const updateLine = (obj: THREE.Object3D) => {
-        if (obj instanceof THREE.Line) {
-          obj.geometry.setAttribute('position', attr);
-          obj.computeLineDistances();
-        }
-      };
-      if ((line as any).userData?.isDashedGroup && line instanceof THREE.Group) {
-        line.children.forEach(updateLine);
-      } else if (line instanceof THREE.Line) {
-        updateLine(line);
-      } else {
-        return false;
-      }
+      line.geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      line.computeLineDistances();
       return true;
     },
     []
