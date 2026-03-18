@@ -1,36 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
-import { useGraphStore } from '@/hooks/useGraphStore';
 import { STAR_COLOR_MAP } from './cosmic/cosmicConstants';
+
+const TOP_FIELDS = ['Computer Science', 'Medicine', 'Biology', 'Physics', 'Economics'];
 
 export default function GraphLegend() {
   const [collapsed, setCollapsed] = useState(true);
-  const [guideCollapsed, setGuideCollapsed] = useState(true);
-  const { selectedPaper } = useGraphStore();
 
-  const LEGEND_FIELDS = [
-    'Computer Science',
-    'Medicine',
-    'Biology',
-    'Physics',
-    'Economics',
-    'Engineering',
-    'Business',
-    'Chemistry',
-    'Psychology',
-    'Environmental Science',
-  ];
-  const fieldEntries = LEGEND_FIELDS
+  const fieldEntries = TOP_FIELDS
     .filter(f => STAR_COLOR_MAP[f])
     .map(f => [f, STAR_COLOR_MAP[f].core] as [string, string]);
-
-  useEffect(() => {
-    if (selectedPaper) {
-      setCollapsed(true);
-    }
-  }, [selectedPaper]);
 
   if (collapsed) {
     return (
@@ -40,7 +21,6 @@ export default function GraphLegend() {
       >
         <ChevronUp className="w-3 h-3 text-[#D4AF37]/70" />
         <span className="uppercase tracking-[0.16em] text-[#D4AF37]/70">Visual Key</span>
-        <span className="text-[#999999]/45">colors + connections</span>
       </button>
     );
   }
@@ -58,32 +38,17 @@ export default function GraphLegend() {
         </button>
       </div>
 
-      {/* Node size */}
-      <div className="mb-2">
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 flex-shrink-0">
-            <div className="w-2 h-2 rounded-full bg-[#999999]/40" />
-            <div className="w-3.5 h-3.5 rounded-full bg-[#999999]/40" />
-          </div>
-          <span>Size = citation count</span>
-        </div>
-      </div>
-
-      {/* Field colors */}
+      {/* Field colors (top 5) */}
       <div className="mb-2">
         <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
           {fieldEntries.map(([field, color]) => (
             <div key={field} className="flex items-center gap-1.5">
               <div
                 className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                style={{ backgroundColor: color, boxShadow: `0 0 6px ${color}90, 0 0 12px ${color}40` }}
+                style={{ backgroundColor: color, boxShadow: `0 0 6px ${color}90` }}
               />
               <span className="truncate">
-                {field
-                  .replace(' Science', '')
-                  .replace(' Sciences', '')
-                  .replace('Environmental', 'Environ.')
-                  .replace('Computer', 'CS')}
+                {field.replace(' Science', '').replace('Computer', 'CS')}
               </span>
             </div>
           ))}
@@ -102,138 +67,9 @@ export default function GraphLegend() {
         </div>
       </div>
 
-      {/* Always-on edge indicators */}
-      <div className="mb-1.5 flex flex-col gap-0.5">
-        <div className="text-[9px] font-mono text-[#999999]/40 mb-0.5">Always visible:</div>
-        <div className="flex items-center gap-2">
-          <div className="w-5 h-0.5 bg-[#FFD700] flex-shrink-0 rounded-full" />
-          <span>Bidirectional</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-5 h-0.5 bg-[#2ECC71] flex-shrink-0 rounded-full" />
-          <span>Shared authors</span>
-        </div>
-      </div>
-
-      {/* Citation context legend */}
-      <div className="mb-1.5 pt-1.5 border-t border-[#1A1A1A]/70">
-        <div className="text-[10px] font-mono uppercase tracking-widest text-text-primary/60 mb-1">
-          Citation Context
-        </div>
-        <div className="flex flex-col gap-0.5">
-          <div className="flex items-center gap-2">
-            <div className="w-5 h-0 border-t-2 flex-shrink-0" style={{ borderColor: '#95A5A6' }} />
-            <span>Background</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-5 h-0 border-t-2 flex-shrink-0" style={{ borderColor: '#9B59B6' }} />
-            <span>Methodology</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-5 h-0 border-t-2 flex-shrink-0" style={{ borderColor: '#4A90D9' }} />
-            <span>Result/Comparison</span>
-          </div>
-        </div>
-        <div className="text-[10px] text-[#999999]/40 mt-1 italic">
-          Hover edges for details
-        </div>
-      </div>
-
       {/* Cluster */}
       <div className="text-[#999999]/60">
         Shaded region = topic area
-      </div>
-
-      {/* Direction legend */}
-      <div className="mb-1.5 pt-1.5 border-t border-[#1A1A1A]/70">
-        <div className="text-[9px] font-mono text-[#999999]/40 mb-0.5">Direction tint:</div>
-        <div className="flex flex-col gap-0.5">
-          <div className="flex items-center gap-2">
-            <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#4488FF', opacity: 0.7 }} />
-            <span className="text-[9px]">Reference</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#FF8844', opacity: 0.7 }} />
-            <span className="text-[9px]">Citation</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Visual Guide — collapsible */}
-      <div className="border-t border-[#1A1A1A]/70 pt-2 mt-2">
-        <button
-          onClick={() => setGuideCollapsed(!guideCollapsed)}
-          className="flex items-center justify-between w-full text-[10px] font-mono uppercase tracking-widest text-[#D4AF37]/60 hover:text-[#D4AF37]/80 transition-colors"
-        >
-          <span>VISUAL GUIDE</span>
-          {guideCollapsed ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-        </button>
-
-        {!guideCollapsed && (
-          <div className="mt-1.5 flex flex-col gap-1 text-[9px]">
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-0.5 flex-shrink-0">
-                <div className="w-1.5 h-1.5 rounded-full bg-[#999999]/40" />
-                <div className="w-3 h-3 rounded-full bg-[#999999]/40" />
-              </div>
-              <span>Size = citation count</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-[#D4AF37]/30 border border-[#D4AF37]/50 flex-shrink-0 animate-pulse" />
-              <span>Bright glow = highly cited</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full border-2 border-[#D4AF37]/60 flex-shrink-0 animate-pulse" style={{ animationDuration: '1.5s' }} />
-              <span>Pulsing ring = top 10% cited</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="relative flex-shrink-0 w-3 h-3">
-                <div className="absolute inset-0 rounded-full bg-[#999999]/30" />
-                <div className="absolute w-1 h-1 rounded-full bg-[#D4AF37] top-0 left-1" />
-              </div>
-              <span>Orbiting dots = bridge node</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full border border-[#2ECC71]/70 flex-shrink-0" />
-              <span>Green ring = Open Access</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-0.5 bg-[#D4AF37] flex-shrink-0 rounded-full relative">
-                <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1 h-1 rounded-full bg-[#D4AF37] animate-pulse" />
-              </div>
-              <span>Flowing particles = citation</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="flex-shrink-0 text-[8px]">
-                <span className="text-[#999999]/40">slow</span>
-                <span className="mx-0.5">→</span>
-                <span className="text-[#999999]/80">fast</span>
-              </div>
-              <span>Twinkle = recency</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="flex flex-col items-center flex-shrink-0 text-[7px] text-[#999999]/50 leading-none">
-                <span>▲ new</span>
-                <span>▼ old</span>
-              </div>
-              <span>Z-axis = publication year</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full border-2 border-[#FF4444]/60 flex-shrink-0" />
-              <span>Red ring = frontier node</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-0.5 bg-[#D4AF37] flex-shrink-0 rounded-full" />
-              <span>Gold = citation path</span>
-            </div>
-          </div>
-        )}
-
-        {guideCollapsed && (
-          <div className="text-[9px] text-[#999999]/40 mt-0.5 italic">
-            Click to learn about visual features
-          </div>
-        )}
       </div>
     </div>
   );
