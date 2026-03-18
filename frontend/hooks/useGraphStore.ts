@@ -52,6 +52,10 @@ interface GraphStore {
   hoveredGapEdges: { source: string; target: string; similarity: number }[];
   setHoveredGapEdges: (edges: { source: string; target: string; similarity: number }[]) => void;
 
+  // Foundation paper IDs (shared foundations for highlighted cluster pair)
+  foundationPaperIds: Set<string>;
+  setFoundationPaperIds: (ids: Set<string>) => void;
+
   // Phase 4: Timeline
   showTimeline: boolean;
 
@@ -135,6 +139,9 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
   setHighlightedClusterPair: (pair) => set({ highlightedClusterPair: pair }),
   hoveredGapEdges: [],
   setHoveredGapEdges: (edges) => set({ hoveredGapEdges: edges }),
+
+  foundationPaperIds: new Set<string>(),
+  setFoundationPaperIds: (ids: Set<string>) => set({ foundationPaperIds: ids }),
 
   showTimeline: false,
 

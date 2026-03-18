@@ -147,6 +147,8 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     activePath,
     highlightedClusterPair,
     hoveredGapEdges,
+    setFoundationPaperIds,
+    foundationPaperIds,
   } = useGraphStore();
 
   const newNodeIdsRef = useRef<Set<string>>(new Set());
@@ -162,6 +164,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
   const gapArcRef = useRef<THREE.Line | null>(null);
   const gapArcGlowRef = useRef<THREE.Sprite | null>(null);
   const gapVoidRef = useRef<THREE.Group | null>(null);
+  const foundationGroupRef = useRef<THREE.Group | null>(null);
   const timelineOverlayRef = useRef<THREE.Group | null>(null);
 
   // Sync expandedFromMap from store to local ref
@@ -466,6 +469,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
     showCosmicTheme,
     yearRange,
     activePath,
+    foundationPaperIds,
   });
 
   // ── Camera auto-focus when paper selected from panel ──────────
@@ -507,10 +511,13 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
       gapArcRef,
       gapArcGlowRef,
       gapVoidRef,
+      foundationGroupRef,
       highlightedClusterPair,
       graphData,
+      forceGraphNodes: forceGraphData.nodes,
+      onFoundationsComputed: setFoundationPaperIds,
     });
-  }, [highlightedClusterPair, graphData, fgMounted]);
+  }, [highlightedClusterPair, graphData, fgMounted, forceGraphData.nodes, setFoundationPaperIds]);
 
   // Timeline mode: fix node Y positions by publication year
   useEffect(() => {

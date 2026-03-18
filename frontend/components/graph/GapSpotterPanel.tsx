@@ -11,6 +11,8 @@ export default function GapSpotterPanel() {
     graphData,
     selectPaper,
     setPanelSelectionId,
+    setHighlightedClusterPair,
+    highlightedClusterPair,
   } = useGraphStore();
 
   if (gaps.length === 0) {
@@ -48,6 +50,8 @@ export default function GapSpotterPanel() {
             graphData={graphData!}
             selectPaper={selectPaper}
             setPanelSelectionId={setPanelSelectionId}
+            setHighlightedClusterPair={setHighlightedClusterPair}
+            highlightedClusterPair={highlightedClusterPair}
           />
         ))}
       </div>
@@ -62,9 +66,11 @@ interface GapCardProps {
   graphData: NonNullable<ReturnType<typeof useGraphStore.getState>['graphData']>;
   selectPaper: (paper: Paper) => void;
   setPanelSelectionId: (id: string | null) => void;
+  setHighlightedClusterPair: (pair: [number, number] | null) => void;
+  highlightedClusterPair: [number, number] | null;
 }
 
-function GapCard({ gap, graphData, selectPaper, setPanelSelectionId }: GapCardProps) {
+function GapCard({ gap, graphData, selectPaper, setPanelSelectionId, setHighlightedClusterPair, highlightedClusterPair }: GapCardProps) {
   const [expanded, setExpanded] = useState(false);
   const strengthPct = Math.round(gap.gap_strength * 100);
 
@@ -75,13 +81,25 @@ function GapCard({ gap, graphData, selectPaper, setPanelSelectionId }: GapCardPr
       ? '#999999'
       : '#444444';
 
+  const isActive = highlightedClusterPair &&
+    ((highlightedClusterPair[0] === gap.cluster_a.id && highlightedClusterPair[1] === gap.cluster_b.id) ||
+     (highlightedClusterPair[0] === gap.cluster_b.id && highlightedClusterPair[1] === gap.cluster_a.id));
+
   return (
-    <div className="hud-panel-clean rounded-lg">
+    <div className="hud-panel-clean rounded-lg" style={isActive ? { borderLeft: '2px solid #D4AF37' } : undefined}>
       <div className="p-3">
         {/* Header row — cluster pair + strength */}
         <button
           className="flex items-center gap-1.5 w-full text-left"
-          onClick={() => setExpanded(!expanded)}
+          onClick={() => {
+            const newExpanded = !expanded;
+            setExpanded(newExpanded);
+            if (newExpanded) {
+              setHighlightedClusterPair([gap.cluster_a.id, gap.cluster_b.id]);
+            } else {
+              setHighlightedClusterPair(null);
+            }
+          }}
         >
           {expanded ? (
             <ChevronDown className="w-3 h-3 text-[#999999]/30 flex-shrink-0" />

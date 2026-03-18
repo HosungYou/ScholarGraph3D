@@ -409,6 +409,56 @@ export function updateGapOverlay({
   };
 }
 
+// ─── Foundation computation helper ───────────────────────────────────
+
+interface FoundationPaper {
+  nodeId: string;
+  title: string;
+  year: number;
+  count: number;
+  total: number;
+  position: THREE.Vector3;
+}
+
+function computeClusterFoundations(
+  clusterId: number,
+  graphData: GraphData,
+  nodePositions: Map<string, THREE.Vector3>,
+  maxResults: number = 3,
+): FoundationPaper[] {
+  const clusterPapers = graphData.nodes.filter(n => n.cluster_id === clusterId);
+  const clusterPaperIds = new Set(clusterPapers.map(n => n.id));
+  const clusterSize = clusterPaperIds.size;
+  if (clusterSize < 3) return [];
+
+  const citedByCount = new Map<string, number>();
+  graphData.edges.forEach(e => {
+    if (e.type === 'citation' && clusterPaperIds.has(e.source)) {
+      citedByCount.set(e.target, (citedByCount.get(e.target) || 0) + 1);
+    }
+  });
+
+  return Array.from(citedByCount.entries())
+    .filter(([, count]) => count >= 3)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, maxResults)
+    .map(([id, count]) => {
+      const paper = graphData.nodes.find(n => n.id === id);
+      const pos = nodePositions.get(id);
+      if (!paper || !pos) return null;
+      const authorName = paper.authors?.[0]?.name?.split(' ').pop() || '';
+      return {
+        nodeId: id,
+        title: `${authorName} ${paper.year || ''}`,
+        year: paper.year,
+        count,
+        total: clusterSize,
+        position: pos,
+      };
+    })
+    .filter((f): f is FoundationPaper => f !== null);
+}
+
 // ─── Gap arc (between highlighted cluster pair) ─────────────────────
 
 export interface GapArcParams {
@@ -416,8 +466,11 @@ export interface GapArcParams {
   gapArcRef: React.MutableRefObject<THREE.Line | null>;
   gapArcGlowRef: React.MutableRefObject<THREE.Sprite | null>;
   gapVoidRef: React.MutableRefObject<THREE.Group | null>;
+  foundationGroupRef: React.MutableRefObject<THREE.Group | null>;
   highlightedClusterPair: [number, number] | null;
   graphData: GraphData | null;
+  forceGraphNodes: ForceGraphNode[];
+  onFoundationsComputed?: (ids: Set<string>) => void;
 }
 
 export function updateGapArc({
@@ -425,8 +478,11 @@ export function updateGapArc({
   gapArcRef,
   gapArcGlowRef,
   gapVoidRef,
+  foundationGroupRef,
   highlightedClusterPair,
   graphData,
+  forceGraphNodes,
+  onFoundationsComputed,
 }: GapArcParams): void {
   if (!fgRef.current) return;
   let scene: THREE.Scene;
@@ -478,7 +534,25 @@ export function updateGapArc({
     });
   }
 
-  if (!highlightedClusterPair || !graphData) return;
+  // Remove existing foundation highlights
+  if (foundationGroupRef.current) {
+    const animId = foundationGroupRef.current.userData?.animFrameId;
+    if (animId?.value) cancelAnimationFrame(animId.value);
+    scene.remove(foundationGroupRef.current);
+    const fGroup = foundationGroupRef.current;
+    foundationGroupRef.current = null;
+    requestAnimationFrame(() => {
+      fGroup.traverse((child) => {
+        if ((child as any).geometry) (child as any).geometry.dispose();
+        if ((child as any).material) (child as any).material.dispose();
+      });
+    });
+  }
+
+  if (!highlightedClusterPair || !graphData) {
+    onFoundationsComputed?.(new Set());
+    return;
+  }
 
   const [cidA, cidB] = highlightedClusterPair;
   const clusterA = graphData.clusters.find((c) => c.id === cidA);
@@ -504,11 +578,28 @@ export function updateGapArc({
     (centA.z + centB.z) / 2,
   );
 
-  const curve = new THREE.QuadraticBezierCurve3(centA, mid, centB);
-  const points = curve.getPoints(50);
-  const geo = new THREE.BufferGeometry().setFromPoints(points);
+  // ── Build node position map from force graph nodes ──
+  const nodePositions = new Map<string, THREE.Vector3>();
+  forceGraphNodes.forEach(n => {
+    if (n.x !== undefined) {
+      nodePositions.set(n.id, new THREE.Vector3(n.x, n.y, n.z));
+    }
+  });
 
-  // Animated dashed line shader
+  // ── Compute shared foundations for both clusters ──
+  const foundationsA = computeClusterFoundations(cidA, graphData, nodePositions, 3);
+  const foundationsB = computeClusterFoundations(cidB, graphData, nodePositions, 3);
+  const allFoundationIds = new Set<string>([
+    ...foundationsA.map(f => f.nodeId),
+    ...foundationsB.map(f => f.nodeId),
+  ]);
+  onFoundationsComputed?.(allFoundationIds);
+
+  // ── Arc line ──
+  const curve = new THREE.QuadraticBezierCurve3(centA, mid, centB);
+  const arcPoints = curve.getPoints(50);
+  const geo = new THREE.BufferGeometry().setFromPoints(arcPoints);
+
   const mat = new THREE.ShaderMaterial({
     vertexShader: `
       attribute float lineDistance;
@@ -542,7 +633,6 @@ export function updateGapArc({
     depthWrite: false,
   });
 
-  // Compute line distances for dash pattern
   const positions = geo.attributes.position;
   const lineDistances = new Float32Array(positions.count);
   let totalDist = 0;
@@ -556,13 +646,12 @@ export function updateGapArc({
   geo.setAttribute('lineDistance', new THREE.BufferAttribute(lineDistances, 1));
 
   manager.registerShaderMaterial(mat);
-
   const arcLine = new THREE.Line(geo, mat);
   arcLine.name = 'gap-arc';
   scene.add(arcLine);
   gapArcRef.current = arcLine;
 
-  // Glow sprite at arc midpoint
+  // ── Glow sprite at arc midpoint ──
   const glowSprite = new THREE.Sprite(
     new THREE.SpriteMaterial({
       map: getGlowTexture(),
@@ -579,14 +668,13 @@ export function updateGapArc({
   scene.add(glowSprite);
   gapArcGlowRef.current = glowSprite;
 
-  // Find gap strength for this pair
+  // ── Gap void particles ──
   const gap = graphData.gaps?.find((g) =>
     (g.cluster_a.id === cidA && g.cluster_b.id === cidB) ||
     (g.cluster_a.id === cidB && g.cluster_b.id === cidA)
   );
   const gapStrength = gap?.gap_strength ?? 0.5;
 
-  // Create gap void visualization
   const voidGroup = createGapVoid({
     centroidA: centA,
     centroidB: centB,
@@ -595,7 +683,191 @@ export function updateGapArc({
   scene.add(voidGroup);
   gapVoidRef.current = voidGroup;
 
-  // Camera fly-to: center between the two cluster centroids
+  // ── Foundation highlights ──
+  const foundationGroup = new THREE.Group();
+  foundationGroup.name = 'foundation-highlights';
+
+  const clusterAColor = clusterA.color || CLUSTER_COLORS[cidA % CLUSTER_COLORS.length];
+  const clusterBColor = clusterB.color || CLUSTER_COLORS[cidB % CLUSTER_COLORS.length];
+
+  const renderFoundation = (f: FoundationPaper, clusterColor: string) => {
+    // Glow ring around foundation node
+    const ringRadius = f.count / f.total * 6 + 3;
+    const ringGeo = new THREE.RingGeometry(ringRadius, ringRadius + 1, 32);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: new THREE.Color(clusterColor),
+      transparent: true,
+      opacity: 0.6,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.position.copy(f.position);
+    ring.userData.isFoundationRing = true;
+    foundationGroup.add(ring);
+
+    // Label sprite: "Author Year · N/M"
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      canvas.width = 256;
+      canvas.height = 48;
+      // Background
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      const r = 6;
+      ctx.beginPath();
+      ctx.moveTo(r, 0);
+      ctx.lineTo(canvas.width - r, 0);
+      ctx.quadraticCurveTo(canvas.width, 0, canvas.width, r);
+      ctx.lineTo(canvas.width, canvas.height - r);
+      ctx.quadraticCurveTo(canvas.width, canvas.height, canvas.width - r, canvas.height);
+      ctx.lineTo(r, canvas.height);
+      ctx.quadraticCurveTo(0, canvas.height, 0, canvas.height - r);
+      ctx.lineTo(0, r);
+      ctx.quadraticCurveTo(0, 0, r, 0);
+      ctx.closePath();
+      ctx.fill();
+
+      // Left color bar
+      ctx.fillStyle = clusterColor;
+      ctx.fillRect(0, 0, 4, canvas.height);
+
+      ctx.font = 'bold 18px Arial, sans-serif';
+      ctx.fillStyle = '#FFFFFF';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(f.title, 12, 24);
+
+      ctx.font = '14px Arial, sans-serif';
+      ctx.fillStyle = clusterColor;
+      ctx.textAlign = 'right';
+      ctx.fillText(`${f.count}/${f.total}`, canvas.width - 8, 24);
+
+      const texture = new THREE.CanvasTexture(canvas);
+      const sprite = new THREE.Sprite(
+        new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false })
+      );
+      sprite.scale.set(35, 7, 1);
+      sprite.position.copy(f.position);
+      sprite.position.y += 8;
+      foundationGroup.add(sprite);
+    }
+  };
+
+  foundationsA.forEach(f => renderFoundation(f, clusterAColor));
+  foundationsB.forEach(f => renderFoundation(f, clusterBColor));
+
+  // ── Gap Brief card at arc midpoint ──
+  const papersACount = graphData.nodes.filter(n => n.cluster_id === cidA).length;
+  const papersBCount = graphData.nodes.filter(n => n.cluster_id === cidB).length;
+  const crossEdges = graphData.edges.filter(e => {
+    const srcCluster = graphData.nodes.find(n => n.id === e.source)?.cluster_id;
+    const tgtCluster = graphData.nodes.find(n => n.id === e.target)?.cluster_id;
+    return (srcCluster === cidA && tgtCluster === cidB) ||
+           (srcCluster === cidB && tgtCluster === cidA);
+  }).length;
+  const maxPossible = papersACount * papersBCount;
+
+  const briefCanvas = document.createElement('canvas');
+  const briefCtx = briefCanvas.getContext('2d');
+  if (briefCtx) {
+    briefCanvas.width = 400;
+    briefCanvas.height = 200;
+
+    // Background
+    briefCtx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+    const br = 10;
+    briefCtx.beginPath();
+    briefCtx.moveTo(br, 0);
+    briefCtx.lineTo(briefCanvas.width - br, 0);
+    briefCtx.quadraticCurveTo(briefCanvas.width, 0, briefCanvas.width, br);
+    briefCtx.lineTo(briefCanvas.width, briefCanvas.height - br);
+    briefCtx.quadraticCurveTo(briefCanvas.width, briefCanvas.height, briefCanvas.width - br, briefCanvas.height);
+    briefCtx.lineTo(br, briefCanvas.height);
+    briefCtx.quadraticCurveTo(0, briefCanvas.height, 0, briefCanvas.height - br);
+    briefCtx.lineTo(0, br);
+    briefCtx.quadraticCurveTo(0, 0, br, 0);
+    briefCtx.closePath();
+    briefCtx.fill();
+
+    // Border
+    briefCtx.strokeStyle = 'rgba(212, 175, 55, 0.3)';
+    briefCtx.lineWidth = 1;
+    briefCtx.stroke();
+
+    let y = 24;
+
+    // Cluster A header
+    const labelA = clusterA.label.length > 18 ? clusterA.label.slice(0, 16) + '..' : clusterA.label;
+    const labelB = clusterB.label.length > 18 ? clusterB.label.slice(0, 16) + '..' : clusterB.label;
+
+    briefCtx.font = 'bold 16px Arial, sans-serif';
+    briefCtx.fillStyle = clusterAColor;
+    briefCtx.textAlign = 'left';
+    briefCtx.fillText(`${labelA} (${papersACount})`, 16, y);
+    y += 20;
+
+    // Cross-citation density
+    briefCtx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+    briefCtx.font = '12px Arial, sans-serif';
+    briefCtx.fillText(`\u2195 ${crossEdges} / ${maxPossible} cross-citations`, 16, y);
+    y += 20;
+
+    // Cluster B header
+    briefCtx.font = 'bold 16px Arial, sans-serif';
+    briefCtx.fillStyle = clusterBColor;
+    briefCtx.fillText(`${labelB} (${papersBCount})`, 16, y);
+    y += 28;
+
+    // Divider
+    briefCtx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+    briefCtx.beginPath();
+    briefCtx.moveTo(16, y);
+    briefCtx.lineTo(briefCanvas.width - 16, y);
+    briefCtx.stroke();
+    y += 16;
+
+    // Foundations
+    briefCtx.font = '11px Arial, sans-serif';
+    if (foundationsA.length > 0) {
+      briefCtx.fillStyle = clusterAColor;
+      briefCtx.fillText(foundationsA.map(f => f.title).join(', '), 16, y);
+      y += 18;
+    }
+    if (foundationsB.length > 0) {
+      briefCtx.fillStyle = clusterBColor;
+      briefCtx.fillText(foundationsB.map(f => f.title).join(', '), 16, y);
+    }
+
+    const briefTexture = new THREE.CanvasTexture(briefCanvas);
+    const briefSprite = new THREE.Sprite(
+      new THREE.SpriteMaterial({ map: briefTexture, transparent: true, depthTest: false })
+    );
+    briefSprite.scale.set(60, 30, 1);
+    briefSprite.position.copy(mid);
+    briefSprite.position.y += 15;
+    foundationGroup.add(briefSprite);
+  }
+
+  scene.add(foundationGroup);
+  foundationGroupRef.current = foundationGroup;
+
+  // Animate foundation rings to face camera (billboard)
+  const foundationAnimId = { value: 0 };
+  const animateFoundations = () => {
+    foundationAnimId.value = requestAnimationFrame(animateFoundations);
+    const camera = fgRef.current?.camera();
+    if (!camera || !foundationGroupRef.current) return;
+    foundationGroupRef.current.children.forEach((child: any) => {
+      if (child.userData?.isFoundationRing) {
+        child.lookAt(camera.position);
+      }
+    });
+  };
+  animateFoundations();
+  foundationGroup.userData.animFrameId = foundationAnimId;
+
+  // ── Camera fly-to ──
   if (fgRef.current) {
     const lookAt = new THREE.Vector3(
       (centA.x + centB.x) / 2,

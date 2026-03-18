@@ -26,6 +26,38 @@ export default function ClusterPanel() {
       .sort((a, b) => (b.citation_count || 0) - (a.citation_count || 0));
   }, [graphData, selectedCluster]);
 
+  const sharedFoundations = useMemo(() => {
+    if (!graphData || !selectedCluster) return [];
+
+    const clusterPaperIds = new Set(
+      graphData.nodes
+        .filter(n => n.cluster_id === selectedCluster.id)
+        .map(n => n.id)
+    );
+    const clusterSize = clusterPaperIds.size;
+    if (clusterSize < 3) return [];
+
+    // Count how many cluster papers cite each target
+    const citedByCount = new Map<string, number>();
+    graphData.edges.forEach(e => {
+      if (e.type === 'citation' && clusterPaperIds.has(e.source)) {
+        citedByCount.set(e.target, (citedByCount.get(e.target) || 0) + 1);
+      }
+    });
+
+    // At least 3 papers must cite it, take top 5
+    return Array.from(citedByCount.entries())
+      .filter(([, count]) => count >= 3)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([id, count]) => ({
+        paper: graphData.nodes.find(n => n.id === id),
+        count,
+        total: clusterSize,
+      }))
+      .filter((f): f is { paper: Paper; count: number; total: number } => !!f.paper);
+  }, [graphData, selectedCluster]);
+
   const handleClusterSelect = useCallback((cluster: typeof selectedCluster) => {
     if (cluster && cluster.id === selectedCluster?.id) {
       selectCluster(null);
@@ -125,6 +157,41 @@ export default function ClusterPanel() {
               ))}
             </div>
           </div>
+
+          {/* Shared Foundations */}
+          {sharedFoundations.length > 0 && (
+            <div className="hud-panel-clean rounded-lg p-3" style={{ borderLeft: `2px solid ${selectedCluster.color}40` }}>
+              <span className="hud-label text-[#999999]/50">Shared Foundations</span>
+              <div className="space-y-1 mt-2">
+                {sharedFoundations.map(({ paper, count, total }) => (
+                  <button
+                    key={paper.id}
+                    onClick={() => {
+                      selectPaper(paper);
+                      setPanelSelectionId(paper.id);
+                    }}
+                    className={`w-full text-left p-2 rounded-lg transition-all group ${
+                      selectedPaper?.id === paper.id
+                        ? 'bg-[rgba(212,175,55,0.06)] border border-[rgba(212,175,55,0.12)]'
+                        : 'hover:bg-[rgba(255,255,255,0.02)] border border-transparent'
+                    }`}
+                  >
+                    <div className={`text-xs truncate transition-colors ${
+                      selectedPaper?.id === paper.id
+                        ? 'text-[#D4AF37] font-semibold'
+                        : 'text-text-primary group-hover:text-[#D4AF37]'
+                    }`}>
+                      {paper.title}
+                    </div>
+                    <div className="flex items-center gap-2 text-[10px] font-mono text-[#999999]/40 mt-0.5">
+                      {paper.year && <span>{paper.year}</span>}
+                      <span className="text-[#D4AF37]/50">{count} / {total} papers cite this</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Paper list */}
           <div className="hud-panel-clean rounded-lg p-3">
