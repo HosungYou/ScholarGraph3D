@@ -713,7 +713,50 @@ function SeedExploreContent() {
 
           {!isLoading && !graphData && paperId && (
             <div className="absolute inset-0 flex items-center justify-center">
-              <p className="text-[#999999] font-mono text-sm">No results found</p>
+              <div className="text-center max-w-md px-6">
+                <div className="text-[#D4AF37] text-lg font-semibold mb-2 font-mono">
+                  Unable to build citation network
+                </div>
+                <p className="text-[#999999] text-sm mb-4 font-mono">
+                  The API may be temporarily unavailable. Please check your connection and try again.
+                </p>
+                <button
+                  onClick={() => {
+                    setLoading(true);
+                    setError(null);
+                    const fetchPromise = graphId
+                      ? api.loadGraph(graphId)
+                      : api.seedExplore(paperId, { depth: 1, max_papers: 80 });
+                    fetchPromise
+                      .then((data) => {
+                        setGraphData(data);
+                        const meta = data.meta as any;
+                        setSeedMeta(meta);
+                        const intents: CitationIntent[] = data.edges
+                          .filter(e => e.type === 'citation' && e.intent)
+                          .map(e => ({
+                            citing_id: e.source,
+                            cited_id: e.target,
+                            basic_intent: e.intent as CitationIntent['basic_intent'],
+                            is_influential: false,
+                          }));
+                        if (intents.length > 0) setCitationIntents(intents);
+                        const responseAny = data as any;
+                        if (responseAny.gaps && Array.isArray(responseAny.gaps)) setGaps(responseAny.gaps);
+                        if (responseAny.frontier_ids && Array.isArray(responseAny.frontier_ids)) setFrontierIds(responseAny.frontier_ids);
+                        autoSave(data, meta?.seed_title);
+                      })
+                      .catch((err) => {
+                        console.error('Seed explore retry failed:', err);
+                        setError(err instanceof Error ? err.message : 'Failed to build seed graph');
+                      })
+                      .finally(() => setLoading(false));
+                  }}
+                  className="px-4 py-2 bg-[#D4AF37]/10 border border-[#D4AF37]/30 rounded text-[#D4AF37] text-sm font-mono hover:bg-[#D4AF37]/20 transition-colors"
+                >
+                  Try Again
+                </button>
+              </div>
             </div>
           )}
 

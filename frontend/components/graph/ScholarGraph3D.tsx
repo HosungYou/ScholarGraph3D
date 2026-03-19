@@ -722,24 +722,11 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         setHoveredSimLink(prev => prev === closest ? prev : closest);
       }}
     >
-      {/* Z-axis legend — hybrid temporal+semantic */}
+      {/* Layout info — force-directed */}
       <div className="absolute bottom-16 left-4 glass rounded-lg px-3 py-2 text-xs text-text-secondary pointer-events-none z-10">
-        <div className="font-medium text-text-primary/60 mb-1 text-[10px] uppercase tracking-wide">
-          Z-axis · {yearRange.max - yearRange.min >= 3 ? 'Time + Similarity' : 'Similarity'}
+        <div className="font-medium text-text-primary/60 text-[10px] uppercase tracking-wide">
+          3D Force-Directed Layout
         </div>
-        {yearRange.max - yearRange.min >= 3 ? (
-          <div className="flex items-center gap-1.5">
-            <span className="text-text-secondary/40 text-[10px]">← Older</span>
-            <span className="text-text-secondary/80">{yearRange.min}</span>
-            <div className="w-10 h-px bg-gradient-to-r from-text-secondary/20 to-accent/50" />
-            <span className="text-text-secondary/80">{yearRange.max}</span>
-            <span className="text-text-secondary/40 text-[10px]">Newer →</span>
-          </div>
-        ) : (
-          <div className="text-text-secondary/40 text-[10px]">
-            Semantic embedding distance
-          </div>
-        )}
       </div>
       {isClient ? (
       <Suspense fallback={<ForceGraph3DLoading />}>
