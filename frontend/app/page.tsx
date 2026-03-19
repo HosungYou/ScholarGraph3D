@@ -246,8 +246,8 @@ export default function LandingPage() {
 
       {/* Hero Section */}
       <div className={`relative z-10 ${isWarping ? 'animate-warp' : ''}`}>
-        <div className="max-w-7xl mx-auto px-8 md:px-16 pt-8 md:pt-16">
-          <div className="flex items-center min-h-[60vh]">
+        <div className="max-w-7xl mx-auto px-8 md:px-16 pt-4 md:pt-8">
+          <div className="flex items-center min-h-[35vh]">
 
             {/* Left: Text */}
             <motion.div
@@ -256,7 +256,7 @@ export default function LandingPage() {
               transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
             >
               <motion.h1
-                className="font-serif text-5xl md:text-7xl lg:text-8xl font-normal leading-[0.95] tracking-tight mb-8"
+                className="font-serif text-5xl md:text-7xl lg:text-8xl font-normal leading-[0.95] tracking-tight mb-5"
                 initial={{ opacity: 0, y: 40 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 1, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
@@ -267,7 +267,7 @@ export default function LandingPage() {
               </motion.h1>
 
               <motion.p
-                className="text-neutral-500 text-base md:text-lg max-w-md leading-relaxed mb-10"
+                className="text-neutral-500 text-base md:text-lg max-w-md leading-relaxed mb-6"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.6, delay: 0.4 }}
@@ -277,7 +277,7 @@ export default function LandingPage() {
 
               {/* Stats row */}
               <motion.div
-                className="flex items-center gap-10 mb-10"
+                className="flex items-center gap-10 mb-6"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.6, delay: 0.6 }}

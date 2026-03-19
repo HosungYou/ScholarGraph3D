@@ -57,6 +57,7 @@ export default function PaperDetailPanel({
         </h2>
         <button
           onClick={onClose}
+          aria-label="Close paper details"
           className="p-1.5 rounded-lg hover:bg-[rgba(255,255,255,0.03)] border border-transparent hover:border-[rgba(255,255,255,0.08)] transition-all flex-shrink-0"
         >
           <X className="w-4 h-4 text-[#999999] hover:text-[#D4AF37]" />
@@ -139,6 +140,7 @@ export default function PaperDetailPanel({
         <button
           onClick={() => onExpand('refs')}
           disabled={isExpanding}
+          aria-label="Expand references"
           className="hud-button flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg uppercase text-[10px] tracking-wider disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {isExpanding ? (
@@ -153,6 +155,7 @@ export default function PaperDetailPanel({
         <button
           onClick={() => onExpand('cites')}
           disabled={isExpanding}
+          aria-label="Expand citations"
           className="hud-button flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg uppercase text-[10px] tracking-wider disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {isExpanding ? (

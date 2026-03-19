@@ -262,7 +262,7 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
           0.3 + 0.7 * ((paperYear - yearRange.min) / yearSpan);
 
         const rawCitations = paper.citation_count || 0;
-        const baseSize = Math.min(4, Math.max(1, Math.log2(rawCitations + 2) * 0.7));
+        const baseSize = Math.min(4, Math.max(1.5, Math.log2(rawCitations + 2) * 0.7));
         const size = isSeed ? baseSize * 1.5 : baseSize;
 
         const authorName = paper.authors?.[0]?.name?.split(' ').pop() || 'Unknown';

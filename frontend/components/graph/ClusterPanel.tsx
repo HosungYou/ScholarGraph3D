@@ -117,6 +117,7 @@ export default function ClusterPanel() {
             >
               <button
                 onClick={() => handleClusterSelect(isSelected ? null : cluster)}
+                aria-label={`${isSelected ? 'Deselect' : 'Select'} cluster: ${cluster.label}`}
                 className="flex items-center gap-2 p-3 w-full text-left"
               >
                 <div
