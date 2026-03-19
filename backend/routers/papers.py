@@ -74,6 +74,7 @@ class StableExpandNode(BaseModel):
     title: str
     year: Optional[int] = None
     citation_count: int = 0
+    reference_count: int = 0
     venue: Optional[str] = None
     is_open_access: bool = False
     doi: Optional[str] = None
@@ -91,6 +92,7 @@ class StableExpandNode(BaseModel):
 class StableExpandRequest(BaseModel):
     existing_nodes: List[GraphNodeInput] = []
     limit: int = Field(default=20, ge=1, le=100)
+    direction: Optional[str] = Field(default=None, description="'refs' for references only, 'cites' for citations only, None for both")
 
 
 class ExpandMeta(BaseModel):
@@ -379,25 +381,41 @@ async def expand_paper_stable(
     refs_error = None
     cites_error = None
 
-    try:
-        refs = await client.get_references(paper_id, limit=request.limit // 2, include_embedding=True)
-    except Exception as e:
-        refs_ok = False
-        if "TimeoutException" in type(e).__name__ or "timeout" in str(e).lower():
-            refs_error = "References fetch timed out"
-        else:
-            refs_error = f"References fetch failed: {type(e).__name__}"
-        logger.warning(f"get_references failed for {paper_id}: {e}")
+    # Determine fetch limits based on direction
+    fetch_refs = request.direction in (None, "refs")
+    fetch_cites = request.direction in (None, "cites")
 
-    try:
-        cites = await client.get_citations(paper_id, limit=request.limit // 2, include_embedding=True)
-    except Exception as e:
-        cites_ok = False
-        if "TimeoutException" in type(e).__name__ or "timeout" in str(e).lower():
-            cites_error = "Citations fetch timed out"
-        else:
-            cites_error = f"Citations fetch failed: {type(e).__name__}"
-        logger.warning(f"get_citations failed for {paper_id}: {e}")
+    if fetch_refs and fetch_cites:
+        refs_limit = request.limit // 2
+        cites_limit = request.limit // 2
+    elif fetch_refs:
+        refs_limit = request.limit
+        cites_limit = 0
+    else:
+        refs_limit = 0
+        cites_limit = request.limit
+
+    if fetch_refs:
+        try:
+            refs = await client.get_references(paper_id, limit=refs_limit, include_embedding=True)
+        except Exception as e:
+            refs_ok = False
+            if "TimeoutException" in type(e).__name__ or "timeout" in str(e).lower():
+                refs_error = "References fetch timed out"
+            else:
+                refs_error = f"References fetch failed: {type(e).__name__}"
+            logger.warning(f"get_references failed for {paper_id}: {e}")
+
+    if fetch_cites:
+        try:
+            cites = await client.get_citations(paper_id, limit=cites_limit, include_embedding=True)
+        except Exception as e:
+            cites_ok = False
+            if "TimeoutException" in type(e).__name__ or "timeout" in str(e).lower():
+                cites_error = "Citations fetch timed out"
+            else:
+                cites_error = f"Citations fetch failed: {type(e).__name__}"
+            logger.warning(f"get_citations failed for {paper_id}: {e}")
 
     all_papers = refs + cites
     if not all_papers:
@@ -443,6 +461,7 @@ async def expand_paper_stable(
             title=paper.title,
             year=paper.year,
             citation_count=paper.citation_count,
+            reference_count=paper.reference_count,
             venue=paper.venue,
             is_open_access=paper.is_open_access,
             doi=paper.doi,

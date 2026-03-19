@@ -106,7 +106,8 @@ export const api = {
   expandPaperStable: (
     id: string,
     existingNodes: import('@/types').Paper[],
-    existingEdges: import('@/types').GraphEdge[]
+    existingEdges: import('@/types').GraphEdge[],
+    direction?: 'refs' | 'cites'
   ): Promise<{ nodes: import('@/types').Paper[]; edges: import('@/types').GraphEdge[]; meta?: { references_ok: boolean; citations_ok: boolean; refs_count: number; cites_count: number; error_detail?: string } }> =>
     request(`${API_BASE}/api/papers/${encodeURIComponent(id)}/expand-stable`, {
       method: 'POST',
@@ -119,6 +120,7 @@ export const api = {
           cluster_id: n.cluster_id,
         })),
         limit: 50,
+        direction: direction || null,
       }),
     }).then((r: any) => ({
       nodes: (r.nodes || []).map((n: any) => ({
@@ -128,6 +130,7 @@ export const api = {
         year: n.year || 0,
         venue: n.venue,
         citation_count: n.citation_count || 0,
+        reference_count: n.reference_count || 0,
         abstract: n.abstract || undefined,
         tldr: n.tldr || undefined,
         fields: n.fields || [],

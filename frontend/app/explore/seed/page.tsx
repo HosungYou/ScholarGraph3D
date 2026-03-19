@@ -353,7 +353,7 @@ function SeedExploreContent() {
   }, [gaps.length, graphData, gapToastDismissed, isLoading]);
 
   const handleExpandPaper = useCallback(
-    async (paper: Paper) => {
+    async (paper: Paper, direction?: 'refs' | 'cites') => {
       const s2Id = paper.s2_paper_id;
       const doiId = paper.doi ? `DOI:${paper.doi}` : '';
 
@@ -373,10 +373,10 @@ function SeedExploreContent() {
         const expandId = s2Id || doiId;
 
         try {
-          result = await api.expandPaperStable(expandId, graphData?.nodes || [], graphData?.edges || []);
+          result = await api.expandPaperStable(expandId, graphData?.nodes || [], graphData?.edges || [], direction);
         } catch (err) {
           if (expandId === s2Id && doiId) {
-            result = await api.expandPaperStable(doiId, graphData?.nodes || [], graphData?.edges || []);
+            result = await api.expandPaperStable(doiId, graphData?.nodes || [], graphData?.edges || [], direction);
           } else {
             throw err;
           }
@@ -469,8 +469,8 @@ function SeedExploreContent() {
   // Double-click expand
   useEffect(() => {
     const handle = async (e: Event) => {
-      const { paper } = (e as CustomEvent<{ paper: Paper }>).detail;
-      await handleExpandPaper(paper);
+      const detail = (e as CustomEvent<{ paper: Paper; direction?: 'refs' | 'cites' }>).detail;
+      await handleExpandPaper(detail.paper, detail.direction);
     };
     window.addEventListener('expandPaper', handle);
     return () => window.removeEventListener('expandPaper', handle);
@@ -803,7 +803,7 @@ function SeedExploreContent() {
                 <PaperDetailPanel
                   paper={selectedPaper}
                   onClose={() => handlePaperSelect(null)}
-                  onExpand={() => handleExpandPaper(selectedPaper)}
+                  onExpand={(direction) => handleExpandPaper(selectedPaper, direction)}
                   isExpanding={isExpanding}
                 />
               </div>

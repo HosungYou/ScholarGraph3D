@@ -44,6 +44,7 @@ class SeedGraphNode(BaseModel):
     year: Optional[int] = None
     venue: Optional[str] = None
     citation_count: int = 0
+    reference_count: int = 0
     fields: List[str] = []
     tldr: Optional[str] = None
     is_open_access: bool = False
@@ -116,6 +117,7 @@ def _s2_paper_to_node(paper, node_id: str, is_seed: bool = False) -> SeedGraphNo
         year=paper.year,
         venue=paper.venue,
         citation_count=paper.citation_count,
+        reference_count=paper.reference_count,
         fields=paper.fields_of_study,
         tldr=paper.tldr,
         is_open_access=paper.is_open_access,

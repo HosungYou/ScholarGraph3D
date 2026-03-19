@@ -5,7 +5,6 @@ import {
   X,
   ChevronDown,
   ChevronUp,
-  Network,
   Loader2,
 } from 'lucide-react';
 import type { Paper } from '@/types';
@@ -16,7 +15,7 @@ import { findCitationPath } from '@/lib/utils';
 interface PaperDetailPanelProps {
   paper: Paper;
   onClose: () => void;
-  onExpand: () => void;
+  onExpand: (direction?: 'refs' | 'cites') => void;
   isExpanding?: boolean;
 }
 
@@ -135,26 +134,39 @@ export default function PaperDetailPanel({
 
       <div className="hud-divider my-4" />
 
-      {/* ── EXPAND NETWORK — single primary CTA ── */}
-      <button
-        onClick={onExpand}
-        disabled={isExpanding}
-        className="hud-button flex items-center justify-center gap-2 w-full py-2.5 rounded-lg uppercase text-xs tracking-wider disabled:opacity-40 disabled:cursor-not-allowed"
-      >
-        {isExpanding ? (
-          <>
-            <Loader2 className="w-4 h-4 animate-spin" />
-            EXPANDING...
-          </>
-        ) : (
-          <>
-            <Network className="w-4 h-4" />
-            EXPAND NETWORK
-          </>
-        )}
-      </button>
+      {/* ── EXPAND — directional buttons ── */}
+      <div className="flex gap-2">
+        <button
+          onClick={() => onExpand('refs')}
+          disabled={isExpanding}
+          className="hud-button flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg uppercase text-[10px] tracking-wider disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {isExpanding ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <>
+              <span>&larr;</span>
+              <span>REFS ({paper.reference_count ?? '?'})</span>
+            </>
+          )}
+        </button>
+        <button
+          onClick={() => onExpand('cites')}
+          disabled={isExpanding}
+          className="hud-button flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg uppercase text-[10px] tracking-wider disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {isExpanding ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <>
+              <span>CITES ({paper.citation_count ?? '?'})</span>
+              <span>&rarr;</span>
+            </>
+          )}
+        </button>
+      </div>
       <div className="px-1 mt-1.5 text-[10px] font-mono text-[#999999]/45">
-        Adds references and citing papers around this paper.
+        Expand references (what this paper cites) or citations (who cites this paper).
       </div>
 
       {/* ── Citation Path Finder (minimal) ── */}

@@ -19,6 +19,7 @@ export interface Paper {
   year: number;
   venue?: string;
   citation_count: number;
+  reference_count?: number;
   abstract?: string;
   tldr?: string;
   fields: string[];
