@@ -736,6 +736,8 @@ const ScholarGraph3D = forwardRef<ScholarGraph3DRef>((_, ref) => {
         nodeId="id"
         nodeThreeObject={nodeThreeObject}
         nodeLabel={(nodeData: unknown) => {
+          // Hide tooltip when paper detail panel is open to avoid overlap
+          if (selectedPaperIdRef.current) return '';
           const node = nodeData as ForceGraphNode;
           const p = node.paper;
           const tldrSnippet = p.tldr ? p.tldr.substring(0, 100) + (p.tldr.length > 100 ? '...' : '') : (p.abstract ? p.abstract.substring(0, 100) + '...' : '');

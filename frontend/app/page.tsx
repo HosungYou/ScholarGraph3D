@@ -588,7 +588,7 @@ export default function LandingPage() {
             <h2 className="font-serif text-4xl md:text-5xl tracking-tight">
               How It<br />Works.
             </h2>
-            <p className="text-neutral-500 text-sm leading-relaxed max-w-md pt-3">
+            <p className="text-neutral-400 text-sm leading-relaxed max-w-md pt-3">
               Three dimensions of academic knowledge, each revealing a different
               layer of the research landscape.
             </p>
@@ -623,15 +623,15 @@ export default function LandingPage() {
                 viewport={{ once: true }}
                 className="flex items-start gap-8 py-8 border-t border-neutral-900 group"
               >
-                <span className="font-mono text-[11px] text-neutral-700 pt-1 w-8 flex-shrink-0">{item.num}</span>
+                <span className="font-mono text-[11px] text-neutral-500 pt-1 w-8 flex-shrink-0">{item.num}</span>
                 <div className="flex-1 flex flex-col md:flex-row md:items-start md:justify-between gap-4">
                   <div>
                     <h3 className="text-xl font-serif text-white group-hover:text-[#D4AF37] transition-colors mb-2">
                       {item.title}
                     </h3>
-                    <p className="text-neutral-500 text-sm leading-relaxed max-w-md">{item.desc}</p>
+                    <p className="text-neutral-400 text-sm leading-relaxed max-w-md">{item.desc}</p>
                   </div>
-                  <span className="font-mono text-xs text-neutral-600 flex-shrink-0 pt-1">{item.stat}</span>
+                  <span className="font-mono text-xs text-neutral-500 flex-shrink-0 pt-1">{item.stat}</span>
                 </div>
               </motion.div>
             ))}
@@ -643,7 +643,7 @@ export default function LandingPage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <span className="font-serif text-lg text-white">ScholarGraph3D</span>
-              <span className="text-[10px] font-mono text-neutral-700">&copy; 2025</span>
+              <span className="text-[10px] font-mono text-neutral-700">&copy; 2026</span>
             </div>
             <div className="flex items-center gap-6 text-[10px] font-mono text-neutral-600">
               <a href={user ? '/dashboard' : '/auth'} className="hover:text-white transition-colors uppercase tracking-wider">

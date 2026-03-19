@@ -147,6 +147,22 @@ function SeedExploreContent() {
     similarity_edges?: number;
   } | null>(null);
 
+  // Loading phase messages
+  const LOADING_PHASES = [
+    'Fetching paper metadata...',
+    'Building citation network...',
+    'Computing topic clusters...',
+    'Detecting research gaps...',
+  ];
+  const [loadingPhase, setLoadingPhase] = useState(0);
+  useEffect(() => {
+    if (!isLoading) { setLoadingPhase(0); return; }
+    const timer = setInterval(() => {
+      setLoadingPhase((prev) => Math.min(prev + 1, LOADING_PHASES.length - 1));
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [isLoading, LOADING_PHASES.length]);
+
   /* ── Left sidebar collapse ── */
   const [leftCollapsed, setLeftCollapsed] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -703,8 +719,17 @@ function SeedExploreContent() {
           {isLoading && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/80">
               <div className="text-center">
-                <RadarLoader message="Building citation network..." />
-                <p className="text-[10px] text-[#999999]/40 mt-3 font-mono">
+                <RadarLoader message={LOADING_PHASES[loadingPhase]} />
+                <div className="flex items-center justify-center gap-1.5 mt-3">
+                  {LOADING_PHASES.map((_, i) => (
+                    <div
+                      key={i}
+                      className="w-1.5 h-1.5 rounded-full transition-colors duration-300"
+                      style={{ backgroundColor: i <= loadingPhase ? '#D4AF37' : 'rgba(153,153,153,0.2)' }}
+                    />
+                  ))}
+                </div>
+                <p className="text-[10px] text-[#999999]/40 mt-2 font-mono">
                   Fetching references &amp; citations from Semantic Scholar
                 </p>
               </div>

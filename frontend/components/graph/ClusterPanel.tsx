@@ -128,7 +128,7 @@ export default function ClusterPanel() {
                   }}
                 />
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-text-primary truncate">
+                  <div className="text-sm font-medium text-text-primary truncate" title={cluster.label}>
                     {cluster.label}
                   </div>
                   <div className="text-[10px] font-mono text-[#999999]/50 mt-0.5">

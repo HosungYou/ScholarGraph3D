@@ -300,7 +300,7 @@ function FieldRelationshipView({
         <div>
           <div className="flex items-center gap-1.5 mb-1.5">
             <span className="hud-label">Bridge Papers</span>
-            <span className="text-[9px] font-mono text-[#999999]/30 ml-auto">cited by both</span>
+            <span className="text-[9px] font-mono text-[#999999]/30 ml-auto">cross-cluster citations</span>
           </div>
           <div className="space-y-1">
             {bridgePapers.slice(0, 5).map((bp) => {
